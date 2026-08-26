@@ -1,0 +1,2 @@
+/* Native APK uses the real Android status/navigation bars. */
+.statusbar{display:flex!important;visibility:hidden!important;height:42px!important;padding:0!important}.phone:before{display:none!important}.phone{width:100%!important;height:100vh!important;min-height:100vh!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:var(--bg)!important}.app-scroll{inset:0!important;left:11px!important;right:11px!important;padding-bottom:112px!important}.bottom-nav{bottom:-14px!important;left:11px!important;right:11px!important}

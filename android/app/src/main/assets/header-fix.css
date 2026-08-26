@@ -1,0 +1,4 @@
+/* The reference design uses the phone's native status area without an extra app toolbar. */
+.app-header{display:none}
+.screen{padding-top:14px}
+.chat-screen{padding-top:0}

@@ -1,0 +1,9 @@
+/* Bundle the reference typefaces so the prototype stays pixel-stable offline. */
+@font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:400;src:url('./fonts/cormorant-400.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:500;src:url('./fonts/cormorant-500.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:600;src:url('./fonts/cormorant-600.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:400;src:url('./fonts/instrument-400.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:500;src:url('./fonts/instrument-500.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-weight:600;src:url('./fonts/instrument-600.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Space Mono';font-style:normal;font-weight:400;src:url('./fonts/space-mono-400.ttf') format('truetype');font-display:swap}
+@font-face{font-family:'Space Mono';font-style:normal;font-weight:700;src:url('./fonts/space-mono-700.ttf') format('truetype');font-display:swap}

@@ -1,0 +1,32 @@
+/* Larger, bolder controls keep the reference layout readable on a real phone. */
+.screen h1{font-weight:600}
+.eyebrow,.section-label{font-size:10px;font-weight:600}
+.primary{font-size:15px;font-weight:700}
+.outline{border-width:2px;font-size:13px;font-weight:600}
+.chips button{padding:10px 14px;border:2px solid var(--soft);font-size:12px;font-weight:600}
+.filter-tabs button{border-width:2px;font-size:11px;font-weight:600}
+.item-art span,.placeholder span{font-size:10px}
+.bottom-nav button small{font-size:10px;font-weight:500}
+
+.screen[data-screen-id="home"] .eyebrow{font-size:10px;letter-spacing:2.2px}
+.screen[data-screen-id="home"] h1{font-size:38px;line-height:.98;margin-top:4px;margin-bottom:10px;font-weight:600}
+.screen[data-screen-id="home"] .weather-card{height:60px;margin-top:12px;padding:10px 15px}
+.screen[data-screen-id="home"] .weather-icon{width:38px;height:38px;font-size:19px}
+.screen[data-screen-id="home"] .weather-card strong{font-size:16px;font-weight:700}
+.screen[data-screen-id="home"] .weather-card small{font-size:13px}
+.screen[data-screen-id="home"] .section-label{margin-top:14px;margin-bottom:7px;font-size:10px}
+.screen[data-screen-id="home"] .outfit-collage{height:270px;margin-top:7px;grid-template-rows:minmax(90px,1fr) minmax(90px,1fr) 56px}
+.screen[data-screen-id="home"] .placeholder span{left:11px;bottom:10px;font-size:10.5px}
+.screen[data-screen-id="home"] .primary{height:50px;margin-top:11px;font-size:17px;font-weight:700}
+.screen[data-screen-id="home"] .button-row{margin-top:8px;gap:10px}
+.screen[data-screen-id="home"] .button-row .outline{height:46px;border-width:2px;font-size:16px;font-weight:600}
+.screen[data-screen-id="home"] .quick-label{margin-top:12px;margin-bottom:7px}
+.screen[data-screen-id="home"] .quick-chips{gap:6px 8px;padding-bottom:0}
+.screen[data-screen-id="home"] .quick-chips button{height:35px;padding:0 14px;border-width:2px;font-size:14px;font-weight:600}
+
+.screen[data-screen-id="stylist"] h1{font-size:42px;font-weight:600}
+.screen[data-screen-id="stylist"] .intro{font-size:15px}
+.screen[data-screen-id="stylist"] .composer-card textarea{font-size:20px}
+.screen[data-screen-id="stylist"] .chips button{font-size:13px;font-weight:600}
+.message{font-size:13px}
+.chat-compose input{font-size:13px}

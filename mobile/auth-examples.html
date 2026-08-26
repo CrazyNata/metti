@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>metti · auth examples</title>
+    <link rel="stylesheet" href="./font-fix.css" />
+    <link rel="stylesheet" href="./reference-theme.css" />
+    <link rel="stylesheet" href="./auth-examples.css" />
+  </head>
+  <body>
+    <header class="page-head">
+      <div class="eyebrow">METTI · ВИЗУАЛЬНЫЕ ПРИМЕРЫ</div>
+      <h1>Регистрация и вход</h1>
+      <p>Четыре спокойных варианта в стиле Metti. Это только макеты — текущий проект не изменён.</p>
+    </header>
+
+    <main class="examples-grid">
+      <section class="example-card">
+        <div class="example-label">01 · КЛАССИЧЕСКИЙ ВХОД</div>
+        <div class="auth-panel">
+          <div class="auth-brand">metti <span>✦</span></div>
+          <h2>С возвращением</h2>
+          <p class="auth-lead">Войдите, чтобы продолжить собирать образы.</p>
+          <form onsubmit="return false">
+            <label>Email<input type="email" placeholder="you@example.com" /></label>
+            <label>Пароль<div class="password-field"><input id="login-password" type="password" placeholder="Введите пароль" /><button class="password-toggle" type="button" data-password-toggle="login-password" aria-label="Показать пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></label>
+            <label class="check-row remember-row"><input type="checkbox" checked /> <span>Запомнить меня</span></label>
+            <button class="primary" type="button">Войти</button>
+            <button class="text-button" type="button">Забыли пароль?</button>
+            <div class="divider"><span>или</span></div>
+            <button class="outline" type="button"><span class="google-mark">G</span> Продолжить с Google</button>
+          </form>
+          <p class="auth-switch">Нет аккаунта? <button class="link-button" type="button">Зарегистрироваться</button></p>
+        </div>
+      </section>
+
+      <section class="example-card">
+        <div class="example-label">02 · СОЗДАНИЕ АККАУНТА</div>
+        <div class="auth-panel">
+          <div class="auth-brand">metti <span>✦</span></div>
+          <h2>Начнём с тебя</h2>
+          <p class="auth-lead">Пара деталей — и стилист сможет лучше тебя почувствовать.</p>
+          <form onsubmit="return false">
+            <label>Как тебя зовут?<input type="text" placeholder="Наталия" /></label>
+            <label>Email<input type="email" placeholder="you@example.com" /></label>
+            <label>Придумайте пароль<div class="password-field"><input id="register-password" type="password" placeholder="Минимум 8 символов" /><button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="Показать пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></label>
+            <label class="check-row"><input type="checkbox" /> <span>Согласна с условиями и политикой конфиденциальности</span></label>
+            <button class="primary" type="button">Создать аккаунт <span>→</span></button>
+            <div class="divider"><span>или</span></div>
+            <button class="outline" type="button"><span class="google-mark">G</span> Продолжить с Google</button>
+          </form>
+          <p class="auth-switch">Уже есть аккаунт? <button class="link-button" type="button">Войти</button></p>
+        </div>
+      </section>
+
+      <section class="example-card">
+        <div class="example-label">03 · ВЫБОР СПОСОБА</div>
+        <div class="auth-panel method-panel">
+          <div class="auth-brand centered">metti <span>✦</span></div>
+          <h2>Как войдём?</h2>
+          <p class="auth-lead">Выбери удобный способ — настройки можно изменить позже.</p>
+          <div class="method-stack">
+            <button class="method-button" type="button"><span class="method-icon google-mark">G</span><span><strong>Google</strong><small>Через аккаунт Google</small></span><b>›</b></button>
+            <button class="method-button" type="button"><span class="method-icon">✉</span><span><strong>Email</strong><small>Войти с паролем</small></span><b>›</b></button>
+          </div>
+          <button class="outline guest-button" type="button">Открыть демо-пример</button>
+          <p class="auth-switch">Уже есть аккаунт? <button class="link-button" type="button">Войти</button></p>
+        </div>
+      </section>
+
+      <section class="example-card accent-card">
+        <div class="example-label">04 · МЯГКАЯ РЕГИСТРАЦИЯ</div>
+        <div class="auth-panel preference-panel">
+          <div class="magic-orb small-orb">✦</div>
+          <div class="auth-brand centered">metti</div>
+          <h2>Соберём твой стиль</h2>
+          <p class="auth-lead">Выбери настроение — остальное можно добавить потом.</p>
+          <div class="style-options"><button class="style-option selected" type="button">Минимал</button><button class="style-option" type="button">Элегантный</button><button class="style-option" type="button">Расслабленный</button><button class="style-option" type="button">Яркий</button></div>
+          <form onsubmit="return false">
+            <label>Email<input type="email" placeholder="you@example.com" /></label>
+            <button class="primary" type="button">Продолжить <span>→</span></button>
+          </form>
+          <p class="auth-switch">Можно пропустить и вернуться позже</p>
+        </div>
+      </section>
+    </main>
+    <script src="./auth-examples.js"></script>
+  </body>
+</html>

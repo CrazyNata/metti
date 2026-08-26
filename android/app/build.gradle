@@ -1,0 +1,31 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.metti.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.metti.app'
+        minSdk 23
+        // Keep the classic system-bar behavior for this WebView prototype.
+        // Target 35 enables Android 15 edge-to-edge enforcement and makes
+        // the native light header transparent over the window background.
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

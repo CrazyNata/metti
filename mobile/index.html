@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7e9e8" />
+    <title>metti · AI stylist</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./extended.css" />
+    <link rel="stylesheet" href="./header-fix.css" />
+    <link rel="stylesheet" href="./outfit-collage.css" />
+    <link rel="stylesheet" href="./navigation-fix.css" />
+    <link rel="stylesheet" href="./stylist-composer-fix.css" />
+    <link rel="stylesheet" href="./reference-theme.css" />
+    <link rel="stylesheet" href="./refinement-v1.css" />
+    <link rel="stylesheet" href="./home-actions-fix.css?v=2" />
+    <link rel="stylesheet" href="./scroll-fix.css?v=1" />
+    <link rel="stylesheet" href="./font-fix.css" />
+    <link rel="stylesheet" href="./home-compact.css" />
+    <link rel="stylesheet" href="./type-scale-fix.css" />
+    <link rel="stylesheet" href="./auth-app.css" />
+  </head>
+  <body>
+    <main class="phone" aria-label="Metti">
+      <section class="auth-gate" id="auth-gate" aria-label="Вход в metti" aria-hidden="true" hidden>
+        <div class="auth-gate-scroll">
+          <div class="auth-card-shell">
+            <div class="auth-example-label">METTI · ВХОД И РЕГИСТРАЦИЯ</div>
+            <div class="auth-panel-app">
+              <div class="auth-view" data-auth-view="login">
+                <div class="auth-brand-app">metti <span>✦</span></div>
+                <h1>С возвращением</h1>
+                <p class="auth-lead-app">Войдите, чтобы продолжить собирать образы.</p>
+                <form id="login-form" class="auth-form-app" novalidate>
+                  <label>Email<input id="auth-login-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
+                  <label>Пароль<div class="auth-password-field"><input id="auth-login-password" name="password" type="password" autocomplete="current-password" placeholder="Введите пароль" minlength="6" required /><button class="auth-password-toggle" type="button" data-auth-password="auth-login-password" aria-label="Показать пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></label>
+                  <label class="auth-check-row"><input id="auth-remember" name="remember" type="checkbox" checked /><span>Запомнить меня</span></label>
+                  <button class="primary auth-submit" type="submit">Войти</button>
+                  <button class="auth-text-button" type="button" data-auth-action="forgot">Забыли пароль?</button>
+                  <div class="auth-divider"><span>или</span></div>
+                  <button class="outline auth-google" type="button" data-auth-action="google"><span class="google-mark">G</span> Продолжить с Google</button>
+                  <p class="auth-status" id="login-status" role="status" aria-live="polite"></p>
+                </form>
+                <p class="auth-switch-app">Нет аккаунта? <button class="auth-link-button" type="button" data-auth-mode="register">Зарегистрироваться</button></p>
+              </div>
+
+              <div class="auth-view" data-auth-view="register" hidden>
+                <div class="auth-brand-app">metti <span>✦</span></div>
+                <h1>Начнём с тебя</h1>
+                <p class="auth-lead-app">Пара деталей — и стилист сможет лучше тебя почувствовать.</p>
+                <form id="register-form" class="auth-form-app" novalidate>
+                  <label>Как тебя зовут?<input id="auth-register-name" name="name" type="text" autocomplete="name" placeholder="Наталия" required /></label>
+                  <label>Email<input id="auth-register-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
+                  <label>Придумайте пароль<div class="auth-password-field"><input id="auth-register-password" name="password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" minlength="8" required /><button class="auth-password-toggle" type="button" data-auth-password="auth-register-password" aria-label="Показать пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></label>
+                  <label class="auth-check-row"><input id="auth-consent" name="consent" type="checkbox" required /><span>Согласна с условиями и политикой конфиденциальности</span></label>
+                  <button class="primary auth-submit" type="submit">Создать аккаунт <span>→</span></button>
+                  <div class="auth-divider"><span>или</span></div>
+                  <button class="outline auth-google" type="button" data-auth-action="google"><span class="google-mark">G</span> Продолжить с Google</button>
+                  <p class="auth-status" id="register-status" role="status" aria-live="polite"></p>
+                </form>
+                <p class="auth-switch-app">Уже есть аккаунт? <button class="auth-link-button" type="button" data-auth-mode="login">Войти</button></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="app-scroll">
+      <div class="statusbar"><span>9:41</span><span class="status-icons">•••⌄▮</span></div>
+      <header class="app-header">
+        <button class="brand" data-screen="home" aria-label="На главную">metti</button>
+        <button class="profile-button" data-screen="profile" aria-label="Профиль">Н</button>
+      </header>
+
+      <section class="screen active" data-screen-id="home">
+        <div class="eyebrow">ПОНЕДЕЛЬНИК · 18 СЕНТ</div>
+        <h1>Доброе утро,<br />Наталия</h1>
+        <div class="weather-card"><span class="weather-icon">☁</span><div><strong>Prague · 18°C</strong><small>Облачно · теплее к полудню</small></div></div>
+        <div class="section-label"><span>ОБРАЗ НА СЕГОДНЯ</span><span>Собрано AI</span></div>
+        <article class="outfit-card">
+          <div class="outfit-collage" aria-label="Коллаж образа"><div class="collage-main placeholder"><span>бежевый жакет</span></div><div class="collage-side"><div class="placeholder pink"><span>белый топ</span></div><div class="placeholder"><span>прямые джинсы</span></div></div><div class="collage-bottom"><div class="placeholder"><span>лоферы</span></div><div class="placeholder pink"><span>сумка-тоут</span></div><div class="placeholder"><span>золотые серьги</span></div></div></div>
+          <button class="primary" data-action="wear">Надеть этот образ</button>
+          <div class="button-row"><button class="outline" data-action="other">Другой вариант</button><button class="outline rose" data-screen="stylist">Спросить стилиста</button></div>
+        </article>
+        <div class="section-label quick-label"><span>БЫСТРЫЕ ЗАПРОСЫ</span></div>
+        <div class="quick-chips"><button class="selected" data-prompt="Работа">Работа</button><button data-prompt="Кэжуал">Кэжуал</button><button data-prompt="Ужин">Ужин</button><button data-prompt="Свидание">Свидание</button><button data-prompt="Поездка">Поездка</button><button data-prompt="Weekend">Weekend</button></div>
+      </section>
+
+      <section class="screen" data-screen-id="stylist">
+        <div class="eyebrow">ВАШ СТИЛИСТ</div>
+        <h1>Для чего<br />одеваемся?</h1>
+        <p class="intro">Спросите что угодно, приложите фото или выберите вещь из гардероба.</p>
+        <div class="composer-card"><textarea id="prompt-input" rows="2" placeholder="Спросите стилиста о чём угодно…"></textarea><div class="composer-actions"><span class="composer-media-icons"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></span><button data-action="send">↑</button></div></div>
+        <div class="chips"><button data-prompt="Образ на вечер">Образ на вечер</button><button data-prompt="Образ на работу">Образ на работу</button><button data-prompt="Свидание">Свидание</button><button data-prompt="Обыграй эти джинсы">Обыграй эти джинсы</button><button data-prompt="Что взять в поездку?">Что взять в поездку?</button><button data-prompt="Что-то элегантное">Что-то элегантное</button></div>
+        <div class="hint"><span class="spark">✦</span><div><strong>Небольшая подсказка</strong><p>«У вас в календаре ужин в 20:00. Собрать под него образ?»</p><button data-prompt="Да, собери">Да, собери</button><button class="muted" data-action="dismiss">Не сейчас</button></div></div>
+      </section>
+
+      <section class="screen chat-screen" data-screen-id="chat">
+        <header class="chat-header"><span class="chat-avatar">✦</span><div><strong>Ваш стилист</strong><small>на связи</small></div></header>
+        <div id="chat-log" class="chat-log"><div class="message user">Что надеть на ужин сегодня? Что-то приятное, но не слишком нарядное.</div><div class="message assistant">С удовольствием. Вечером будет 17°C — не замёрзнете. Секунду.</div><div class="thinking"><strong>СОБИРАЮ ОБРАЗ…</strong><span>✓ Смотрю погоду</span><span>✓ Изучаю ваш гардероб</span><span>○ Подбираю цвета</span><span>○ Добавляю аксессуары</span></div></div>
+        <div class="chat-compose"><div class="chat-compose-field"><input id="chat-input" placeholder="Напишите стилисту…" /><span class="chat-camera">▧</span></div><button data-action="send-chat">↑</button></div>
+      </section>
+
+      <section class="screen" data-screen-id="result">
+        <div class="eyebrow">ЭЛЕГАНТНО · 17°C · ВЕЧЕР</div>
+        <h1>Ужин в Праге</h1>
+        <div class="result-hero placeholder tall"><span>структурный жакет</span></div>
+        <div class="result-grid"><div class="placeholder"><span>кремовый топ</span></div><div class="placeholder"><span>чёрные брюки</span></div><div class="placeholder"><span>лоферы</span></div><div class="placeholder pink"><span>сумка</span></div></div>
+        <div class="result-note"><span class="result-note-icon">✦</span><p>«Кремовый топ смягчает чёрные брюки, а структурный жакет делает образ уместным для ужина.»</p></div>
+        <div class="result-actions"><button data-action="save"><span>♡</span><small>Сохранить</small></button><button data-screen="stylist"><span>⟳</span><small>Другой</small></button><button data-action="edit"><span>╱</span><small>Изменить</small></button></div>
+        <button class="primary result-wear" data-action="wear">Надеть этот образ</button>
+      </section>
+
+      <section class="screen" data-screen-id="wardrobe">
+        <div class="wardrobe-title-row"><h1>Мой гардероб</h1><span>128 вещей</span></div>
+        <label class="search-box"><span>⌕</span><input type="search" placeholder="Поиск по гардеробу" /></label>
+        <div class="filter-tabs"><button class="selected" data-filter="all">Все</button><button data-filter="top">Верх</button><button data-filter="bottom">Низ</button><button data-filter="outer">Верхняя одежда</button><button data-filter="shoes">Обувь</button></div>
+        <div class="wardrobe-grid">
+          <button class="wardrobe-item" data-item="jacket" data-category="outer"><div class="item-art item-jacket"><span>бежевый жакет</span></div></button>
+          <button class="wardrobe-item" data-item="shirt" data-category="top"><div class="item-art item-shirt"><span>белая рубашка</span></div></button>
+          <button class="wardrobe-item" data-item="jeans" data-category="bottom"><div class="item-art item-jeans"><span>чёрные брюки</span></div></button>
+          <button class="wardrobe-item" data-item="coat" data-category="outer"><div class="item-art item-coat"><span>шерстяное пальто</span></div></button>
+          <button class="wardrobe-item" data-item="loafers" data-category="shoes"><div class="item-art item-loafers"><span>лоферы</span></div></button>
+          <button class="wardrobe-item" data-item="bag" data-category="all"><div class="item-art item-bag"><span>кожаная сумка</span></div></button>
+        </div>
+      </section>
+
+      <section class="screen" data-screen-id="item">
+        <button class="back-button" data-screen="wardrobe">‹　Мой гардероб</button>
+        <div class="item-detail-art item-jacket"></div>
+        <div class="eyebrow">AI ОПРЕДЕЛИЛ</div>
+        <h1 class="detail-title">Чёрный жакет<br />оверсайз</h1>
+        <div class="detail-chips"><span>Жакет</span><span>Чёрный</span><span>Оверсайз</span><span>Осень / Весна</span></div>
+        <button class="primary" data-action="add-item">Добавить в гардероб</button>
+        <button class="outline full-button" data-action="edit-item">Изменить детали</button>
+        <div class="match-note"><strong>Этот жакет сочетается с 8 вещами</strong><span>из вашего гардероба.</span><button data-screen="looks">Посмотреть образы →</button></div>
+      </section>
+
+      <section class="screen" data-screen-id="looks">
+        <h1>Образы</h1>
+        <div class="look-tabs"><button class="selected">Для вас</button><button>Сохранённые</button><button>Надетые</button><button>Коллекции</button></div>
+        <div class="looks-grid"><button class="look-item" data-screen="result"><div class="look-art look-evening"><span>Работа</span></div><strong>Офис в понедельник</strong></button><button class="look-item offset"><div class="look-art look-office"><span>Свидание</span></div><strong>Ужин в Праге</strong></button><button class="look-item"><div class="look-art look-walk"><span>Weekend</span></div><strong>Воскресная прогулка</strong></button><button class="look-item offset"><div class="look-art look-trip"><span>Поездка</span></div><strong>Капсула для Рима</strong></button></div>
+        <h2 class="collection-title">Коллекции</h2><div class="collection-row"><button>Офис в понедельник <span>8</span></button><button>Воскресная прогулка <span>6</span></button><button>Капсула для Рима <span>10</span></button></div>
+      </section>
+
+      <section class="screen" data-screen-id="profile">
+        <div class="eyebrow">ПРОФИЛЬ</div><h1>Наталия</h1><p class="intro">Твой стиль, собранный в одном месте.</p>
+        <div class="profile-card"><span class="large-avatar">Н</span><div><strong>Наталия Волкова</strong><small>Минимал · smart casual</small></div><button>›</button></div>
+        <div class="profile-row"><span>Мой гардероб</span><strong>128 вещей</strong><i>›</i></div><div class="profile-row"><span>Сохранённые образы</span><strong>24</strong><i>›</i></div><div class="profile-row"><span>Настройки стилиста</span><i>›</i></div><button class="outline full-button auth-profile-button" data-action="logout" type="button">Выйти из аккаунта</button>
+      </section>
+      </div>
+
+      <nav class="bottom-nav"><button class="active" data-screen="home"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg></span><small>Главная</small></button><button data-screen="wardrobe"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></span><small>Гардероб</small></button><button class="stylist-tab" data-screen="stylist"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l1.7 4.3L18 10l-4.3 1.7L12 16l-1.7-4.3L6 10l4.3-1.7z"/></svg></span><small>Стилист</small></button><button data-screen="looks"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M7 15l3-3 2 2 3-4 2 3"/></svg></span><small>Образы</small></button><button data-screen="profile"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span><small>Профиль</small></button></nav>
+    </main>
+    <div id="toast" class="toast" role="status"></div>
+    <div id="edit-sheet" class="sheet" hidden><div class="sheet-inner"><div class="sheet-handle"></div><button class="sheet-close" data-action="close-sheet">×</button><h3>Что хотите изменить?</h3><p>Заменю только эту вещь, остальное оставлю.</p><div class="edit-options"><button>Сменить верх</button><button>Сменить низ</button><button class="selected">Сменить обувь ✓</button><button>Сменить сумку</button></div><div class="edit-moods"><button>Теплее</button><button>Проще</button><button>Элегантнее</button><button>Другие цвета</button></div><div class="shoe-label">НОВАЯ ОБУВЬ ИЗ ГАРДЕРОБА</div><div class="shoe-row"><button class="shoe-card selected"></button><button class="shoe-card"></button><button class="shoe-card pink"></button></div><button class="primary" data-action="apply-edit">Отлично · Надеть</button></div></div>
+    <script src="./supabase-config.js"></script>
+    <script src="./supabase-client.js"></script>
+    <script src="./auth-app.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

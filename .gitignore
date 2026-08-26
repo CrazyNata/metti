@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.idea/
+*.iml
+local.properties
+captures/
+.tools/
+android/.gradle/
+android/build/
+android/app/build/
+artifacts/
+.env
+.env.*
+!.env.example
