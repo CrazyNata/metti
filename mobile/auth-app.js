@@ -83,7 +83,6 @@
     if (!name) return setStatus('Напишите, как к вам обращаться.', 'error');
     if (!validEmail(email)) return setStatus('Введите корректный email.', 'error');
     if (password.length < 8) return setStatus('Пароль должен содержать минимум 8 символов.', 'error');
-    if (!form.elements.consent.checked) return setStatus('Подтвердите согласие с условиями.', 'error');
     if (!supabase?.auth) return setStatus('Supabase пока не подключён.', 'error');
     setLoading(form, true); setStatus('Создаю аккаунт…');
     try {
@@ -99,10 +98,19 @@
       setStatus(friendlyError(error), 'error');
     } finally { setLoading(form, false); }
   };
-  const handleGoogle = () => {
+  const handleGoogle = async () => {
     if (!supabase?.auth?.signInWithGoogle) return setStatus('Google-вход пока недоступен.', 'error');
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
-    supabase.auth.signInWithGoogle(redirectTo);
+    setStatus('Проверяю Google-вход…');
+    try {
+      const settings = await supabase.auth.getSettings?.();
+      if (settings?.external?.google !== true) {
+        throw new Error('Google-вход ещё не включён в Supabase.');
+      }
+      const redirectTo = `${window.location.origin}${window.location.pathname}`;
+      supabase.auth.signInWithGoogle(redirectTo);
+    } catch (error) {
+      setStatus(String(error?.message || '').includes('Google-вход ещё') ? error.message : friendlyError(error), 'error');
+    }
   };
   const handleForgot = async () => {
     const email = forms.login?.elements.email.value.trim();

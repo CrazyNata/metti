@@ -21,6 +21,8 @@
     <link rel="stylesheet" href="./font-fix.css" />
     <link rel="stylesheet" href="./home-compact.css" />
     <link rel="stylesheet" href="./type-scale-fix.css" />
+    <link rel="stylesheet" href="./polish-v2.css" />
+    <link rel="stylesheet" href="./photo-assets.css" />
   </head>
   <body>
     <main class="phone" aria-label="Metti">
@@ -37,12 +39,10 @@
         <div class="weather-card"><span class="weather-icon">☁</span><div><strong>Prague · 18°C</strong><small>Облачно · теплее к полудню</small></div></div>
         <div class="section-label"><span>ОБРАЗ НА СЕГОДНЯ</span><span>Собрано AI</span></div>
         <article class="outfit-card">
-          <div class="outfit-collage" aria-label="Коллаж образа"><div class="collage-main placeholder"><span>бежевый жакет</span></div><div class="collage-side"><div class="placeholder pink"><span>белый топ</span></div><div class="placeholder"><span>прямые джинсы</span></div></div><div class="collage-bottom"><div class="placeholder"><span>лоферы</span></div><div class="placeholder pink"><span>сумка-тоут</span></div><div class="placeholder"><span>золотые серьги</span></div></div></div>
+          <div class="outfit-collage" aria-label="Коллаж образа"><div class="collage-main placeholder photo-outfit"><span>бежевый жакет</span></div><div class="collage-side"><div class="placeholder pink photo-shirt"><span>белый топ</span></div><div class="placeholder photo-jeans"><span>прямые джинсы</span></div></div><div class="collage-bottom"><div class="placeholder photo-loafers"><span>лоферы</span></div><div class="placeholder pink photo-bag"><span>сумка-тоут</span></div><div class="placeholder photo-earrings"><span>золотые серьги</span></div></div></div>
           <button class="primary" data-action="wear">Надеть этот образ</button>
           <div class="button-row"><button class="outline" data-action="other">Другой вариант</button><button class="outline rose" data-screen="stylist">Спросить стилиста</button></div>
         </article>
-        <div class="section-label quick-label"><span>БЫСТРЫЕ ЗАПРОСЫ</span></div>
-        <div class="quick-chips"><button class="selected" data-prompt="Работа">Работа</button><button data-prompt="Кэжуал">Кэжуал</button><button data-prompt="Ужин">Ужин</button><button data-prompt="Свидание">Свидание</button><button data-prompt="Поездка">Поездка</button><button data-prompt="Weekend">Weekend</button></div>
       </section>
 
       <section class="screen" data-screen-id="stylist">
@@ -63,8 +63,8 @@
       <section class="screen" data-screen-id="result">
         <div class="eyebrow">ЭЛЕГАНТНО · 17°C · ВЕЧЕР</div>
         <h1>Ужин в Праге</h1>
-        <div class="result-hero placeholder tall"><span>структурный жакет</span></div>
-        <div class="result-grid"><div class="placeholder"><span>кремовый топ</span></div><div class="placeholder"><span>чёрные брюки</span></div><div class="placeholder"><span>лоферы</span></div><div class="placeholder pink"><span>сумка</span></div></div>
+        <div class="result-hero placeholder tall photo-outfit"><span>структурный жакет</span></div>
+        <div class="result-grid"><div class="placeholder photo-shirt"><span>кремовый топ</span></div><div class="placeholder photo-jeans"><span>чёрные брюки</span></div><div class="placeholder photo-loafers"><span>лоферы</span></div><div class="placeholder pink photo-bag"><span>сумка</span></div></div>
         <div class="result-note"><span class="result-note-icon">✦</span><p>«Кремовый топ смягчает чёрные брюки, а структурный жакет делает образ уместным для ужина.»</p></div>
         <div class="result-actions"><button data-action="save"><span>♡</span><small>Сохранить</small></button><button data-screen="stylist"><span>⟳</span><small>Другой</small></button><button data-action="edit"><span>╱</span><small>Изменить</small></button></div>
         <button class="primary result-wear" data-action="wear">Надеть этот образ</button>
@@ -75,21 +75,21 @@
         <label class="search-box"><span>⌕</span><input type="search" placeholder="Поиск по гардеробу" /></label>
         <div class="filter-tabs"><button class="selected" data-filter="all">Все</button><button data-filter="top">Верх</button><button data-filter="bottom">Низ</button><button data-filter="outer">Верхняя одежда</button><button data-filter="shoes">Обувь</button></div>
         <div class="wardrobe-grid">
-          <button class="wardrobe-item" data-item="jacket" data-category="outer"><div class="item-art item-jacket"><span>бежевый жакет</span></div></button>
-          <button class="wardrobe-item" data-item="shirt" data-category="top"><div class="item-art item-shirt"><span>белая рубашка</span></div></button>
-          <button class="wardrobe-item" data-item="jeans" data-category="bottom"><div class="item-art item-jeans"><span>чёрные брюки</span></div></button>
-          <button class="wardrobe-item" data-item="coat" data-category="outer"><div class="item-art item-coat"><span>шерстяное пальто</span></div></button>
-          <button class="wardrobe-item" data-item="loafers" data-category="shoes"><div class="item-art item-loafers"><span>лоферы</span></div></button>
-          <button class="wardrobe-item" data-item="bag" data-category="all"><div class="item-art item-bag"><span>кожаная сумка</span></div></button>
+          <button class="wardrobe-item" data-item="jacket" data-category="outer"><div class="item-art item-jacket photo-jacket"><span>бежевый жакет</span></div></button>
+          <button class="wardrobe-item" data-item="shirt" data-category="top"><div class="item-art item-shirt photo-shirt"><span>белая рубашка</span></div></button>
+          <button class="wardrobe-item" data-item="jeans" data-category="bottom"><div class="item-art item-jeans photo-jeans"><span>чёрные брюки</span></div></button>
+          <button class="wardrobe-item" data-item="loafers" data-category="shoes"><div class="item-art item-loafers photo-loafers"><span>коричневые лоферы</span></div></button>
+          <button class="wardrobe-item" data-item="bag" data-category="all"><div class="item-art item-bag photo-bag"><span>кожаная сумка</span></div></button>
+          <button class="wardrobe-item" data-item="earrings" data-category="all"><div class="item-art photo-earrings"><span>золотые серьги</span></div></button>
         </div>
       </section>
 
       <section class="screen" data-screen-id="item">
         <button class="back-button" data-screen="wardrobe">‹　Мой гардероб</button>
-        <div class="item-detail-art item-jacket"></div>
+        <div class="item-detail-art item-jacket photo-jacket"></div>
         <div class="eyebrow">AI ОПРЕДЕЛИЛ</div>
-        <h1 class="detail-title">Чёрный жакет<br />оверсайз</h1>
-        <div class="detail-chips"><span>Жакет</span><span>Чёрный</span><span>Оверсайз</span><span>Осень / Весна</span></div>
+        <h1 class="detail-title">Бежевый жакет<br />оверсайз</h1>
+        <div class="detail-chips"><span>Жакет</span><span>Бежевый</span><span>Оверсайз</span><span>Осень / Весна</span></div>
         <button class="primary" data-action="add-item">Добавить в гардероб</button>
         <button class="outline full-button" data-action="edit-item">Изменить детали</button>
         <div class="match-note"><strong>Этот жакет сочетается с 8 вещами</strong><span>из вашего гардероба.</span><button data-screen="looks">Посмотреть образы →</button></div>

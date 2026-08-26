@@ -1,0 +1,49 @@
+/* Final interaction polish: keep the prototype calm, tactile and comfortable on a phone. */
+button,
+input,
+textarea { -webkit-tap-highlight-color: transparent; }
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) { outline: none; }
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible { outline: 2px solid var(--rose); outline-offset: 3px; }
+
+.app-scroll { overscroll-behavior-y: contain; scroll-behavior: smooth; }
+
+.screen.active { animation: metti-screen-in .2s ease both; }
+
+@keyframes metti-screen-in {
+  from { opacity: .72; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bottom-nav { padding-bottom: calc(15px + env(safe-area-inset-bottom)); }
+
+/* Give the home collage more presence without pushing the actions down. */
+.screen[data-screen-id="home"] .weather-card { margin-top: 6px; margin-bottom: 12px; }
+.screen[data-screen-id="home"] > .section-label:not(.quick-label) { margin-top: 4px; }
+.screen[data-screen-id="home"] .outfit-collage {
+  height: 302px;
+  margin-top: 4px;
+  grid-template-rows: minmax(92px, 1fr) minmax(92px, 1fr) 92px;
+}
+.screen[data-screen-id="home"] .primary { margin-top: 8px; }
+.screen[data-screen-id="home"] .button-row { margin-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-scroll { scroll-behavior: auto; }
+  .screen.active { animation: none; }
+}
+
+/* The wide browser preview has extra vertical room, so let the outfit breathe. */
+@media (min-width: 501px) {
+  .screen[data-screen-id="home"] .outfit-collage {
+    height: 360px;
+    grid-template-rows: minmax(108px, 1fr) minmax(108px, 1fr) 102px;
+  }
+  .screen[data-screen-id="home"] .primary { margin-top: 12px; }
+  .screen[data-screen-id="home"] .button-row { margin-top: 10px; }
+}

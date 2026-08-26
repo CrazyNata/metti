@@ -1,5 +1,6 @@
 (() => {
   const phone = document.querySelector('.phone');
+  const appScroll = document.querySelector('.app-scroll');
   const toast = document.querySelector('#toast');
   const dateNode = document.querySelector('.screen[data-screen-id="home"] .eyebrow');
   const weatherCard = document.querySelector('.screen[data-screen-id="home"] .weather-card');
@@ -9,7 +10,19 @@
   const weatherUrl = 'https://api.open-meteo.com/v1/forecast?latitude=50.0755&longitude=14.4375&current=temperature_2m,weather_code&daily=temperature_2m_max&forecast_days=1&timezone=Europe%2FPrague';
   let toastTimer;
   const showToast = (message) => { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 1800); };
-  const go = (screen) => { document.querySelectorAll('.screen').forEach((item) => item.classList.toggle('active', item.dataset.screenId === screen)); document.querySelectorAll('.bottom-nav button').forEach((item) => item.classList.toggle('active', item.dataset.screen === screen)); phone.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const go = (screen) => {
+    const target = document.querySelector(`.screen[data-screen-id="${screen}"]`);
+    if (!target) return;
+    document.querySelectorAll('.screen').forEach((item) => item.classList.toggle('active', item === target));
+    document.querySelectorAll('.bottom-nav button').forEach((item) => {
+      const active = item.dataset.screen === screen;
+      item.classList.toggle('active', active);
+      if (active) item.setAttribute('aria-current', 'page');
+      else item.removeAttribute('aria-current');
+    });
+    if (appScroll) appScroll.scrollTo({ top: 0, behavior: 'smooth' });
+    else phone?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const addMessage = (text, role) => { const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = text; document.querySelector('#chat-log').appendChild(node); };
   const ask = (prompt) => { go('chat'); addMessage(prompt, 'user'); setTimeout(() => { addMessage('С удовольствием. Учитываю погоду и ваш гардероб — соберу спокойный, элегантный вариант.', 'assistant'); showToast('Metti собирает образ…'); }, 300); setTimeout(() => { go('result'); showToast('Образ готов'); }, 1800); };
   const updateDate = () => {
@@ -70,6 +83,7 @@
     if (action === 'apply-edit') { document.querySelector('#edit-sheet').hidden = true; showToast('Новый вариант готов'); }
     if (action === 'add-item') showToast('Вещь добавлена в гардероб');
     if (action === 'edit-item') showToast('Можно изменить детали вещи');
+    if (action === 'profile-edit') showToast('Настройки профиля скоро будут доступны');
     if (action === 'logout') window.MettiAuth?.signOut();
     if (action === 'dismiss') event.target.closest('.hint').hidden = true;
     if (action === 'send') { const input = document.querySelector('#prompt-input'); const value = input.value.trim(); if (value) { input.value = ''; ask(value); } }

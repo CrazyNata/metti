@@ -22,9 +22,24 @@
     <link rel="stylesheet" href="./home-compact.css" />
     <link rel="stylesheet" href="./type-scale-fix.css" />
     <link rel="stylesheet" href="./auth-app.css" />
+    <link rel="stylesheet" href="./loading-app.css" />
+    <link rel="stylesheet" href="./profile-refinement.css" />
+    <link rel="stylesheet" href="./polish-v2.css" />
+    <link rel="stylesheet" href="./photo-assets.css" />
   </head>
   <body>
     <main class="phone" aria-label="Metti">
+      <section class="loading-splash" id="loading-splash" aria-label="Metti загружается">
+        <div class="loading-splash-statusbar"><span>9:41</span><span>•••⌄▮</span></div>
+        <div class="loading-splash-notch"></div>
+        <div class="loading-splash-content">
+          <div class="loading-splash-brand">metti <span>✦</span></div>
+          <div class="loading-splash-copy"><span>ВАШ СТИЛИСТ</span><strong>Готовим образ<br />на сегодня</strong></div>
+          <div class="loading-splash-number">68<span>%</span></div>
+          <div class="loading-splash-track" role="progressbar" aria-label="Загрузка образа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="68"><i></i></div>
+          <div class="loading-splash-meta"><span>Изучаю гардероб</span><span>ещё немного</span></div>
+        </div>
+      </section>
       <section class="auth-gate" id="auth-gate" aria-label="Вход в metti" aria-hidden="true" hidden>
         <div class="auth-gate-scroll">
           <div class="auth-card-shell">
@@ -55,7 +70,6 @@
                   <label>Как тебя зовут?<input id="auth-register-name" name="name" type="text" autocomplete="name" placeholder="Наталия" required /></label>
                   <label>Email<input id="auth-register-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
                   <label>Придумайте пароль<div class="auth-password-field"><input id="auth-register-password" name="password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" minlength="8" required /><button class="auth-password-toggle" type="button" data-auth-password="auth-register-password" aria-label="Показать пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></label>
-                  <label class="auth-check-row"><input id="auth-consent" name="consent" type="checkbox" required /><span>Согласна с условиями и политикой конфиденциальности</span></label>
                   <button class="primary auth-submit" type="submit">Создать аккаунт <span>→</span></button>
                   <div class="auth-divider"><span>или</span></div>
                   <button class="outline auth-google" type="button" data-auth-action="google"><span class="google-mark">G</span> Продолжить с Google</button>
@@ -80,12 +94,10 @@
         <div class="weather-card"><span class="weather-icon">☁</span><div><strong>Prague · 18°C</strong><small>Облачно · теплее к полудню</small></div></div>
         <div class="section-label"><span>ОБРАЗ НА СЕГОДНЯ</span><span>Собрано AI</span></div>
         <article class="outfit-card">
-          <div class="outfit-collage" aria-label="Коллаж образа"><div class="collage-main placeholder"><span>бежевый жакет</span></div><div class="collage-side"><div class="placeholder pink"><span>белый топ</span></div><div class="placeholder"><span>прямые джинсы</span></div></div><div class="collage-bottom"><div class="placeholder"><span>лоферы</span></div><div class="placeholder pink"><span>сумка-тоут</span></div><div class="placeholder"><span>золотые серьги</span></div></div></div>
+          <div class="outfit-collage" aria-label="Коллаж образа"><div class="collage-main placeholder photo-outfit"><span>бежевый жакет</span></div><div class="collage-side"><div class="placeholder pink photo-shirt"><span>белый топ</span></div><div class="placeholder photo-jeans"><span>прямые джинсы</span></div></div><div class="collage-bottom"><div class="placeholder photo-loafers"><span>лоферы</span></div><div class="placeholder pink photo-bag"><span>сумка-тоут</span></div><div class="placeholder photo-earrings"><span>золотые серьги</span></div></div></div>
           <button class="primary" data-action="wear">Надеть этот образ</button>
           <div class="button-row"><button class="outline" data-action="other">Другой вариант</button><button class="outline rose" data-screen="stylist">Спросить стилиста</button></div>
         </article>
-        <div class="section-label quick-label"><span>БЫСТРЫЕ ЗАПРОСЫ</span></div>
-        <div class="quick-chips"><button class="selected" data-prompt="Работа">Работа</button><button data-prompt="Кэжуал">Кэжуал</button><button data-prompt="Ужин">Ужин</button><button data-prompt="Свидание">Свидание</button><button data-prompt="Поездка">Поездка</button><button data-prompt="Weekend">Weekend</button></div>
       </section>
 
       <section class="screen" data-screen-id="stylist">
@@ -106,8 +118,8 @@
       <section class="screen" data-screen-id="result">
         <div class="eyebrow">ЭЛЕГАНТНО · 17°C · ВЕЧЕР</div>
         <h1>Ужин в Праге</h1>
-        <div class="result-hero placeholder tall"><span>структурный жакет</span></div>
-        <div class="result-grid"><div class="placeholder"><span>кремовый топ</span></div><div class="placeholder"><span>чёрные брюки</span></div><div class="placeholder"><span>лоферы</span></div><div class="placeholder pink"><span>сумка</span></div></div>
+        <div class="result-hero placeholder tall photo-outfit"><span>структурный жакет</span></div>
+        <div class="result-grid"><div class="placeholder photo-shirt"><span>кремовый топ</span></div><div class="placeholder photo-jeans"><span>чёрные брюки</span></div><div class="placeholder photo-loafers"><span>лоферы</span></div><div class="placeholder pink photo-bag"><span>сумка</span></div></div>
         <div class="result-note"><span class="result-note-icon">✦</span><p>«Кремовый топ смягчает чёрные брюки, а структурный жакет делает образ уместным для ужина.»</p></div>
         <div class="result-actions"><button data-action="save"><span>♡</span><small>Сохранить</small></button><button data-screen="stylist"><span>⟳</span><small>Другой</small></button><button data-action="edit"><span>╱</span><small>Изменить</small></button></div>
         <button class="primary result-wear" data-action="wear">Надеть этот образ</button>
@@ -118,21 +130,21 @@
         <label class="search-box"><span>⌕</span><input type="search" placeholder="Поиск по гардеробу" /></label>
         <div class="filter-tabs"><button class="selected" data-filter="all">Все</button><button data-filter="top">Верх</button><button data-filter="bottom">Низ</button><button data-filter="outer">Верхняя одежда</button><button data-filter="shoes">Обувь</button></div>
         <div class="wardrobe-grid">
-          <button class="wardrobe-item" data-item="jacket" data-category="outer"><div class="item-art item-jacket"><span>бежевый жакет</span></div></button>
-          <button class="wardrobe-item" data-item="shirt" data-category="top"><div class="item-art item-shirt"><span>белая рубашка</span></div></button>
-          <button class="wardrobe-item" data-item="jeans" data-category="bottom"><div class="item-art item-jeans"><span>чёрные брюки</span></div></button>
-          <button class="wardrobe-item" data-item="coat" data-category="outer"><div class="item-art item-coat"><span>шерстяное пальто</span></div></button>
-          <button class="wardrobe-item" data-item="loafers" data-category="shoes"><div class="item-art item-loafers"><span>лоферы</span></div></button>
-          <button class="wardrobe-item" data-item="bag" data-category="all"><div class="item-art item-bag"><span>кожаная сумка</span></div></button>
+          <button class="wardrobe-item" data-item="jacket" data-category="outer"><div class="item-art item-jacket photo-jacket"><span>бежевый жакет</span></div></button>
+          <button class="wardrobe-item" data-item="shirt" data-category="top"><div class="item-art item-shirt photo-shirt"><span>белая рубашка</span></div></button>
+          <button class="wardrobe-item" data-item="jeans" data-category="bottom"><div class="item-art item-jeans photo-jeans"><span>чёрные брюки</span></div></button>
+          <button class="wardrobe-item" data-item="loafers" data-category="shoes"><div class="item-art item-loafers photo-loafers"><span>коричневые лоферы</span></div></button>
+          <button class="wardrobe-item" data-item="bag" data-category="all"><div class="item-art item-bag photo-bag"><span>кожаная сумка</span></div></button>
+          <button class="wardrobe-item" data-item="earrings" data-category="all"><div class="item-art photo-earrings"><span>золотые серьги</span></div></button>
         </div>
       </section>
 
       <section class="screen" data-screen-id="item">
         <button class="back-button" data-screen="wardrobe">‹　Мой гардероб</button>
-        <div class="item-detail-art item-jacket"></div>
+        <div class="item-detail-art item-jacket photo-jacket"></div>
         <div class="eyebrow">AI ОПРЕДЕЛИЛ</div>
-        <h1 class="detail-title">Чёрный жакет<br />оверсайз</h1>
-        <div class="detail-chips"><span>Жакет</span><span>Чёрный</span><span>Оверсайз</span><span>Осень / Весна</span></div>
+        <h1 class="detail-title">Бежевый жакет<br />оверсайз</h1>
+        <div class="detail-chips"><span>Жакет</span><span>Бежевый</span><span>Оверсайз</span><span>Осень / Весна</span></div>
         <button class="primary" data-action="add-item">Добавить в гардероб</button>
         <button class="outline full-button" data-action="edit-item">Изменить детали</button>
         <div class="match-note"><strong>Этот жакет сочетается с 8 вещами</strong><span>из вашего гардероба.</span><button data-screen="looks">Посмотреть образы →</button></div>
@@ -146,9 +158,15 @@
       </section>
 
       <section class="screen" data-screen-id="profile">
-        <div class="eyebrow">ПРОФИЛЬ</div><h1>Наталия</h1><p class="intro">Твой стиль, собранный в одном месте.</p>
-        <div class="profile-card"><span class="large-avatar">Н</span><div><strong>Наталия Волкова</strong><small>Минимал · smart casual</small></div><button>›</button></div>
-        <div class="profile-row"><span>Мой гардероб</span><strong>128 вещей</strong><i>›</i></div><div class="profile-row"><span>Сохранённые образы</span><strong>24</strong><i>›</i></div><div class="profile-row"><span>Настройки стилиста</span><i>›</i></div><button class="outline full-button auth-profile-button" data-action="logout" type="button">Выйти из аккаунта</button>
+        <div class="profile-topline"><div class="eyebrow">ПРОФИЛЬ</div><button class="profile-edit-button" type="button" data-action="profile-edit">Изменить</button></div>
+        <div class="profile-heading"><div><h1>Наталия</h1><p>Твой стиль, собранный<br />в одном месте.</p></div><span class="profile-hero-avatar">Н</span></div>
+        <div class="profile-card profile-card-refined"><div class="profile-card-copy"><strong>Наталия Волкова</strong><small>Минимал · smart casual</small><div class="profile-style-chips"><span>Спокойный</span><span>Элегантный</span></div></div><button type="button" data-action="profile-edit" aria-label="Открыть профиль">›</button></div>
+        <div class="profile-stats"><div><strong>128</strong><span>вещей</span></div><div><strong>24</strong><span>образа</span></div><div><strong>6</strong><span>коллекций</span></div></div>
+        <div class="profile-section-head"><span>ТВОЙ СТИЛЬ</span><button type="button" data-action="profile-edit">Настроить</button></div>
+        <div class="profile-style-card"><span class="style-spark">✦</span><div><strong>Минимал · smart casual</strong><small>Подходит для работы, города и встреч.</small></div><button type="button" data-action="profile-edit" aria-label="Изменить стиль">›</button></div>
+        <div class="profile-section-head profile-menu-head"><span>РАЗДЕЛЫ</span></div>
+        <div class="profile-menu"><button class="profile-menu-row" type="button" data-screen="wardrobe"><span class="menu-icon">▦</span><span>Мой гардероб</span><strong>128</strong><i>›</i></button><button class="profile-menu-row" type="button" data-screen="looks"><span class="menu-icon">▧</span><span>Сохранённые образы</span><strong>24</strong><i>›</i></button><button class="profile-menu-row" type="button" data-action="profile-edit"><span class="menu-icon">⌘</span><span>Настройки стилиста</span><i>›</i></button></div>
+        <button class="outline full-button auth-profile-button" data-action="logout" type="button">Выйти из аккаунта</button>
       </section>
       </div>
 
@@ -158,6 +176,7 @@
     <div id="edit-sheet" class="sheet" hidden><div class="sheet-inner"><div class="sheet-handle"></div><button class="sheet-close" data-action="close-sheet">×</button><h3>Что хотите изменить?</h3><p>Заменю только эту вещь, остальное оставлю.</p><div class="edit-options"><button>Сменить верх</button><button>Сменить низ</button><button class="selected">Сменить обувь ✓</button><button>Сменить сумку</button></div><div class="edit-moods"><button>Теплее</button><button>Проще</button><button>Элегантнее</button><button>Другие цвета</button></div><div class="shoe-label">НОВАЯ ОБУВЬ ИЗ ГАРДЕРОБА</div><div class="shoe-row"><button class="shoe-card selected"></button><button class="shoe-card"></button><button class="shoe-card pink"></button></div><button class="primary" data-action="apply-edit">Отлично · Надеть</button></div></div>
     <script src="./supabase-config.js"></script>
     <script src="./supabase-client.js"></script>
+    <script src="./loading-app.js"></script>
     <script src="./auth-app.js"></script>
     <script src="./app.js"></script>
   </body>

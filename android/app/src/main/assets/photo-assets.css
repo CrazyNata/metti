@@ -1,0 +1,58 @@
+/* Local fashion photography generated for the Metti prototype. */
+.photo-outfit,
+.photo-jacket,
+.photo-shirt,
+.photo-jeans,
+.photo-loafers,
+.photo-bag,
+.photo-earrings {
+  background-repeat: no-repeat !important;
+}
+
+.photo-outfit {
+  background-image: url('./assets/outfit-hero.png') !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+.photo-jacket,
+.photo-shirt,
+.photo-jeans,
+.photo-loafers,
+.photo-bag,
+.photo-earrings {
+  background-image: url('./assets/wardrobe-sheet.png') !important;
+  background-size: 300% 200% !important;
+}
+
+.photo-jacket { background-position: 0 0 !important; }
+.photo-shirt { background-position: 50% 0 !important; }
+.photo-jeans { background-position: 100% 0 !important; }
+.photo-loafers { background-position: 0 100% !important; }
+.photo-bag { background-position: 50% 100% !important; }
+.photo-earrings { background-position: 100% 100% !important; }
+
+/* Keep labels readable over photography while preserving the soft editorial look. */
+.photo-outfit::after,
+.photo-jacket::after,
+.photo-shirt::after,
+.photo-jeans::after,
+.photo-loafers::after,
+.photo-bag::after,
+.photo-earrings::after {
+  background: linear-gradient(180deg, transparent 58%, rgba(23, 21, 15, .16) 100%) !important;
+}
+
+.screen[data-screen-id="wardrobe"] .item-art.photo-loafers,
+.screen[data-screen-id="wardrobe"] .item-art.photo-bag,
+.screen[data-screen-id="wardrobe"] .item-art.photo-earrings {
+  background-color: #efe8dc !important;
+}
+
+.screen[data-screen-id="wardrobe"] .item-art.photo-earrings::after {
+  background: linear-gradient(180deg, transparent 64%, rgba(23, 21, 15, .1) 100%) !important;
+}
+
+@media (max-width: 500px) {
+  .screen[data-screen-id="home"] .photo-outfit { background-position: center 48% !important; }
+}

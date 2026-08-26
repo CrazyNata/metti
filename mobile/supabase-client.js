@@ -48,6 +48,7 @@
       return result;
     },
     setSession: (session, remember = true) => writeSession(session, remember),
+    getSettings: () => request('/auth/v1/settings'),
     signInWithGoogle: (redirectTo = window.location.href) => {
       const target = new URL(`${config.url}/auth/v1/authorize`);
       target.searchParams.set('provider', 'google');
