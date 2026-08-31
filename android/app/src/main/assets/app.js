@@ -199,6 +199,93 @@
     if (addButton) addButton.textContent = item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб';
     await imageUrl(item.image_path);
   };
+  const prepareWardrobeImage = async (file) => {
+    if (!file || !String(file.type || '').startsWith('image/') || /heic|heif/i.test(file.type || '')) return file;
+    const objectUrl = URL.createObjectURL(file);
+    let canvas;
+    let output;
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const node = new Image();
+        node.onload = () => resolve(node);
+        node.onerror = reject;
+        node.src = objectUrl;
+      });
+      const sourceWidth = image.naturalWidth || image.width;
+      const sourceHeight = image.naturalHeight || image.height;
+      if (!sourceWidth || !sourceHeight) return file;
+      const scale = Math.min(1, 1400 / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) return file;
+      context.drawImage(image, 0, 0, width, height);
+      const imageData = context.getImageData(0, 0, width, height);
+      const pixels = imageData.data;
+      let hasTransparency = false;
+      for (let i = 3; i < pixels.length; i += 4) {
+        if (pixels[i] < 250) { hasTransparency = true; break; }
+      }
+      if (!hasTransparency) {
+        const samples = [];
+        const step = Math.max(1, Math.floor(Math.max(width, height) / 32));
+        const sample = (x, y) => {
+          const index = (y * width + x) * 4;
+          samples.push([pixels[index], pixels[index + 1], pixels[index + 2]]);
+        };
+        for (let x = 0; x < width; x += step) { sample(x, 0); sample(x, height - 1); }
+        for (let y = step; y < height; y += step) { sample(0, y); sample(width - 1, y); }
+        const background = samples.reduce((sum, value) => [sum[0] + value[0], sum[1] + value[1], sum[2] + value[2]], [0, 0, 0]).map((value) => value / Math.max(1, samples.length));
+        const thresholdSquared = 58 * 58;
+        const mask = new Uint8Array(width * height);
+        const queue = new Int32Array(width * height);
+        let head = 0; let tail = 0;
+        const closeToBackground = (pixelIndex) => {
+          const index = pixelIndex * 4;
+          const red = pixels[index] - background[0];
+          const green = pixels[index + 1] - background[1];
+          const blue = pixels[index + 2] - background[2];
+          return red * red + green * green + blue * blue <= thresholdSquared;
+        };
+        const mark = (pixelIndex) => {
+          if (mask[pixelIndex] || !closeToBackground(pixelIndex)) return;
+          mask[pixelIndex] = 1; queue[tail++] = pixelIndex;
+        };
+        for (let x = 0; x < width; x += 1) { mark(x); mark((height - 1) * width + x); }
+        for (let y = 1; y < height - 1; y += 1) { mark(y * width); mark(y * width + width - 1); }
+        while (head < tail) {
+          const pixelIndex = queue[head++];
+          const x = pixelIndex % width;
+          if (x > 0) mark(pixelIndex - 1);
+          if (x < width - 1) mark(pixelIndex + 1);
+          if (pixelIndex >= width) mark(pixelIndex - width);
+          if (pixelIndex < width * (height - 1)) mark(pixelIndex + width);
+        }
+        for (let i = 0; i < mask.length; i += 1) {
+          if (mask[i]) pixels[i * 4 + 3] = 0;
+        }
+        context.putImageData(imageData, 0, 0);
+      }
+      output = document.createElement('canvas');
+      output.width = width; output.height = height;
+      const outputContext = output.getContext('2d');
+      if (!outputContext) return file;
+      outputContext.fillStyle = '#ffffff';
+      outputContext.fillRect(0, 0, width, height);
+      outputContext.drawImage(canvas, 0, 0);
+      const blob = await new Promise((resolve) => output.toBlob(resolve, 'image/jpeg', 0.9));
+      if (!blob) return file;
+      return new File([blob], `${String(file.name || 'wardrobe').replace(/\.[^.]+$/, '')}-white.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    } catch (_) {
+      return file;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+      if (canvas) { canvas.width = 0; canvas.height = 0; }
+      if (output) { output.width = 0; output.height = 0; }
+    }
+  };
   const renderOutfitCards = (outfits) => {
     const grid = document.querySelector('.looks-grid');
     if (!grid) return;
@@ -265,7 +352,9 @@
 
   const openWardrobeSheet = (item = null) => {
     const backdrop = byId('wardrobe-sheet'); const form = byId('wardrobe-form'); if (!backdrop || !form) return;
-    form.dataset.itemId = item?.id || ''; byId('wardrobe-form-title').textContent = item ? 'Изменить вещь' : 'Новая вещь';
+    const persistedItem = item && !String(item.id).startsWith('demo-');
+    form.dataset.itemId = persistedItem ? item.id : '';
+    byId('wardrobe-form-title').textContent = persistedItem ? 'Изменить вещь' : 'Новая вещь';
     ['name','color','size','season','brand','notes'].forEach((name) => { if (form.elements[name]) form.elements[name].value = item?.[name] || ''; });
     if (form.elements.category) form.elements.category.value = item?.category || 'outer';
     if (form.elements.image) form.elements.image.value = '';
@@ -278,13 +367,17 @@
     const name = form.elements.name.value.trim(); const category = form.elements.category.value;
     if (!name) return setFormStatus('wardrobe-form-status', 'Введите название вещи.', 'error');
     if (!state.user || !supabase?.data) return setFormStatus('wardrobe-form-status', 'Войдите, чтобы сохранять вещи.', 'error');
-    const existing = state.wardrobe.find((item) => item.id === form.dataset.itemId);
+    // Demo cards are only templates; when opened from a demo card, create a
+    // new persisted item instead of trying to update the demo id.
+    const existing = state.wardrobe.find((item) => item.id === form.dataset.itemId && !String(item.id).startsWith('demo-'));
     const file = form.elements.image.files?.[0];
     if (file && file.size > 5 * 1024 * 1024) return setFormStatus('wardrobe-form-status', 'Файл должен быть меньше 5 МБ.', 'error');
-    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Загружаю фотографию…' : 'Сохраняю…');
+    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Подготавливаю белый фон…' : 'Сохраняю…');
     let newPath = existing?.image_path || null;
     try {
-      if (file) newPath = await supabase.data.uploadWardrobeImage(file, state.user.id, existing?.id || uuid());
+      const processedFile = file ? await prepareWardrobeImage(file) : null;
+      if (processedFile && processedFile.size > 5 * 1024 * 1024) throw new Error('После обработки файл получился больше 5 МБ. Выберите фото поменьше.');
+      if (processedFile) { setFormStatus('wardrobe-form-status', 'Загружаю фотографию…'); newPath = await supabase.data.uploadWardrobeImage(processedFile, state.user.id, existing?.id || uuid()); }
       const payload = { user_id: state.user.id, name, category, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null, image_path: newPath, metadata: existing?.metadata || {} };
       const saved = existing ? await supabase.data.updateWardrobeItem(existing.id, payload) : await supabase.data.saveWardrobeItem(payload);
       if (!saved) throw new Error('Вещь не вернулась из Supabase.');
@@ -425,6 +518,12 @@
     if (action === 'close-sheet') byId('edit-sheet').hidden = true;
     if (action === 'apply-edit') { byId('edit-sheet').hidden = true; showToast('Новый вариант готов'); }
     if (action === 'open-add-item') openWardrobeSheet();
+    if (action === 'add-item') {
+      const item = state.activeItem;
+      if (!item) return;
+      if (!String(item.id).startsWith('demo-')) return showToast('Вещь уже в гардеробе');
+      openWardrobeSheet(item);
+    }
     if (action === 'edit-item') openWardrobeSheet(state.activeItem);
     if (action === 'delete-item') deleteActiveItem();
     if (action === 'close-wardrobe-sheet') closeWardrobeSheet();
