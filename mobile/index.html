@@ -26,18 +26,17 @@
     <link rel="stylesheet" href="./profile-refinement.css" />
     <link rel="stylesheet" href="./polish-v2.css" />
     <link rel="stylesheet" href="./photo-assets.css" />
+    <link rel="stylesheet" href="./data-app.css" />
   </head>
   <body>
     <main class="phone" aria-label="Metti">
-      <section class="loading-splash" id="loading-splash" aria-label="Metti загружается">
+      <section class="loading-splash loading-splash-minimal" id="loading-splash" aria-label="Metti загружается">
         <div class="loading-splash-statusbar"><span>9:41</span><span>•••⌄▮</span></div>
         <div class="loading-splash-notch"></div>
-        <div class="loading-splash-content">
-          <div class="loading-splash-brand">metti <span>✦</span></div>
-          <div class="loading-splash-copy"><span>ВАШ СТИЛИСТ</span><strong>Готовим образ<br />на сегодня</strong></div>
-          <div class="loading-splash-number">68<span>%</span></div>
-          <div class="loading-splash-track" role="progressbar" aria-label="Загрузка образа" aria-valuemin="0" aria-valuemax="100" aria-valuenow="68"><i></i></div>
-          <div class="loading-splash-meta"><span>Изучаю гардероб</span><span>ещё немного</span></div>
+        <div class="loading-splash-content loading-splash-minimal-content">
+          <div class="loading-splash-minimal-brand">metti <span>✦</span></div>
+          <div class="loading-splash-line-loader" role="progressbar" aria-label="Metti загружается" aria-valuemin="0" aria-valuemax="100" aria-valuenow="68"><i></i></div>
+          <p>Ваш личный стилист</p>
         </div>
       </section>
       <section class="auth-gate" id="auth-gate" aria-label="Вход в metti" aria-hidden="true" hidden>
@@ -76,6 +75,18 @@
                   <p class="auth-status" id="register-status" role="status" aria-live="polite"></p>
                 </form>
                 <p class="auth-switch-app">Уже есть аккаунт? <button class="auth-link-button" type="button" data-auth-mode="login">Войти</button></p>
+              </div>
+
+              <div class="auth-view" data-auth-view="reset" hidden>
+                <div class="auth-brand-app">metti <span>✦</span></div>
+                <h1>Новый пароль</h1>
+                <p class="auth-lead-app">Придумайте новый пароль для своего аккаунта.</p>
+                <form id="reset-form" class="auth-form-app" novalidate>
+                  <label>Новый пароль<div class="auth-password-field"><input id="auth-reset-password" name="password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" minlength="8" required /><button class="auth-password-toggle" type="button" data-auth-password="auth-reset-password" aria-label="Показать пароль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></label>
+                  <button class="primary auth-submit" type="submit">Сохранить пароль</button>
+                  <p class="auth-status" id="reset-status" role="status" aria-live="polite"></p>
+                </form>
+                <p class="auth-switch-app"><button class="auth-link-button" type="button" data-auth-mode="login">Вернуться ко входу</button></p>
               </div>
             </div>
           </div>
@@ -126,10 +137,10 @@
       </section>
 
       <section class="screen" data-screen-id="wardrobe">
-        <div class="wardrobe-title-row"><h1>Мой гардероб</h1><span>128 вещей</span></div>
+        <div class="wardrobe-title-row"><h1>Мой гардероб</h1><div class="wardrobe-title-actions"><span id="wardrobe-count">0 вещей</span><button class="icon-button" type="button" data-action="open-add-item" aria-label="Добавить вещь">+</button></div></div>
         <label class="search-box"><span>⌕</span><input type="search" placeholder="Поиск по гардеробу" /></label>
         <div class="filter-tabs"><button class="selected" data-filter="all">Все</button><button data-filter="top">Верх</button><button data-filter="bottom">Низ</button><button data-filter="outer">Верхняя одежда</button><button data-filter="shoes">Обувь</button></div>
-        <div class="wardrobe-grid">
+        <div class="wardrobe-grid" id="wardrobe-grid">
           <button class="wardrobe-item" data-item="jacket" data-category="outer"><div class="item-art item-jacket photo-jacket"><span>бежевый жакет</span></div></button>
           <button class="wardrobe-item" data-item="shirt" data-category="top"><div class="item-art item-shirt photo-shirt"><span>белая рубашка</span></div></button>
           <button class="wardrobe-item" data-item="jeans" data-category="bottom"><div class="item-art item-jeans photo-jeans"><span>чёрные брюки</span></div></button>
@@ -137,6 +148,7 @@
           <button class="wardrobe-item" data-item="bag" data-category="all"><div class="item-art item-bag photo-bag"><span>кожаная сумка</span></div></button>
           <button class="wardrobe-item" data-item="earrings" data-category="all"><div class="item-art photo-earrings"><span>золотые серьги</span></div></button>
         </div>
+        <div class="wardrobe-empty" id="wardrobe-empty">В гардеробе пока нет вещей.<br />Добавьте первую вещь — фотографию, цвет и детали.</div>
       </section>
 
       <section class="screen" data-screen-id="item">
@@ -145,14 +157,15 @@
         <div class="eyebrow">AI ОПРЕДЕЛИЛ</div>
         <h1 class="detail-title">Бежевый жакет<br />оверсайз</h1>
         <div class="detail-chips"><span>Жакет</span><span>Бежевый</span><span>Оверсайз</span><span>Осень / Весна</span></div>
-        <button class="primary" data-action="add-item">Добавить в гардероб</button>
-        <button class="outline full-button" data-action="edit-item">Изменить детали</button>
+        <div class="item-detail-actions"><button class="primary" data-action="add-item">Добавить в гардероб</button><button class="outline" data-action="edit-item">Изменить</button></div>
+        <button class="outline full-button" data-action="delete-item">Удалить вещь</button>
         <div class="match-note"><strong>Этот жакет сочетается с 8 вещами</strong><span>из вашего гардероба.</span><button data-screen="looks">Посмотреть образы →</button></div>
       </section>
 
       <section class="screen" data-screen-id="looks">
         <h1>Образы</h1>
         <div class="look-tabs"><button class="selected">Для вас</button><button>Сохранённые</button><button>Надетые</button><button>Коллекции</button></div>
+        <div class="looks-data-note" id="looks-data-note"></div>
         <div class="looks-grid"><button class="look-item" data-screen="result"><div class="look-art look-evening"><span>Работа</span></div><strong>Офис в понедельник</strong></button><button class="look-item offset"><div class="look-art look-office"><span>Свидание</span></div><strong>Ужин в Праге</strong></button><button class="look-item"><div class="look-art look-walk"><span>Weekend</span></div><strong>Воскресная прогулка</strong></button><button class="look-item offset"><div class="look-art look-trip"><span>Поездка</span></div><strong>Капсула для Рима</strong></button></div>
         <h2 class="collection-title">Коллекции</h2><div class="collection-row"><button>Офис в понедельник <span>8</span></button><button>Воскресная прогулка <span>6</span></button><button>Капсула для Рима <span>10</span></button></div>
       </section>
@@ -173,6 +186,8 @@
       <nav class="bottom-nav"><button class="active" data-screen="home"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" /></svg></span><small>Главная</small></button><button data-screen="wardrobe"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></span><small>Гардероб</small></button><button class="stylist-tab" data-screen="stylist"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l1.7 4.3L18 10l-4.3 1.7L12 16l-1.7-4.3L6 10l4.3-1.7z"/></svg></span><small>Стилист</small></button><button data-screen="looks"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M7 15l3-3 2 2 3-4 2 3"/></svg></span><small>Образы</small></button><button data-screen="profile"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span><small>Профиль</small></button></nav>
     </main>
     <div id="toast" class="toast" role="status"></div>
+    <div id="wardrobe-sheet" class="sheet-backdrop" hidden><form id="wardrobe-form" class="data-sheet data-form" novalidate><button class="data-sheet-close" type="button" data-action="close-wardrobe-sheet" aria-label="Закрыть">×</button><h2 id="wardrobe-form-title">Новая вещь</h2><p>Добавьте вещь в свой гардероб. Фото хранится приватно и доступно только вам.</p><label>Название<input name="name" required placeholder="Например, бежевый жакет" /></label><div class="form-two"><label>Категория<select name="category" required><option value="outer">Верхняя одежда</option><option value="top">Верх</option><option value="bottom">Низ</option><option value="shoes">Обувь</option><option value="accessory">Аксессуары</option></select></label><label>Цвет<input name="color" placeholder="Бежевый" /></label></div><div class="form-two"><label>Размер<input name="size" placeholder="M" /></label><label>Сезон<input name="season" placeholder="Осень / Весна" /></label></div><label>Бренд<input name="brand" placeholder="Необязательно" /></label><label>Заметки<textarea name="notes" placeholder="Посадка, сочетания, настроение…"></textarea></label><label>Фотография<input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" /><span class="form-help">До 5 МБ. Для замены фотографии выберите новый файл.</span></label><div class="form-actions"><button class="outline" type="button" data-action="close-wardrobe-sheet">Отмена</button><button class="primary" type="submit">Сохранить</button></div><p class="auth-status" id="wardrobe-form-status" role="status" aria-live="polite"></p></form></div>
+    <div id="profile-sheet" class="sheet-backdrop" hidden><form id="profile-form" class="data-sheet data-form" novalidate><button class="data-sheet-close" type="button" data-action="close-profile-sheet" aria-label="Закрыть">×</button><h2>Твой профиль</h2><p>Настройте данные, чтобы стилист точнее подбирал образы.</p><label>Имя<input name="display_name" required placeholder="Наталия" /></label><label>Город<input name="city" required placeholder="Prague" /></label><label>Стиль<input name="style_tags" placeholder="Спокойный, элегантный" /></label><label>Любимые цвета<input name="favorite_colors" placeholder="Молочный, бежевый, чёрный" /></label><div class="form-two"><label>Посадка<select name="fit"><option value="">Не указано</option><option value="relaxed">Свободная</option><option value="regular">Классическая</option><option value="slim">По фигуре</option></select></label><label>Размер<input name="size" placeholder="M" /></label></div><label>Предпочтения<textarea name="preferences" placeholder="Для работы, города, встреч…"></textarea></label><div class="form-actions"><button class="outline" type="button" data-action="close-profile-sheet">Отмена</button><button class="primary" type="submit">Сохранить</button></div><p class="auth-status" id="profile-form-status" role="status" aria-live="polite"></p></form></div>
     <div id="edit-sheet" class="sheet" hidden><div class="sheet-inner"><div class="sheet-handle"></div><button class="sheet-close" data-action="close-sheet">×</button><h3>Что хотите изменить?</h3><p>Заменю только эту вещь, остальное оставлю.</p><div class="edit-options"><button>Сменить верх</button><button>Сменить низ</button><button class="selected">Сменить обувь ✓</button><button>Сменить сумку</button></div><div class="edit-moods"><button>Теплее</button><button>Проще</button><button>Элегантнее</button><button>Другие цвета</button></div><div class="shoe-label">НОВАЯ ОБУВЬ ИЗ ГАРДЕРОБА</div><div class="shoe-row"><button class="shoe-card selected"></button><button class="shoe-card"></button><button class="shoe-card pink"></button></div><button class="primary" data-action="apply-edit">Отлично · Надеть</button></div></div>
     <script src="./supabase-config.js"></script>
     <script src="./supabase-client.js"></script>
