@@ -28,5 +28,15 @@
 .screen[data-screen-id="stylist"] .intro{font-size:15px}
 .screen[data-screen-id="stylist"] .composer-card textarea{font-size:20px}
 .screen[data-screen-id="stylist"] .chips button{font-size:13px;font-weight:600}
-.message{font-size:13px}
-.chat-compose input{font-size:13px}
+.screen[data-screen-id="chat"] .chat-header strong{font-size:15.5px}
+.screen[data-screen-id="chat"] .chat-header small{font-size:12px}
+.screen[data-screen-id="chat"] .message{font-size:14.3px}
+.screen[data-screen-id="chat"] .thinking{font-size:14.3px}
+.screen[data-screen-id="chat"] .thinking strong{font-size:12px}
+.screen[data-screen-id="chat"] .chat-compose input{font-size:15.5px}
+.screen[data-screen-id="chat"] .chat-camera{font-size:20px}
+
+/* Give the chat its own viewport so messages never slide beneath the composer. */
+.screen[data-screen-id="chat"].active{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0;padding-bottom:0}
+.screen[data-screen-id="chat"] .chat-log{flex:1 1 auto;min-height:0;overflow-y:auto;padding-bottom:22px}
+.screen[data-screen-id="chat"] .chat-compose{position:relative;flex:0 0 auto;z-index:3}

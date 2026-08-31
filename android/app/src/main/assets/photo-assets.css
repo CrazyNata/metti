@@ -32,6 +32,19 @@
 .photo-bag { background-position: 50% 100% !important; }
 .photo-earrings { background-position: 100% 100% !important; }
 
+/* Additional demo wardrobe photos. */
+.photo-skirt,
+.photo-sneakers,
+.photo-scarf {
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+
+.photo-skirt { background-image: url('./assets/wardrobe-skirt.png') !important; }
+.photo-sneakers { background-image: url('./assets/wardrobe-sneakers.png') !important; }
+.photo-scarf { background-image: url('./assets/wardrobe-scarf.png') !important; }
+
 /* Keep labels readable over photography while preserving the soft editorial look. */
 .photo-outfit::after,
 .photo-jacket::after,
@@ -39,7 +52,10 @@
 .photo-jeans::after,
 .photo-loafers::after,
 .photo-bag::after,
-.photo-earrings::after {
+.photo-earrings::after,
+.photo-skirt::after,
+.photo-sneakers::after,
+.photo-scarf::after {
   background: linear-gradient(180deg, transparent 58%, rgba(23, 21, 15, .16) 100%) !important;
 }
 

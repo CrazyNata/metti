@@ -29,9 +29,13 @@
     { id: 'demo-jeans', name: 'Прямые джинсы', category: 'bottom', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-jeans' },
     { id: 'demo-loafers', name: 'Коричневые лоферы', category: 'shoes', color: 'Коричневый', season: 'Осень / Весна', photoClass: 'photo-loafers' },
     { id: 'demo-bag', name: 'Сумка-тоут', category: 'accessory', color: 'Тауп', season: 'Круглый год', photoClass: 'photo-bag' },
-    { id: 'demo-earrings', name: 'Золотые серьги', category: 'accessory', color: 'Золотой', season: 'Круглый год', photoClass: 'photo-earrings' }
+    { id: 'demo-earrings', name: 'Золотые серьги', category: 'accessory', color: 'Золотой', season: 'Круглый год', photoClass: 'photo-earrings' },
+    { id: 'demo-skirt', name: 'Чёрная миди-юбка', category: 'bottom', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-skirt' },
+    { id: 'demo-sneakers', name: 'Белые кеды', category: 'shoes', color: 'Белый', season: 'Весна / Лето', photoClass: 'photo-sneakers' },
+    { id: 'demo-scarf', name: 'Шёлковый платок', category: 'accessory', color: 'Пыльная слива', season: 'Круглый год', photoClass: 'photo-scarf' }
   ];
   const itemClass = (item) => {
+    if (item?.photoClass) return item.photoClass;
     const value = `${item.name || ''} ${item.category || ''}`.toLowerCase();
     if (value.includes('жакет') || item.category === 'outer') return 'item-jacket photo-jacket';
     if (value.includes('джин') || value.includes('брюк') || item.category === 'bottom') return 'item-jeans photo-jeans';
@@ -147,7 +151,9 @@
   const addImageBackground = async (node, path) => {
     const url = await imageUrl(path);
     if (!url || !node?.isConnected) return;
-    node.style.backgroundImage = `url("${url.replace(/"/g, '\\"')}")`;
+    // The editorial placeholder classes use !important background rules. Set the
+    // signed private image with the same priority so uploaded photos win.
+    node.style.setProperty('background-image', `url("${url.replace(/"/g, '\\"')}")`, 'important');
     node.classList.add('has-image');
   };
   const renderWardrobe = async () => {
