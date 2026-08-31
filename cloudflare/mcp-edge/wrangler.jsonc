@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "metti-mcp-edge",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-31",
+  "workers_dev": true,
+  "vars": {
+    "METTI_MCP_UPSTREAM_URL": "https://fkicjvawvaddjdmcpiei.supabase.co/functions/v1/metti-mcp",
+    "MCP_ALLOWED_ORIGINS": "",
+    "MCP_ALLOWED_HOSTS": "metti-mcp-edge.road-guide-natasha7261.workers.dev"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -25,7 +25,8 @@ create table if not exists public.wardrobe_items (
   image_path text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now())
+  updated_at timestamptz not null default timezone('utc', now()),
+  archived_at timestamptz
 );
 
 create table if not exists public.saved_outfits (
@@ -41,7 +42,8 @@ create table if not exists public.saved_outfits (
   worn_at timestamptz,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now())
+  updated_at timestamptz not null default timezone('utc', now()),
+  archived_at timestamptz
 );
 
 alter table public.profiles enable row level security;
@@ -130,3 +132,5 @@ create policy "wardrobe_storage_delete_own" on storage.objects for delete to aut
 create index if not exists wardrobe_items_user_created_idx on public.wardrobe_items (user_id, created_at desc);
 create index if not exists saved_outfits_user_created_idx on public.saved_outfits (user_id, created_at desc);
 create index if not exists saved_outfits_user_worn_idx on public.saved_outfits (user_id, is_worn, worn_at desc);
+create index if not exists wardrobe_items_user_archived_created_idx on public.wardrobe_items (user_id, archived_at, created_at desc);
+create index if not exists saved_outfits_user_archived_created_idx on public.saved_outfits (user_id, archived_at, created_at desc);

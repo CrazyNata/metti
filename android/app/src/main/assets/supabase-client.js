@@ -140,7 +140,49 @@
   };
   const currentUser = () => readSession()?.user || null;
 
+  const oauth = {
+    getAuthorizationDetails: async (authorizationId) => {
+      const id = String(authorizationId || '').trim();
+      if (!id) return { data: null, error: new Error('Не найден authorization_id.') };
+      try {
+        const data = await request(`/auth/v1/oauth/authorizations/${encodeURIComponent(id)}`);
+        return { data, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    approveAuthorization: async (authorizationId, options = {}) => {
+      const id = String(authorizationId || '').trim();
+      if (!id) return { data: null, error: new Error('Не найден authorization_id.') };
+      try {
+        const data = await request(`/auth/v1/oauth/authorizations/${encodeURIComponent(id)}/consent`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'approve' })
+        });
+        if (data?.redirect_url && !options.skipBrowserRedirect) window.location.assign(data.redirect_url);
+        return { data, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    denyAuthorization: async (authorizationId, options = {}) => {
+      const id = String(authorizationId || '').trim();
+      if (!id) return { data: null, error: new Error('Не найден authorization_id.') };
+      try {
+        const data = await request(`/auth/v1/oauth/authorizations/${encodeURIComponent(id)}/consent`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'deny' })
+        });
+        if (data?.redirect_url && !options.skipBrowserRedirect) window.location.assign(data.redirect_url);
+        return { data, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    }
+  };
+
   const auth = {
+    oauth: Object.freeze(oauth),
     getSession: readSession,
     getUser: async () => {
       const user = await request('/auth/v1/user');
@@ -210,7 +252,7 @@
   };
 
   const data = {
-    listWardrobe: () => request('/rest/v1/wardrobe_items?select=*&order=created_at.desc'),
+    listWardrobe: () => request('/rest/v1/wardrobe_items?select=*&archived_at=is.null&order=created_at.desc'),
     saveWardrobeItem: async (item) => {
       const payload = { ...item };
       delete payload.id;
@@ -242,7 +284,7 @@
       const relative = signed.startsWith('/storage/v1/') ? signed : `/storage/v1${signed.startsWith('/') ? signed : `/${signed}`}`;
       return `${config.url}${relative}`;
     },
-    listSavedOutfits: () => request('/rest/v1/saved_outfits?select=*&order=created_at.desc'),
+    listSavedOutfits: () => request('/rest/v1/saved_outfits?select=*&archived_at=is.null&order=created_at.desc'),
     saveOutfit: async (outfit) => {
       const result = await request('/rest/v1/saved_outfits', { method: 'POST', headers: { prefer: 'return=representation' }, body: JSON.stringify(outfit) });
       return Array.isArray(result) ? result[0] : result;
@@ -252,6 +294,7 @@
       return Array.isArray(result) ? result[0] : result;
     },
     deleteOutfit: (id) => request(`/rest/v1/saved_outfits?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    deleteAccount: () => request('/functions/v1/metti-delete-account', { method: 'POST', headers: { 'x-client-info': 'metti-web' }, body: JSON.stringify({}) }),
     getProfile: async () => {
       const result = await request('/rest/v1/profiles?select=*&limit=1');
       return Array.isArray(result) ? result[0] || null : result;

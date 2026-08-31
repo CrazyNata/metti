@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>metti · кнопка удаления аккаунта</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./navigation-fix.css" />
+    <link rel="stylesheet" href="./refinement-v1.css" />
+    <link rel="stylesheet" href="./type-scale-fix.css" />
+    <link rel="stylesheet" href="./profile-refinement.css" />
+    <link rel="stylesheet" href="./polish-v2.css" />
+    <link rel="stylesheet" href="./data-app.css" />
+    <style>
+      body{display:grid;place-items:center;min-height:100vh}
+      .app-scroll{padding-bottom:180px!important}
+      .preview-note{position:fixed;top:14px;left:50%;z-index:5;transform:translateX(-50%);padding:8px 13px;border-radius:999px;background:#1b1714;color:#fff;font:11px var(--sans);white-space:nowrap}
+      .account-actions-preview{display:flex;align-items:stretch;gap:10px;margin-top:24px;position:relative;z-index:2;transform:translateY(-8px);margin-bottom:-8px}
+      .screen[data-screen-id="profile"] .account-actions-preview .auth-profile-button{display:flex;align-items:center;justify-content:center;flex:1;height:52px!important;margin-top:0!important}
+      .delete-icon-button{display:grid;width:52px;height:52px;flex:0 0 52px;place-items:center;border:1.5px solid #c77a80;border-radius:15px;background:#fff8f7;color:#ae4c58;cursor:pointer}
+      .delete-icon-button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+      .profile-menu-row{min-height:52px!important}
+      .delete-preview-sheet h2{margin-top:0}
+      .delete-preview-sheet .danger-confirm-button{background:#ae4c58!important}
+      @media(max-width:500px){.preview-note{top:8px;font-size:10px}}
+    </style>
+  </head>
+  <body>
+    <div class="preview-note">ПРЕДПРОСМОТР · приложение не изменено</div>
+    <main class="phone">
+      <div class="app-scroll">
+        <section class="screen active" data-screen-id="profile">
+          <div class="profile-topline"><div class="eyebrow">ПРОФИЛЬ</div><button class="profile-edit-button" type="button">Изменить</button></div>
+          <div class="profile-heading"><div><h1>Наталия Nat</h1><p>Твой стиль, собранный<br />в одном месте.</p></div><span class="profile-hero-avatar">Н</span></div>
+          <div class="profile-card profile-card-refined"><div class="profile-card-copy"><strong>Наталия Nat</strong><small>Спокойный · Элегантный</small><div class="profile-style-chips"><span>Спокойный</span><span>Элегантный</span></div></div></div>
+          <div class="profile-stats"><div><strong>128</strong><span>вещей</span></div><div><strong>24</strong><span>образа</span></div><div><strong>6</strong><span>коллекций</span></div></div>
+          <div class="profile-section-head"><span>ТВОЙ СТИЛЬ</span><button type="button">Настроить</button></div>
+          <div class="profile-style-card"><span class="style-spark">✦</span><div><strong>Спокойный · Элегантный</strong><small>Подходит для Prague, работы и встреч.</small></div></div>
+          <div class="profile-section-head profile-menu-head"><span>РАЗДЕЛЫ</span></div>
+          <div class="profile-menu"><button class="profile-menu-row" type="button"><span class="menu-icon">▦</span><span>Мой гардероб</span><strong>128</strong><i>›</i></button><button class="profile-menu-row" type="button"><span class="menu-icon">▧</span><span>Сохранённые образы</span><strong>24</strong><i>›</i></button></div>
+          <div class="account-actions-preview"><button class="outline full-button auth-profile-button" type="button">Выйти из аккаунта</button><button class="delete-icon-button" type="button" data-open-delete aria-label="Удалить аккаунт"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg></button></div>
+        </section>
+      </div>
+      <nav class="bottom-nav"><button><span class="nav-icon">⌂</span><small>Главная</small></button><button><span class="nav-icon">▦</span><small>Гардероб</small></button><button class="stylist-tab"><span class="nav-icon">✦</span><small>Стилист</small></button><button><span class="nav-icon">▧</span><small>Образы</small></button><button class="active"><span class="nav-icon">♙</span><small>Профиль</small></button></nav>
+    </main>
+
+    <div class="sheet-backdrop" id="delete-preview-sheet" hidden>
+      <div class="data-sheet delete-preview-sheet">
+        <button class="data-sheet-close" type="button" data-close-delete aria-label="Закрыть">×</button>
+        <h2>Удалить аккаунт?</h2>
+        <p>Профиль, гардероб и сохранённые образы будут удалены без возможности восстановления.</p>
+        <div class="form-actions"><button class="outline" type="button" data-close-delete>Отмена</button><button class="primary danger-confirm-button" type="button" data-close-delete>Удалить аккаунт</button></div>
+      </div>
+    </div>
+    <script>
+      const sheet = document.querySelector('#delete-preview-sheet');
+      document.querySelector('[data-open-delete]').addEventListener('click', () => { sheet.hidden = false; });
+      document.querySelectorAll('[data-close-delete]').forEach((button) => button.addEventListener('click', () => { sheet.hidden = true; }));
+      sheet.addEventListener('click', (event) => { if (event.target === sheet) sheet.hidden = true; });
+      if (new URLSearchParams(location.search).has('confirm')) sheet.hidden = false;
+    </script>
+  </body>
+</html>

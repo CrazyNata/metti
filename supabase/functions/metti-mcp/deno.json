@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true
+  },
+  "tasks": {
+    "dev": "supabase functions serve metti-mcp --no-verify-jwt",
+    "start": "supabase functions serve metti-mcp --no-verify-jwt",
+    "test": "deno test --allow-env --allow-net tests",
+    "check": "deno check index.ts",
+    "build": "deno check index.ts"
+  }
+}

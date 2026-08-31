@@ -1,0 +1,20 @@
+{
+  "name": "metti-mcp-edge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "check": "wrangler check",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "deno test --allow-net tests",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "latest",
+    "wrangler": "latest"
+  }
+}

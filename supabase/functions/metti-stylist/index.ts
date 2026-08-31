@@ -1,3 +1,8 @@
+import { AppError } from '../_shared/errors.ts';
+import { authenticateRequest, getSupabaseConfig } from '../_shared/auth.ts';
+import { createApplicationServices } from '../_shared/services.ts';
+import { SupabaseRestClient } from '../_shared/supabase-client.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -7,17 +12,6 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-});
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? (() => {
-  try { return JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}').default ?? ''; } catch (_) { return ''; }
-})();
-
-const authHeaders = (authorization: string) => ({
-  apikey: supabaseKey,
-  authorization,
-  'Content-Type': 'application/json'
 });
 
 const cleanJson = (value: string) => {
@@ -52,27 +46,18 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const authorization = req.headers.get('authorization') ?? '';
   if (!authorization.toLowerCase().startsWith('bearer ')) return json({ error: 'Authentication required' }, 401);
-  if (!supabaseUrl || !supabaseKey) return json({ error: 'Supabase environment is not configured' }, 500);
 
   try {
+    const supabaseConfig = getSupabaseConfig();
+    const auth = await authenticateRequest(req, supabaseConfig);
+    const services = createApplicationServices(new SupabaseRestClient(supabaseConfig, auth.accessToken), auth.user);
     const body = await req.json().catch(() => ({}));
     const prompt = String(body?.prompt ?? '').trim().slice(0, 1000);
     if (!prompt) return json({ error: 'Prompt is required' }, 400);
 
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: authHeaders(authorization) });
-    if (!userResponse.ok) return json({ error: 'Invalid session' }, 401);
-    const user = await userResponse.json();
-    const userId = String(user?.id ?? '');
-    if (!userId) return json({ error: 'Invalid session' }, 401);
-
-    const query = encodeURIComponent('id,name,category,color,size,season,brand,notes');
-    const wardrobeResponse = await fetch(`${supabaseUrl}/rest/v1/wardrobe_items?select=${query}&user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc`, { headers: authHeaders(authorization) });
-    if (!wardrobeResponse.ok) return json({ error: 'Could not load wardrobe' }, 502);
-    const wardrobe = await wardrobeResponse.json();
-
-    const profileResponse = await fetch(`${supabaseUrl}/rest/v1/profiles?select=display_name,city,preferences,style_tags,style_profile&id=eq.${encodeURIComponent(userId)}&limit=1`, { headers: authHeaders(authorization) });
-    const profileRows = profileResponse.ok ? await profileResponse.json() : [];
-    const profile = profileRows?.[0] ?? { display_name: user?.user_metadata?.full_name ?? '', city: 'Prague', preferences: {}, style_tags: [], style_profile: {} };
+    const wardrobePage = await services.wardrobe.list({ status: 'active', limit: 100 });
+    const wardrobe = wardrobePage.items;
+    const profile = await services.profile.get();
     const weather = body?.weather && typeof body.weather === 'object' ? body.weather : { city: profile.city ?? 'Prague', temperature_c: 18, weather_code: 3 };
 
     const geminiKey = Deno.env.get('GEMINI_API_KEY');
@@ -126,6 +111,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('metti-stylist error', error);
+    if (error instanceof AppError) return json({ error: error.message }, error.status);
     return json({ error: 'Stylist request failed' }, 500);
   }
 });

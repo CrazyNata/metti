@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>metti · доступ к гардеробу</title>
+    <link rel="stylesheet" href="./oauth-consent.css" />
+  </head>
+  <body>
+    <main class="consent-shell">
+      <div class="brand" aria-label="Metti">metti <span aria-hidden="true">✦</span></div>
+
+      <section class="consent-card" aria-live="polite">
+        <div class="state" data-state="loading">
+          <div class="eyebrow">ПОДКЛЮЧЕНИЕ MCP</div>
+          <h1>Проверяем запрос…</h1>
+          <p class="muted">Секунду, загружаем данные приложения.</p>
+        </div>
+
+        <div class="state" data-state="login" hidden>
+          <div class="eyebrow">ПОДКЛЮЧЕНИЕ MCP</div>
+          <h1>Войдите в Metti</h1>
+          <p class="muted">Чтобы разрешить AI-приложению доступ к вашему гардеробу, сначала войдите в существующий аккаунт.</p>
+          <form id="oauth-login-form" novalidate>
+            <label>Email<input name="email" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
+            <label>Пароль<input name="password" type="password" autocomplete="current-password" placeholder="Ваш пароль" required /></label>
+            <button class="primary" type="submit">Войти и продолжить</button>
+          </form>
+          <p class="form-status" id="login-status" role="status"></p>
+          <button class="text-button" type="button" data-action="open-app">Нет аккаунта? Открыть Metti</button>
+        </div>
+
+        <div class="state" data-state="consent" hidden>
+          <div class="eyebrow">ЗАПРОС ДОСТУПА</div>
+          <h1 id="client-title">Приложение хочет подключиться</h1>
+          <p class="muted" id="client-description">Это приложение запрашивает доступ к данным вашего аккаунта Metti через MCP.</p>
+
+          <dl class="request-details">
+            <div><dt>Приложение</dt><dd id="client-name">—</dd></div>
+            <div><dt>Возврат после решения</dt><dd id="redirect-uri">—</dd></div>
+          </dl>
+
+          <div class="permissions-block">
+            <strong>Запрошенные разрешения</strong>
+            <ul id="scope-list"><li>Данные, перечисленные OAuth-клиентом</li></ul>
+          </div>
+
+          <p class="notice">Разрешение можно отозвать позже в настройках аккаунта. Metti не передаёт AI-приложению пароль или service-role ключ.</p>
+          <div class="decision-actions">
+            <button class="outline" type="button" data-decision="deny">Отклонить</button>
+            <button class="primary" type="button" data-decision="approve">Разрешить</button>
+          </div>
+          <p class="form-status" id="decision-status" role="status"></p>
+        </div>
+
+        <div class="state" data-state="error" hidden>
+          <div class="eyebrow">НЕ УДАЛОСЬ ПОДКЛЮЧИТЬ</div>
+          <h1>Запрос недействителен</h1>
+          <p class="muted" id="error-message">Попробуйте начать подключение ещё раз.</p>
+          <a class="primary link-button" href="./index.html">Вернуться в Metti</a>
+        </div>
+      </section>
+    </main>
+
+    <script src="./supabase-config.js"></script>
+    <script src="./supabase-client.js"></script>
+    <script src="./oauth-consent.js"></script>
+  </body>
+</html>

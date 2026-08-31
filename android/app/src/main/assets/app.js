@@ -17,6 +17,7 @@
     outfits: [],
     activeItem: null,
     currentOutfit: null,
+    activeLooksTab: 'recommended',
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
   };
@@ -41,6 +42,7 @@
   };
   const uuid = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const byId = (id) => document.getElementById(id);
+  const defaultLooksMarkup = document.querySelector('.looks-grid')?.innerHTML || '';
   const setText = (selector, value) => { const node = document.querySelector(selector); if (node) node.textContent = value ?? ''; };
   const showToast = (message, type = '') => {
     if (!toast) return;
@@ -191,12 +193,52 @@
     if (addButton) addButton.textContent = item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб';
     await imageUrl(item.image_path);
   };
+  const renderOutfitCards = (outfits) => {
+    const grid = document.querySelector('.looks-grid');
+    if (!grid) return;
+    const artClasses = ['look-evening', 'look-office', 'look-walk', 'look-trip'];
+    grid.innerHTML = '';
+    outfits.forEach((outfit, index) => {
+      const button = document.createElement('button');
+      button.className = `look-item${index % 2 ? ' offset' : ''}`;
+      button.type = 'button';
+      button.dataset.screen = 'result';
+      if (outfit.id) button.dataset.outfitId = outfit.id;
+      const art = document.createElement('div');
+      art.className = `look-art ${artClasses[index % artClasses.length]}`;
+      const badge = document.createElement('span');
+      badge.textContent = outfit.is_worn ? 'Надето' : 'Сохранено';
+      const title = document.createElement('strong');
+      title.textContent = outfit.title || 'Образ на сегодня';
+      art.append(badge); button.append(art, title); grid.append(button);
+    });
+  };
   const renderLooks = () => {
     const note = byId('looks-data-note');
-    if (!note) return;
-    if (!state.outfits.length) { note.classList.remove('show'); return; }
-    const worn = state.outfits.filter((outfit) => outfit.is_worn).length;
-    note.textContent = `${state.outfits.length} сохранённых образа${worn ? ` · ${worn} надето` : ''}`;
+    const grid = document.querySelector('.looks-grid');
+    if (!note || !grid) return;
+    const tab = state.activeLooksTab || 'recommended';
+    document.querySelectorAll('.look-tabs [data-look-tab]').forEach((button) => button.classList.toggle('selected', button.dataset.lookTab === tab));
+    if (tab === 'recommended') {
+      grid.innerHTML = defaultLooksMarkup;
+      grid.hidden = false;
+      if (!state.outfits.length) { note.classList.remove('show'); return; }
+      const worn = state.outfits.filter((outfit) => outfit.is_worn).length;
+      note.textContent = `${state.outfits.length} сохранённых образа${worn ? ` · ${worn} надето` : ''}`;
+      note.classList.add('show');
+      return;
+    }
+    const matches = tab === 'worn' ? state.outfits.filter((outfit) => outfit.is_worn) : state.outfits;
+    if (!matches.length) {
+      grid.innerHTML = '';
+      grid.hidden = true;
+      note.textContent = tab === 'worn' ? 'Надетых образов пока нет.' : 'Сохранённых образов пока нет.';
+      note.classList.add('show');
+      return;
+    }
+    renderOutfitCards(matches);
+    grid.hidden = false;
+    note.textContent = tab === 'worn' ? `Надетых образов: ${matches.length}` : `Сохранённых образов: ${matches.length}`;
     note.classList.add('show');
   };
   const loadData = async () => {
@@ -269,6 +311,36 @@
     setFormStatus('profile-form-status'); byId('profile-sheet').hidden = false; document.body.classList.add('modal-open'); setTimeout(() => form.elements.display_name?.focus(), 0);
   };
   const closeProfileSheet = () => { const node = byId('profile-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
+  const openDeleteAccountSheet = () => {
+    const node = byId('delete-account-sheet'); if (!node) return;
+    setFormStatus('delete-account-status'); node.hidden = false; document.body.classList.add('modal-open');
+    setTimeout(() => node.querySelector('[data-action="close-delete-account"]')?.focus(), 0);
+  };
+  const closeDeleteAccountSheet = () => { const node = byId('delete-account-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
+  const confirmDeleteAccount = async (button) => {
+    if (!state.user || !supabase?.data?.deleteAccount) return setFormStatus('delete-account-status', 'Войдите, чтобы удалить аккаунт.', 'error');
+    button.disabled = true; button.textContent = 'Удаляем…'; setFormStatus('delete-account-status', 'Удаляю профиль и данные…');
+    try {
+      await supabase.data.deleteAccount();
+      closeDeleteAccountSheet(); state.user = null; state.profile = null; state.wardrobe = []; state.outfits = [];
+      await window.MettiAuth?.signOut(); showToast('Аккаунт удалён', 'success');
+    } catch (error) {
+      button.disabled = false; button.textContent = 'Удалить аккаунт';
+      setFormStatus('delete-account-status', error?.message || 'Не удалось удалить аккаунт.', 'error');
+    }
+  };
+  const openStyleSheet = () => {
+    const form = byId('style-form'); const profile = state.profile || {}; if (!form) return;
+    const preferences = profile.preferences && typeof profile.preferences === 'object' ? profile.preferences : {};
+    form.elements.style_tags.value = (profile.style_tags || []).join(', ');
+    form.elements.favorite_colors.value = Array.isArray(preferences.favorite_colors) ? preferences.favorite_colors.join(', ') : (preferences.favorite_colors || '');
+    form.elements.fit.value = profile.style_profile?.fit || '';
+    form.elements.size.value = profile.style_profile?.size || '';
+    form.elements.preferences.value = preferences.note || '';
+    setFormStatus('style-form-status'); byId('style-sheet').hidden = false; document.body.classList.add('modal-open');
+    setTimeout(() => form.elements.style_tags?.focus(), 0);
+  };
+  const closeStyleSheet = () => { const node = byId('style-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
   const saveProfileForm = async (event) => {
     event.preventDefault(); const form = event.currentTarget; const displayName = form.elements.display_name.value.trim(); const city = form.elements.city.value.trim();
     if (!displayName || !city) return setFormStatus('profile-form-status', 'Заполните имя и город.', 'error');
@@ -280,6 +352,18 @@
       const payload = { id: state.user.id, display_name: displayName, city, style_tags: tags, preferences: { ...(state.profile?.preferences || {}), favorite_colors: favoriteColors, note: form.elements.preferences.value.trim() }, style_profile: { ...(state.profile?.style_profile || {}), fit: form.elements.fit.value || null, size: form.elements.size.value.trim() || null } };
       state.profile = await supabase.data.saveProfile(payload); closeProfileSheet(); renderProfile(); updateWeather(); showToast('Профиль сохранён', 'success');
     } catch (error) { setFormStatus('profile-form-status', error?.message || 'Не удалось сохранить профиль.', 'error'); } finally { setBusy(form, false); }
+  };
+  const saveStyleForm = async (event) => {
+    event.preventDefault(); const form = event.currentTarget;
+    if (!state.user || !supabase?.data) return setFormStatus('style-form-status', 'Войдите, чтобы сохранять настройки стилиста.', 'error');
+    setBusy(form, true); setFormStatus('style-form-status', 'Сохраняю…');
+    try {
+      const tags = form.elements.style_tags.value.split(',').map((value) => value.trim()).filter(Boolean).slice(0, 5);
+      const favoriteColors = form.elements.favorite_colors.value.split(',').map((value) => value.trim()).filter(Boolean).slice(0, 8);
+      const currentPreferences = state.profile?.preferences && typeof state.profile.preferences === 'object' ? state.profile.preferences : {};
+      const payload = { id: state.user.id, display_name: profileName(), city: state.profile?.city || 'Prague', style_tags: tags, preferences: { ...currentPreferences, favorite_colors: favoriteColors, note: form.elements.preferences.value.trim() }, style_profile: { ...(state.profile?.style_profile || {}), fit: form.elements.fit.value || null, size: form.elements.size.value.trim() || null } };
+      state.profile = await supabase.data.saveProfile(payload); closeStyleSheet(); renderProfile(); updateWeather(); showToast('Настройки стилиста сохранены', 'success');
+    } catch (error) { setFormStatus('style-form-status', error?.message || 'Не удалось сохранить настройки.', 'error'); } finally { setBusy(form, false); }
   };
 
   const addMessage = (text, role) => { const log = byId('chat-log'); if (!log) return null; const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = text; log.append(node); log.scrollTop = log.scrollHeight; return node; };
@@ -321,6 +405,8 @@
   };
 
   document.addEventListener('click', (event) => {
+    const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
+    const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
     const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } go(screenButton.dataset.screen); return; }
     const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item); go('item'); } return; }
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
@@ -338,13 +424,20 @@
     if (action === 'close-wardrobe-sheet') closeWardrobeSheet();
     if (action === 'profile-edit') openProfileSheet();
     if (action === 'close-profile-sheet') closeProfileSheet();
+    if (action === 'open-delete-account') openDeleteAccountSheet();
+    if (action === 'close-delete-account') closeDeleteAccountSheet();
+    if (action === 'confirm-delete-account') confirmDeleteAccount(event.target.closest('[data-action="confirm-delete-account"]'));
+    if (action === 'style-edit') openStyleSheet();
+    if (action === 'close-style-sheet') closeStyleSheet();
     if (action === 'logout') window.MettiAuth?.signOut();
     if (action === 'dismiss') event.target.closest('.hint').hidden = true;
     if (action === 'send') { const input = byId('prompt-input'); const value = input.value.trim(); if (value) { input.value = ''; ask(value); } }
     if (action === 'send-chat') { const input = byId('chat-input'); const value = input.value.trim(); if (value) { input.value = ''; ask(value); } }
   });
   byId('wardrobe-form')?.addEventListener('submit', saveWardrobeForm);
+  byId('wardrobe-sheet')?.querySelectorAll('[data-action="close-wardrobe-sheet"]').forEach((button) => button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); closeWardrobeSheet(); }));
   byId('profile-form')?.addEventListener('submit', saveProfileForm);
+  byId('style-form')?.addEventListener('submit', saveStyleForm);
   document.querySelector('.search-box input')?.addEventListener('input', (event) => { const query = event.target.value.trim().toLowerCase(); document.querySelectorAll('.wardrobe-item').forEach((item) => { item.hidden = query.length > 0 && !item.textContent.toLowerCase().includes(query); }); });
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { node.hidden = true; document.body.classList.remove('modal-open'); } }));
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });

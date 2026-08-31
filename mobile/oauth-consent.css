@@ -1,0 +1,197 @@
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-400.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-500.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("./fonts/cormorant-500.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color: #252321;
+  background: #f5f1ed;
+  font-family: "Instrument Sans", Arial, sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, .9), transparent 32rem),
+    #f5f1ed;
+}
+
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+
+.consent-shell {
+  display: grid;
+  width: min(100%, 560px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 34px 20px 44px;
+  align-content: center;
+  gap: 24px;
+}
+
+.brand {
+  color: #252321;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -.04em;
+}
+
+.brand span { color: #bd795f; margin-left: 3px; }
+
+.consent-card {
+  padding: clamp(26px, 7vw, 46px);
+  border: 1px solid rgba(37, 35, 33, .08);
+  border-radius: 26px;
+  background: rgba(255, 253, 250, .86);
+  box-shadow: 0 22px 70px rgba(62, 48, 38, .09);
+}
+
+.eyebrow {
+  color: #9c6b59;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .14em;
+}
+
+h1 {
+  max-width: 12ch;
+  margin: 14px 0 10px;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(42px, 10vw, 64px);
+  font-weight: 500;
+  line-height: .92;
+  letter-spacing: -.04em;
+}
+
+.muted {
+  margin: 0 0 26px;
+  color: #77716c;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  color: #625d58;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+input {
+  width: 100%;
+  padding: 14px 15px;
+  border: 1px solid rgba(37, 35, 33, .14);
+  border-radius: 12px;
+  outline: none;
+  color: #252321;
+  background: #fffdfa;
+}
+
+input:focus { border-color: #bd795f; box-shadow: 0 0 0 3px rgba(189, 121, 95, .14); }
+
+.primary, .outline, .text-button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform .18s ease, opacity .18s ease, background .18s ease;
+}
+
+.primary {
+  width: 100%;
+  border: 1px solid #252321;
+  color: #fffdfa;
+  background: #252321;
+}
+
+.primary:hover, .outline:hover, .text-button:hover { opacity: .82; }
+.primary:active, .outline:active, .text-button:active { transform: translateY(1px); }
+
+.outline {
+  width: 100%;
+  border: 1px solid rgba(37, 35, 33, .16);
+  color: #252321;
+  background: transparent;
+}
+
+.text-button {
+  min-height: 0;
+  margin: 18px auto 0;
+  padding: 0;
+  border: 0;
+  color: #9c6b59;
+  background: transparent;
+  font-size: 13px;
+}
+
+.form-status {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: #9c6b59;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.request-details {
+  display: grid;
+  gap: 12px;
+  margin: 26px 0;
+  padding: 16px 0;
+  border-top: 1px solid rgba(37, 35, 33, .09);
+  border-bottom: 1px solid rgba(37, 35, 33, .09);
+}
+
+.request-details div { display: grid; gap: 4px; }
+.request-details dt { color: #938b84; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.request-details dd { margin: 0; overflow-wrap: anywhere; font-size: 14px; }
+
+.permissions-block { margin: 0 0 20px; font-size: 14px; }
+.permissions-block strong { font-size: 13px; }
+.permissions-block ul { display: grid; gap: 8px; margin: 12px 0 0; padding-left: 20px; color: #625d58; line-height: 1.45; }
+
+.notice {
+  margin: 0 0 24px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  color: #74635b;
+  background: #f8ebe4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.decision-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; }
+
+@media (max-width: 420px) {
+  .consent-shell { padding: 24px 14px 34px; }
+  .consent-card { padding: 24px 20px; border-radius: 20px; }
+  .decision-actions { grid-template-columns: 1fr; }
+}

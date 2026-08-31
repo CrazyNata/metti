@@ -1,0 +1,9 @@
+project_id = "fkicjvawvaddjdmcpiei"
+
+# MCP authenticates Supabase access tokens itself so it can expose the same
+# bearer-token contract to MCP clients and then use RLS with that token.
+[functions.metti-mcp]
+verify_jwt = false
+
+[functions.metti-delete-account]
+verify_jwt = true

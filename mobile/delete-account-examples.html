@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>metti · варианты удаления аккаунта</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./delete-account-examples.css" />
+  </head>
+  <body>
+    <div class="examples-shell">
+      <header class="examples-header">
+        <div class="eyebrow">METTI · ВАРИАНТЫ</div>
+        <h1>Как может выглядеть<br /><em>удаление аккаунта</em></h1>
+        <p>Это отдельные примеры — в само приложение пока ничего не добавляла.</p>
+      </header>
+
+      <main class="variants">
+        <article class="variant">
+          <div class="variant-label">01 · В ПРОФИЛЕ</div>
+          <div class="variant-card profile-variant">
+            <div class="demo-topline"><span>ПРОФИЛЬ</span><button type="button">Изменить</button></div>
+            <div class="demo-profile-heading"><div><h2>Наталия</h2><p>Твой стиль, собранный<br />в одном месте.</p></div><span class="demo-avatar">Н</span></div>
+            <div class="demo-profile-box"><strong>Наталия Nat</strong><small>Спокойный · Элегантный</small></div>
+            <div class="demo-divider"></div>
+            <button class="delete-link" type="button" data-demo="modal">Удалить аккаунт</button>
+          </div>
+          <p class="variant-note">Незаметная ссылка внизу профиля. Не перегружает экран.</p>
+        </article>
+
+        <article class="variant">
+          <div class="variant-label">02 · СТРОКА В НАСТРОЙКАХ</div>
+          <div class="variant-card settings-variant">
+            <div class="settings-title">НАСТРОЙКИ</div>
+            <div class="settings-row"><span class="row-icon">⌘</span><div><strong>Уведомления</strong><small>Включены</small></div><span class="row-chevron">›</span></div>
+            <div class="settings-row"><span class="row-icon">♧</span><div><strong>Приватность</strong><small>Пароль и вход</small></div><span class="row-chevron">›</span></div>
+            <button class="settings-row danger-row" type="button" data-demo="sheet"><span class="row-icon">×</span><div><strong>Удаление аккаунта</strong><small>Все данные будут удалены</small></div><span class="row-chevron">›</span></button>
+          </div>
+          <p class="variant-note">Спокойный пункт меню с понятным предупреждением.</p>
+        </article>
+
+        <article class="variant">
+          <div class="variant-label">03 · ВЫДЕЛЕННЫЙ БЛОК</div>
+          <div class="variant-card danger-variant">
+            <div class="danger-icon">!</div>
+            <h2>Удалить аккаунт?</h2>
+            <p>Профиль, гардероб и сохранённые образы будут удалены без возможности восстановления.</p>
+            <button class="danger-button" type="button" data-demo="modal">Удалить аккаунт</button>
+          </div>
+          <p class="variant-note">Самый заметный вариант — подходит для экрана настроек.</p>
+        </article>
+
+        <article class="variant">
+          <div class="variant-label">04 · ПОДТВЕРЖДЕНИЕ</div>
+          <div class="variant-card sheet-variant">
+            <div class="sheet-handle"></div>
+            <h2>Удалить аккаунт?</h2>
+            <p>Это действие нельзя отменить. Все данные Metti исчезнут навсегда.</p>
+            <button class="danger-button" type="button" data-demo="modal">Да, удалить аккаунт</button>
+            <button class="cancel-button" type="button">Отмена</button>
+          </div>
+          <p class="variant-note">Отдельное окно подтверждения с безопасной паузой перед удалением.</p>
+        </article>
+      </main>
+    </div>
+
+    <div class="demo-overlay" id="demo-overlay" hidden>
+      <div class="demo-modal" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+        <button class="modal-close" type="button" aria-label="Закрыть">×</button>
+        <div class="danger-icon">!</div>
+        <h2 id="demo-modal-title">Удалить аккаунт?</h2>
+        <p>Это демонстрация подтверждения. В приложении удаление пока не выполняется.</p>
+        <button class="danger-button" type="button">Удалить аккаунт</button>
+        <button class="cancel-button" type="button">Отмена</button>
+      </div>
+    </div>
+
+    <script>
+      const overlay = document.querySelector('#demo-overlay');
+      const closeDemo = () => { overlay.hidden = true; };
+      document.querySelectorAll('[data-demo]').forEach((button) => button.addEventListener('click', () => { overlay.hidden = false; }));
+      overlay.querySelector('.modal-close').addEventListener('click', closeDemo);
+      overlay.querySelector('.cancel-button').addEventListener('click', closeDemo);
+      document.querySelectorAll('.cancel-button').forEach((button) => button.addEventListener('click', closeDemo));
+      overlay.addEventListener('click', (event) => { if (event.target === overlay) closeDemo(); });
+    </script>
+  </body>
+</html>

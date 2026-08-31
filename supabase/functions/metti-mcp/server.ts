@@ -1,0 +1,721 @@
+import {
+  type CallToolResult,
+  createMcpHandler,
+  McpServer,
+} from "https://esm.sh/@modelcontextprotocol/server@2.0.0?target=deno";
+import * as z from "https://esm.sh/zod@4.2.0?target=deno";
+
+import { authenticateRequest, getSupabaseConfig } from "../_shared/auth.ts";
+import { AppError, publicErrorPayload, toAppError } from "../_shared/errors.ts";
+import { createApplicationServices } from "../_shared/services.ts";
+import { SupabaseRestClient } from "../_shared/supabase-client.ts";
+import type { ApplicationServices } from "../_shared/services.ts";
+import type {
+  AuthContext,
+  AuthenticatedUser,
+  JsonObject,
+  OutfitListOptions,
+  SupabaseConfig,
+  WardrobeItemInput,
+  WardrobeListOptions,
+} from "../_shared/types.ts";
+
+export const MCP_VERSION = "1.0.0";
+
+type FetchLike = typeof fetch;
+type McpHttpHandler = ReturnType<typeof createMcpHandler>;
+
+const corsMethods = "GET, POST, DELETE, OPTIONS";
+const corsHeaders =
+  "authorization, content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id";
+
+const categoryInputSchema = z.enum([
+  "outer",
+  "top",
+  "bottom",
+  "shoes",
+  "accessory",
+  "jeans",
+  "bag",
+]);
+const statusSchema = z.enum(["active", "archived", "all"]);
+const stringListSchema = (maxItems: number, maxLength = 80) =>
+  z.array(z.string().trim().min(1).max(maxLength)).max(maxItems);
+const idSchema = z.string().trim().min(1).max(128).regex(
+  /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
+);
+const emptySchema = z.object({}).strict();
+
+const profilePreferencesSchema = z.object({
+  styleTags: stringListSchema(12).optional(),
+  preferredColors: stringListSchema(20, 50).optional(),
+  avoidedColors: stringListSchema(20, 50).optional(),
+  preferredBrands: stringListSchema(20, 80).optional(),
+  dislikedBrands: stringListSchema(20, 80).optional(),
+  preferredFits: stringListSchema(12, 50).optional(),
+  clothingSizes: z.record(
+    z.string().trim().min(1).max(40),
+    z.string().trim().max(40),
+  ).optional(),
+  shoeSize: z.string().trim().max(40).nullable().optional(),
+  height: z.number().finite().min(40).max(250).nullable().optional(),
+  gender: z.string().trim().max(60).nullable().optional(),
+  styleNotes: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+
+const listWardrobeSchema = z.object({
+  category: categoryInputSchema.optional(),
+  subcategory: z.string().trim().min(1).max(80).optional(),
+  color: z.string().trim().min(1).max(80).optional(),
+  colors: stringListSchema(12, 50).optional(),
+  brand: z.string().trim().min(1).max(120).optional(),
+  brands: stringListSchema(12, 80).optional(),
+  season: z.string().trim().min(1).max(80).optional(),
+  seasons: stringListSchema(12, 80).optional(),
+  occasion: z.string().trim().min(1).max(80).optional(),
+  occasions: stringListSchema(12, 60).optional(),
+  favorite: z.boolean().optional(),
+  status: statusSchema.optional().default("active"),
+  tags: stringListSchema(20, 50).optional(),
+  page: z.number().int().min(1).max(10000).optional().default(1),
+  limit: z.number().int().min(1).max(100).optional().default(40),
+}).strict();
+
+const searchWardrobeSchema = z.object({
+  query: z.string().trim().max(100).optional(),
+  category: categoryInputSchema.optional(),
+  subcategory: z.string().trim().min(1).max(80).optional(),
+  colors: stringListSchema(12, 50).optional(),
+  brands: stringListSchema(12, 80).optional(),
+  seasons: stringListSchema(12, 80).optional(),
+  occasion: z.string().trim().min(1).max(80).optional(),
+  occasions: stringListSchema(12, 60).optional(),
+  favorite: z.boolean().optional(),
+  status: statusSchema.optional().default("active"),
+  tags: stringListSchema(20, 50).optional(),
+  page: z.number().int().min(1).max(10000).optional().default(1),
+  limit: z.number().int().min(1).max(100).optional().default(40),
+}).strict();
+
+const wardrobeItemFields = {
+  name: z.string().trim().min(1).max(160),
+  category: categoryInputSchema,
+  subcategory: z.string().trim().max(80).optional(),
+  brand: z.string().trim().max(120).nullable().optional(),
+  color: z.string().trim().max(80).nullable().optional(),
+  colors: stringListSchema(12, 50).optional(),
+  size: z.string().trim().max(40).nullable().optional(),
+  season: z.string().trim().max(80).nullable().optional(),
+  material: z.string().trim().max(80).nullable().optional(),
+  pattern: z.string().trim().max(80).nullable().optional(),
+  fit: z.string().trim().max(80).nullable().optional(),
+  occasion: z.string().trim().max(80).nullable().optional(),
+  occasions: stringListSchema(12, 60).optional(),
+  tags: stringListSchema(20, 50).optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+  favorite: z.boolean().optional(),
+  imagePath: z.string().trim().max(500).nullable().optional(),
+};
+
+const addWardrobeItemSchema = z.object(wardrobeItemFields).strict();
+const updateWardrobeItemSchema = z.object({
+  itemId: idSchema,
+  name: wardrobeItemFields.name.optional(),
+  category: wardrobeItemFields.category.optional(),
+  subcategory: wardrobeItemFields.subcategory,
+  brand: wardrobeItemFields.brand,
+  color: wardrobeItemFields.color,
+  colors: wardrobeItemFields.colors,
+  size: wardrobeItemFields.size,
+  season: wardrobeItemFields.season,
+  material: wardrobeItemFields.material,
+  pattern: wardrobeItemFields.pattern,
+  fit: wardrobeItemFields.fit,
+  occasion: wardrobeItemFields.occasion,
+  occasions: wardrobeItemFields.occasions,
+  tags: wardrobeItemFields.tags,
+  notes: wardrobeItemFields.notes,
+  favorite: wardrobeItemFields.favorite,
+  imagePath: wardrobeItemFields.imagePath,
+}).strict();
+
+const listOutfitsSchema = z.object({
+  favorite: z.boolean().optional(),
+  favorites: z.boolean().optional(),
+  occasion: z.string().trim().min(1).max(80).optional(),
+  season: z.string().trim().min(1).max(80).optional(),
+  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  tags: stringListSchema(20, 50).optional(),
+  status: statusSchema.optional().default("active"),
+  page: z.number().int().min(1).max(10000).optional().default(1),
+  limit: z.number().int().min(1).max(100).optional().default(40),
+}).strict();
+
+const saveOutfitSchema = z.object({
+  name: z.string().trim().max(160).optional(),
+  itemIds: z.array(idSchema).min(1).max(20),
+  occasion: z.string().trim().max(80).nullable().optional(),
+  season: z.string().trim().max(80).nullable().optional(),
+  notes: z.string().trim().max(1500).nullable().optional(),
+  tags: stringListSchema(20, 50).optional(),
+  favorite: z.boolean().optional(),
+  prompt: z.string().trim().max(1000).nullable().optional(),
+  temperatureC: z.number().finite().min(-100).max(100).nullable().optional(),
+  weatherCode: z.number().int().min(0).max(200).nullable().optional(),
+}).strict();
+
+const updateOutfitSchema = z.object({
+  outfitId: idSchema,
+  name: z.string().trim().max(160).optional(),
+  itemIds: z.array(idSchema).min(1).max(20).optional(),
+  occasion: z.string().trim().max(80).nullable().optional(),
+  season: z.string().trim().max(80).nullable().optional(),
+  notes: z.string().trim().max(1500).nullable().optional(),
+  tags: stringListSchema(20, 50).optional(),
+  favorite: z.boolean().optional(),
+  prompt: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+
+const markAsWornSchema = z.object({
+  outfitId: idSchema.optional(),
+  itemIds: z.array(idSchema).min(1).max(20).optional(),
+  wornAt: z.string().trim().max(80).optional(),
+}).strict();
+
+const servicesFor = (
+  config: SupabaseConfig,
+  context: AuthContext,
+  fetchImpl: FetchLike,
+): ApplicationServices =>
+  createApplicationServices(
+    new SupabaseRestClient(config, context.accessToken, fetchImpl),
+    context.user,
+  );
+
+const categoryAliases: Record<
+  string,
+  { category: "bottom" | "accessory"; subcategory: string }
+> = {
+  jeans: { category: "bottom", subcategory: "jeans" },
+  bag: { category: "accessory", subcategory: "bag" },
+};
+
+function normalizeWardrobeCategoryInput(
+  input: Record<string, unknown>,
+): WardrobeItemInput {
+  const category = typeof input.category === "string"
+    ? categoryAliases[input.category]
+    : undefined;
+  if (!category) return input as unknown as WardrobeItemInput;
+  return {
+    ...input,
+    category: category.category,
+    subcategory: input.subcategory ?? category.subcategory,
+  } as unknown as WardrobeItemInput;
+}
+
+function normalizeWardrobeFilter(
+  input: Record<string, unknown>,
+): WardrobeListOptions {
+  const category = typeof input.category === "string"
+    ? categoryAliases[input.category]
+    : undefined;
+  if (!category) return input as unknown as WardrobeListOptions;
+  return {
+    ...input,
+    category: category.category,
+    subcategory: input.subcategory ?? category.subcategory,
+  } as unknown as WardrobeListOptions;
+}
+
+function normalizeOutfitFilter(
+  input: Record<string, unknown>,
+): OutfitListOptions {
+  const result = { ...input };
+  if (result.favorites === undefined && result.favorite !== undefined) {
+    result.favorites = result.favorite;
+  }
+  delete result.favorite;
+  return result as unknown as OutfitListOptions;
+}
+
+function structured(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return { value };
+}
+
+function toolSuccess(value: unknown): CallToolResult {
+  const payload = structured(value);
+  return {
+    structuredContent: payload,
+    content: [{ type: "text", text: JSON.stringify(payload) }],
+  };
+}
+
+function toolFailure(error: unknown): CallToolResult {
+  const payload = publicErrorPayload(error);
+  return {
+    isError: true,
+    structuredContent: payload,
+    content: [{ type: "text", text: JSON.stringify(payload) }],
+  };
+}
+
+async function runTool(
+  operation: () => Promise<unknown>,
+): Promise<CallToolResult> {
+  try {
+    return toolSuccess(await operation());
+  } catch (error) {
+    return toolFailure(error);
+  }
+}
+
+const readAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+};
+
+const writeAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+};
+
+export function registerTools(
+  server: McpServer,
+  services: ApplicationServices,
+): McpServer {
+  server.registerTool("get_profile", {
+    description:
+      "Retrieve the authenticated user profile relevant to personal styling. Use this before making recommendations when fit, sizes, colors or style context matter. This reads only the current user profile.",
+    inputSchema: emptySchema,
+    annotations: readAnnotations,
+  }, () => runTool(() => services.profile.get()));
+
+  server.registerTool("get_style_preferences", {
+    description:
+      "Retrieve the authenticated user’s saved style preferences, including preferred and avoided colors, brands, fits and notes. Use this when tailoring wardrobe analysis or outfit suggestions.",
+    inputSchema: emptySchema,
+    annotations: readAnnotations,
+  }, () => runTool(() => services.profile.getPreferences()));
+
+  server.registerTool("update_style_preferences", {
+    description:
+      "Update the authenticated user’s saved style preferences. This changes the user profile; send only fields the user explicitly provided and omit unchanged fields.",
+    inputSchema: profilePreferencesSchema,
+    annotations: writeAnnotations,
+  }, (args) => runTool(() => services.profile.updatePreferences(args)));
+
+  server.registerTool("list_wardrobe", {
+    description:
+      "Retrieve clothing items from the authenticated user’s wardrobe. Use this for outfit recommendations, packing, wardrobe analysis or finding clothes the user already owns. Results are paginated and active items are returned by default. The category aliases jeans and bag map to the existing bottom/accessory categories with matching subcategories.",
+    inputSchema: listWardrobeSchema,
+    annotations: readAnnotations,
+  }, (args) =>
+    runTool(() =>
+      services.wardrobe.list(
+        normalizeWardrobeFilter(args as Record<string, unknown>),
+      )
+    ));
+
+  server.registerTool("search_wardrobe", {
+    description:
+      "Search the authenticated user’s wardrobe by free-text query and optional categories, colors, brands, seasons, occasions, tags or favorite state. Use this to narrow candidates before composing an outfit; it never searches other users’ items. The category aliases jeans and bag map to the existing bottom/accessory categories with matching subcategories.",
+    inputSchema: searchWardrobeSchema,
+    annotations: readAnnotations,
+  }, (args) =>
+    runTool(() =>
+      services.wardrobe.search(
+        normalizeWardrobeFilter(args as Record<string, unknown>),
+      )
+    ));
+
+  server.registerTool("get_wardrobe_item", {
+    description:
+      "Retrieve full details for one wardrobe item owned by the authenticated user, including a short-lived signed image URL when an image exists. Use this after finding a candidate item by id.",
+    inputSchema: z.object({ itemId: idSchema }).strict(),
+    annotations: readAnnotations,
+  }, (args) => runTool(() => services.wardrobe.get(args.itemId)));
+
+  server.registerTool("add_wardrobe_item", {
+    description:
+      "Add a new item to the authenticated user’s wardrobe. This changes user data. Do not send user_id; the server derives ownership from the access token. imagePath is optional and must already be in the user’s private wardrobe Storage folder. The category aliases jeans and bag are stored as bottom/accessory with a matching subcategory.",
+    inputSchema: addWardrobeItemSchema,
+    annotations: writeAnnotations,
+  }, (args) =>
+    runTool(() =>
+      services.wardrobe.add(
+        normalizeWardrobeCategoryInput(args as Record<string, unknown>),
+      )
+    ));
+
+  server.registerTool("update_wardrobe_item", {
+    description:
+      "Edit one wardrobe item owned by the authenticated user. This changes user data. Do not send user_id; ownership is checked server-side and at the database RLS layer.",
+    inputSchema: updateWardrobeItemSchema,
+    annotations: writeAnnotations,
+  }, (args) => {
+    const { itemId, ...changes } = args;
+    return runTool(() =>
+      services.wardrobe.update(
+        itemId,
+        normalizeWardrobeCategoryInput(changes as Record<string, unknown>),
+      )
+    );
+  });
+
+  server.registerTool("archive_wardrobe_item", {
+    description:
+      "Soft-archive one wardrobe item owned by the authenticated user. This changes user data but keeps the database row recoverable for future restore tooling; archived items are excluded from lists by default.",
+    inputSchema: z.object({ itemId: idSchema }).strict(),
+    annotations: { ...writeAnnotations, destructiveHint: true },
+  }, (args) => runTool(() => services.wardrobe.archive(args.itemId)));
+
+  server.registerTool("list_outfits", {
+    description:
+      "List saved outfits belonging to the authenticated user with optional favorite, occasion, season, date, tag and status filters. Use this to review saved looks; call get_outfit for full item details.",
+    inputSchema: listOutfitsSchema,
+    annotations: readAnnotations,
+  }, (args) =>
+    runTool(() =>
+      services.outfits.list(
+        normalizeOutfitFilter(args as Record<string, unknown>),
+      )
+    ));
+
+  server.registerTool("get_outfit", {
+    description:
+      "Retrieve one saved outfit owned by the authenticated user, including its wardrobe item details and signed image URLs where available.",
+    inputSchema: z.object({ outfitId: idSchema }).strict(),
+    annotations: readAnnotations,
+  }, (args) => runTool(() => services.outfits.get(args.outfitId)));
+
+  server.registerTool("save_outfit", {
+    description:
+      "Save an outfit made from the authenticated user’s existing wardrobe items. This changes user data. itemIds must refer to items the same authenticated user owns; the server verifies them and never accepts a user_id argument.",
+    inputSchema: saveOutfitSchema,
+    annotations: { ...writeAnnotations, idempotentHint: false },
+  }, (args) => runTool(() => services.outfits.save(args)));
+
+  server.registerTool("update_outfit", {
+    description:
+      "Edit a saved outfit owned by the authenticated user. This changes user data and validates every replacement item id against that same user’s wardrobe.",
+    inputSchema: updateOutfitSchema,
+    annotations: writeAnnotations,
+  }, (args) => {
+    const { outfitId, ...changes } = args;
+    return runTool(() => services.outfits.update(outfitId, changes));
+  });
+
+  server.registerTool("archive_outfit", {
+    description:
+      "Soft-archive a saved outfit owned by the authenticated user. This changes user data while keeping the row for possible future restore; archived outfits are hidden from default lists.",
+    inputSchema: z.object({ outfitId: idSchema }).strict(),
+    annotations: { ...writeAnnotations, destructiveHint: true },
+  }, (args) => runTool(() => services.outfits.archive(args.outfitId)));
+
+  server.registerTool(
+    "favorite_outfit",
+    {
+      description:
+        "Set or clear the favorite flag for a saved outfit owned by the authenticated user. This changes user data and is safe to repeat with the same value.",
+      inputSchema: z.object({ outfitId: idSchema, favorite: z.boolean() })
+        .strict(),
+      annotations: writeAnnotations,
+    },
+    (args) =>
+      runTool(() => services.outfits.favorite(args.outfitId, args.favorite)),
+  );
+
+  server.registerTool("get_wear_history", {
+    description:
+      "Retrieve recent outfits marked as worn by the authenticated user. Use this to answer questions about repeated looks or items that have not been used recently.",
+    inputSchema: z.object({
+      page: z.number().int().min(1).max(10000).optional().default(1),
+      limit: z.number().int().min(1).max(100).optional().default(40),
+    }).strict(),
+    annotations: readAnnotations,
+  }, (args) => runTool(() => services.outfits.getWearHistory(args)));
+
+  server.registerTool("mark_as_worn", {
+    description:
+      "Mark an existing saved outfit as worn, or record a worn set of the authenticated user’s wardrobe items as a new wear-history entry. This changes user data. Provide outfitId or itemIds; never provide user_id.",
+    inputSchema: markAsWornSchema,
+    annotations: writeAnnotations,
+  }, (args) => runTool(() => services.outfits.markAsWorn(args)));
+
+  return server;
+}
+
+export function createMcpHttpHandler(
+  config: SupabaseConfig,
+  fetchImpl: FetchLike = fetch,
+): McpHttpHandler {
+  return createMcpHandler(({ authInfo }) => {
+    const user = authInfo?.extra?.mettiUser as AuthenticatedUser | undefined;
+    const accessToken = typeof authInfo?.token === "string"
+      ? authInfo.token
+      : "";
+    if (!user?.id || !accessToken) {
+      throw new AppError(
+        "authentication_required",
+        "Authentication is required.",
+        401,
+      );
+    }
+    const context: AuthContext = {
+      accessToken,
+      authorization: `Bearer ${accessToken}`,
+      user,
+    };
+    return registerTools(
+      new McpServer({ name: "metti-wardrobe", version: MCP_VERSION }),
+      servicesFor(config, context, fetchImpl),
+    );
+  }, { responseMode: "json" });
+}
+
+class FixedWindowRateLimiter {
+  private readonly buckets = new Map<
+    string,
+    { startedAt: number; count: number }
+  >();
+
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs = 60_000,
+  ) {}
+
+  allow(key: string, now = Date.now()): boolean {
+    const current = this.buckets.get(key);
+    if (!current || now - current.startedAt >= this.windowMs) {
+      this.buckets.set(key, { startedAt: now, count: 1 });
+      return true;
+    }
+    if (current.count >= this.limit) return false;
+    current.count += 1;
+    return true;
+  }
+}
+
+let defaultRateLimiter: FixedWindowRateLimiter | null = null;
+let defaultHandler: McpHttpHandler | null = null;
+let defaultHandlerConfig = "";
+
+function envNumber(
+  name: string,
+  fallback: number,
+  env: typeof Deno.env = Deno.env,
+): number {
+  const value = Number(env.get(name));
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function getDefaultRateLimiter(): FixedWindowRateLimiter {
+  if (!defaultRateLimiter) {
+    defaultRateLimiter = new FixedWindowRateLimiter(
+      envNumber("MCP_RATE_LIMIT_PER_MINUTE", 120),
+    );
+  }
+  return defaultRateLimiter;
+}
+
+function getDefaultHandler(
+  config: SupabaseConfig,
+  fetchImpl: FetchLike = fetch,
+): McpHttpHandler {
+  const key = `${config.url}|${config.publishableKey}`;
+  if (!defaultHandler || defaultHandlerConfig !== key) {
+    defaultHandler = createMcpHttpHandler(config, fetchImpl);
+    defaultHandlerConfig = key;
+  }
+  return defaultHandler;
+}
+
+function configuredOrigins(env: typeof Deno.env = Deno.env): string[] {
+  return String(env.get("MCP_ALLOWED_ORIGINS") ?? "").split(",").map((value) =>
+    value.trim()
+  ).filter(Boolean);
+}
+
+function configuredHosts(env: typeof Deno.env = Deno.env): string[] {
+  return String(env.get("MCP_ALLOWED_HOSTS") ?? "").split(",").map((value) =>
+    value.trim().toLowerCase()
+  ).filter(Boolean);
+}
+
+function originAllowed(
+  request: Request,
+  env: typeof Deno.env = Deno.env,
+): boolean {
+  const origin = request.headers.get("origin");
+  const allowed = configuredOrigins(env);
+  if (!origin || !allowed.length || allowed.includes("*")) return true;
+  return allowed.includes(origin);
+}
+
+function hostAllowed(
+  request: Request,
+  env: typeof Deno.env = Deno.env,
+): boolean {
+  const allowed = configuredHosts(env);
+  if (!allowed.length) return true;
+  const host = request.headers.get("host") ?? "";
+  let hostname = "";
+  try {
+    hostname = new URL(`http://${host}`).hostname.toLowerCase();
+  } catch (_) {
+    return false;
+  }
+  return allowed.includes(hostname) || allowed.includes(host.toLowerCase());
+}
+
+function headersFor(request: Request): Headers {
+  const headers = new Headers({
+    "Access-Control-Allow-Methods": corsMethods,
+    "Access-Control-Allow-Headers": corsHeaders,
+    "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
+    Vary: "Origin",
+  });
+  const configured = configuredOrigins();
+  const origin = request.headers.get("origin");
+  if (!configured.length || configured.includes("*")) {
+    headers.set("Access-Control-Allow-Origin", "*");
+  } else if (origin && configured.includes(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+  }
+  return headers;
+}
+
+function jsonResponse(
+  body: unknown,
+  status: number,
+  request: Request,
+  extra: HeadersInit = {},
+): Response {
+  const headers = headersFor(request);
+  headers.set("Content-Type", "application/json");
+  new Headers(extra).forEach((value, key) => headers.set(key, value));
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+function withCors(response: Response, request: Request): Response {
+  const headers = new Headers(response.headers);
+  headersFor(request).forEach((value, key) => {
+    if (!headers.has(key)) headers.set(key, value);
+  });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function health(request: Request): Response {
+  let configured = true;
+  try {
+    getSupabaseConfig();
+  } catch (_) {
+    configured = false;
+  }
+  return jsonResponse(
+    {
+      status: configured ? "ok" : "degraded",
+      service: "metti-mcp",
+      version: MCP_VERSION,
+      transport: "streamable-http",
+      checks: { supabaseConfigured: configured },
+    },
+    configured ? 200 : 503,
+    request,
+  );
+}
+
+export interface McpRequestDependencies {
+  config?: SupabaseConfig;
+  fetchImpl?: FetchLike;
+  handler?: McpHttpHandler;
+  rateLimiter?: { allow(key: string): boolean };
+}
+
+export async function handleMcpRequest(
+  request: Request,
+  dependencies: McpRequestDependencies = {},
+): Promise<Response> {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: headersFor(request) });
+  }
+  if (!originAllowed(request) || !hostAllowed(request)) {
+    return jsonResponse(
+      { error: "Origin or host is not allowed." },
+      403,
+      request,
+    );
+  }
+  if (new URL(request.url).pathname.endsWith("/health")) return health(request);
+  if (!["GET", "POST", "DELETE"].includes(request.method)) {
+    return jsonResponse({ error: "Method not allowed." }, 405, request, {
+      Allow: "GET, POST, DELETE, OPTIONS",
+    });
+  }
+  const maxBodyBytes = envNumber("MCP_MAX_BODY_BYTES", 128 * 1024);
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > maxBodyBytes) {
+    return jsonResponse({ error: "Request body is too large." }, 413, request);
+  }
+
+  let context: AuthContext;
+  let config: SupabaseConfig;
+  try {
+    config = dependencies.config ?? getSupabaseConfig();
+    context = await authenticateRequest(
+      request,
+      config,
+      dependencies.fetchImpl ?? fetch,
+    );
+  } catch (error) {
+    const safe = toAppError(error);
+    return jsonResponse(
+      publicErrorPayload(safe),
+      safe.status,
+      request,
+      safe.code === "authentication_required" || safe.code === "invalid_session"
+        ? { "WWW-Authenticate": "Bearer" }
+        : {},
+    );
+  }
+
+  const limiter = dependencies.rateLimiter ?? getDefaultRateLimiter();
+  if (!limiter.allow(context.user.id)) {
+    return jsonResponse(
+      { error: { code: "rate_limited", message: "Too many requests." } },
+      429,
+      request,
+      { "Retry-After": "60" },
+    );
+  }
+
+  const authInfo = {
+    token: context.accessToken,
+    clientId: context.user.id,
+    scopes: [] as string[],
+    expiresAt: Math.floor(Date.now() / 1000) + 300,
+    extra: { mettiUser: context.user } as unknown as JsonObject,
+  };
+  try {
+    const handler = dependencies.handler ??
+      getDefaultHandler(config, dependencies.fetchImpl ?? fetch);
+    return withCors(await handler.fetch(request, { authInfo }), request);
+  } catch (error) {
+    console.error("metti-mcp request failed", error);
+    return jsonResponse(
+      { error: { code: "internal_error", message: "Internal server error." } },
+      500,
+      request,
+    );
+  }
+}
