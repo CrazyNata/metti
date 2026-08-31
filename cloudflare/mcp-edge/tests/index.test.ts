@@ -3,6 +3,8 @@ import { type Env, handleCloudflareRequest } from "../src/index.ts";
 const env: Env = {
   METTI_MCP_UPSTREAM_URL:
     "https://fkicjvawvaddjdmcpiei.supabase.co/functions/v1/metti-mcp",
+  SUPABASE_AUTH_SERVER_URL:
+    "https://fkicjvawvaddjdmcpiei.supabase.co/auth/v1",
   MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
   MCP_ALLOWED_HOSTS: "mcp.example.com",
 };
@@ -14,8 +16,30 @@ Deno.test("Cloudflare edge rejects unauthenticated MCP requests", async () => {
     async () => new Response("should not reach origin"),
   );
   if (response.status !== 401) throw new Error("Expected HTTP 401.");
-  if (response.headers.get("www-authenticate") !== "Bearer") {
-    throw new Error("Expected bearer challenge.");
+  if (
+    response.headers.get("www-authenticate") !==
+      'Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource", scope="email profile"'
+  ) {
+    throw new Error("Expected OAuth protected-resource challenge.");
+  }
+});
+
+Deno.test("Cloudflare edge publishes OAuth protected-resource metadata", async () => {
+  const response = await handleCloudflareRequest(
+    new Request("https://mcp.example.com/.well-known/oauth-protected-resource"),
+    env,
+    async () => new Response("should not reach origin"),
+  );
+  if (response.status !== 200) throw new Error("Expected metadata HTTP 200.");
+  const metadata = await response.json() as Record<string, unknown>;
+  if (metadata.resource !== "https://mcp.example.com/mcp") {
+    throw new Error("MCP resource metadata has the wrong resource URL.");
+  }
+  if (
+    JSON.stringify(metadata.authorization_servers) !==
+      JSON.stringify(["https://fkicjvawvaddjdmcpiei.supabase.co/auth/v1"])
+  ) {
+    throw new Error("MCP resource metadata has the wrong authorization server.");
   }
 });
 
@@ -33,6 +57,9 @@ Deno.test("Cloudflare edge forwards MCP auth and protocol headers", async () => 
         "content-type": "application/json",
         "mcp-protocol-version": "2025-11-25",
         "mcp-session-id": "session-1",
+        "mcp-method": "tools/list",
+        "mcp-name": "wardrobe",
+        "mcp-param-example": "value",
       },
       body: '{"jsonrpc":"2.0"}',
     }),
@@ -58,6 +85,15 @@ Deno.test("Cloudflare edge forwards MCP auth and protocol headers", async () => 
   }
   if (receivedHeaders.get("mcp-session-id") !== "session-1") {
     throw new Error("MCP session header was not forwarded.");
+  }
+  if (receivedHeaders.get("mcp-method") !== "tools/list") {
+    throw new Error("MCP method header was not forwarded.");
+  }
+  if (receivedHeaders.get("mcp-name") !== "wardrobe") {
+    throw new Error("MCP name header was not forwarded.");
+  }
+  if (receivedHeaders.get("mcp-param-example") !== "value") {
+    throw new Error("MCP parameter headers were not forwarded.");
   }
   if (receivedHeaders.get("origin")) {
     throw new Error(

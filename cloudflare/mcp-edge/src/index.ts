@@ -1,14 +1,16 @@
 export interface Env {
   METTI_MCP_UPSTREAM_URL: string;
+  SUPABASE_AUTH_SERVER_URL?: string;
   MCP_ALLOWED_ORIGINS?: string;
   MCP_ALLOWED_HOSTS?: string;
 }
 
 type FetchLike = typeof fetch;
+type Route = "mcp" | "health" | "protected-resource-metadata";
 
 const allowedMethods = "GET, POST, DELETE, OPTIONS";
 const allowedHeaders =
-  "authorization, content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id";
+  "authorization, content-type, accept, mcp-protocol-version, mcp-session-id, mcp-method, mcp-name, mcp-param-*, last-event-id";
 const forwardedHeaders = [
   "authorization",
   "content-type",
@@ -72,6 +74,12 @@ function withCors(response: Response, request: Request, env: Env): Response {
   const headers = new Headers(response.headers);
   corsHeaders(request, env).forEach((value, key) => headers.set(key, value));
   headers.set("X-Metti-Edge", "cloudflare");
+  if (
+    response.status === 401 &&
+    !/resource_metadata\s*=/i.test(headers.get("WWW-Authenticate") ?? "")
+  ) {
+    headers.set("WWW-Authenticate", oauthChallenge(request));
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -81,6 +89,47 @@ function withCors(response: Response, request: Request, env: Env): Response {
 
 function isRoute(pathname: string, route: "mcp" | "health"): boolean {
   return pathname === `/${route}` || pathname === `/${route}/`;
+}
+
+function isProtectedResourceMetadataRoute(pathname: string): boolean {
+  return [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/oauth-protected-resource/mcp/",
+  ].includes(pathname);
+}
+
+function authServerUrl(env: Env): string {
+  const configured = String(env.SUPABASE_AUTH_SERVER_URL ?? "").trim();
+  if (configured) return configured.replace(/\/+$/, "");
+
+  const upstream = new URL(env.METTI_MCP_UPSTREAM_URL);
+  return `${upstream.origin}/auth/v1`;
+}
+
+function resourceUrl(request: Request): string {
+  return `${new URL(request.url).origin}/mcp`;
+}
+
+function resourceMetadataUrl(request: Request): string {
+  return `${new URL(request.url).origin}/.well-known/oauth-protected-resource`;
+}
+
+function oauthChallenge(request: Request): string {
+  return `Bearer resource_metadata="${resourceMetadataUrl(request)}", scope="email profile"`;
+}
+
+function protectedResourceMetadata(
+  request: Request,
+  env: Env,
+): Record<string, unknown> {
+  return {
+    resource: resourceUrl(request),
+    authorization_servers: [authServerUrl(env)],
+    scopes_supported: ["email", "profile"],
+    bearer_methods_supported: ["header"],
+  };
 }
 
 function upstreamUrl(
@@ -108,6 +157,11 @@ function proxyHeaders(request: Request): Headers {
   for (const name of forwardedHeaders) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
+  }
+  for (const [name, value] of request.headers) {
+    if (name.toLowerCase().startsWith("mcp-") && !headers.has(name)) {
+      headers.set(name, value);
+    }
   }
   return headers;
 }
@@ -151,7 +205,9 @@ export async function handleCloudflareRequest(
   fetchImpl: FetchLike = fetch,
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
-  const route: "mcp" | "health" | null = isRoute(pathname, "mcp")
+  const route: Route | null = isProtectedResourceMetadataRoute(pathname)
+    ? "protected-resource-metadata"
+    : isRoute(pathname, "mcp")
     ? "mcp"
     : isRoute(pathname, "health")
     ? "health"
@@ -171,6 +227,25 @@ export async function handleCloudflareRequest(
       status: 204,
       headers: corsHeaders(request, env),
     });
+  }
+
+  if (route === "protected-resource-metadata") {
+    if (request.method !== "GET") {
+      return jsonResponse(
+        { error: "Method not allowed." },
+        405,
+        request,
+        env,
+        { Allow: "GET, OPTIONS" },
+      );
+    }
+    return jsonResponse(
+      protectedResourceMetadata(request, env),
+      200,
+      request,
+      env,
+      { "Cache-Control": "public, max-age=300" },
+    );
   }
 
   if (route === "health") {
@@ -202,7 +277,7 @@ export async function handleCloudflareRequest(
       401,
       request,
       env,
-      { "WWW-Authenticate": "Bearer" },
+      { "WWW-Authenticate": oauthChallenge(request) },
     );
   }
   return proxy(request, env, route, fetchImpl);
