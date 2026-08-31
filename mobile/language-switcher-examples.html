@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>metti · варианты переключателя языка</title>
+    <link rel="stylesheet" href="./language-switcher-examples.css" />
+  </head>
+  <body>
+    <div class="examples-shell">
+      <header class="examples-header">
+        <div class="eyebrow">METTI · ПРИМЕРЫ</div>
+        <h1>Кнопка для<br /><em>смены языка</em></h1>
+        <p>Три варианта на основе экрана профиля. Это отдельный макет — в приложение ничего не добавлено.</p>
+        <div class="tap-hint"><span>⌁</span> Нажми на переключатель, чтобы посмотреть состояние English</div>
+      </header>
+
+      <main class="variants">
+        <article class="variant">
+          <div class="variant-label">01 · В ШАПКЕ ПРОФИЛЯ</div>
+          <div class="phone-frame">
+            <div class="phone-screen" data-example="header">
+              <div class="statusbar"><span>9:41</span><span>•••⌄▮</span></div>
+              <div class="demo-page">
+                <div class="profile-topline">
+                  <span class="demo-eyebrow">ПРОФИЛЬ</span>
+                  <div class="topline-actions">
+                    <button class="language-pill" type="button" data-language-control aria-label="Язык: русский">
+                      <span class="language-code is-active">RU</span><span class="language-separator">/</span><span class="language-code">EN</span>
+                    </button>
+                    <button class="edit-link" type="button">Изменить</button>
+                  </div>
+                </div>
+                <div class="profile-heading">
+                  <div><h2>Наталия</h2><p>Твой стиль, собранный<br />в одном месте.</p></div>
+                  <span class="avatar">Н</span>
+                </div>
+                <div class="profile-card">
+                  <strong>Наталия</strong>
+                  <small>Спокойный · Элегантный</small>
+                  <div class="chips"><span>Спокойный</span><span>Элегантный</span></div>
+                </div>
+                <div class="stats"><div><strong>128</strong><small>вещей</small></div><div><strong>24</strong><small>образа</small></div><div><strong>6</strong><small>коллекций</small></div></div>
+                <div class="section-head"><span>ТВОЙ СТИЛЬ</span><button type="button">Настроить</button></div>
+                <div class="style-card"><span class="spark">✦</span><div><strong>Спокойный · Элегантный</strong><small>Подходит для работы, города и встреч.</small></div><span class="arrow">›</span></div>
+                <div class="section-head menu-title"><span>РАЗДЕЛЫ</span></div>
+                <div class="menu"><div class="menu-row"><span class="menu-icon">▦</span><span>Мой гардероб</span><small>128</small><i>›</i></div><div class="menu-row"><span class="menu-icon">▧</span><span>Сохранённые образы</span><small>24</small><i>›</i></div></div>
+              </div>
+              <nav class="bottom-nav"><span>⌂<small>Главная</small></span><span>▦<small>Гардероб</small></span><span class="nav-active">✦<small>Стилист</small></span><span>▧<small>Образы</small></span><span>♙<small>Профиль</small></span></nav>
+            </div>
+          </div>
+          <p class="variant-note"><strong>Плюс:</strong> язык виден сразу на профиле. Компактный вариант, почти не занимает места.</p>
+        </article>
+
+        <article class="variant">
+          <div class="variant-label">02 · СТРОКА В ПРОФИЛЕ</div>
+          <div class="phone-frame">
+            <div class="phone-screen" data-example="row">
+              <div class="statusbar"><span>9:41</span><span>•••⌄▮</span></div>
+              <div class="demo-page">
+                <div class="profile-topline"><span class="demo-eyebrow">ПРОФИЛЬ</span><button class="edit-link" type="button">Изменить</button></div>
+                <div class="profile-heading"><div><h2>Наталия</h2><p>Твой стиль, собранный<br />в одном месте.</p></div><span class="avatar">Н</span></div>
+                <div class="profile-card"><strong>Наталия</strong><small>Спокойный · Элегантный</small><div class="chips"><span>Спокойный</span><span>Элегантный</span></div></div>
+                <div class="stats"><div><strong>128</strong><small>вещей</small></div><div><strong>24</strong><small>образа</small></div><div><strong>6</strong><small>коллекций</small></div></div>
+                <div class="section-head"><span>ТВОЙ СТИЛЬ</span><button type="button">Настроить</button></div>
+                <div class="style-card"><span class="spark">✦</span><div><strong>Спокойный · Элегантный</strong><small>Подходит для работы, города и встреч.</small></div><span class="arrow">›</span></div>
+                <div class="section-head menu-title"><span>НАСТРОЙКИ</span></div>
+                <div class="menu">
+                  <button class="menu-row language-row" type="button" data-open-language-sheet><span class="menu-icon">文</span><span><b>Язык приложения</b><small>Русский</small></span><i>›</i></button>
+                  <div class="menu-row"><span class="menu-icon">▦</span><span>Мой гардероб</span><small>128</small><i>›</i></div>
+                  <div class="menu-row"><span class="menu-icon">▧</span><span>Сохранённые образы</span><small>24</small><i>›</i></div>
+                </div>
+              </div>
+              <nav class="bottom-nav"><span>⌂<small>Главная</small></span><span>▦<small>Гардероб</small></span><span class="nav-active">✦<small>Стилист</small></span><span>▧<small>Образы</small></span><span>♙<small>Профиль</small></span></nav>
+              <div class="language-sheet" data-language-sheet hidden>
+                <div class="sheet-panel">
+                  <button class="sheet-close" type="button" data-close-language-sheet aria-label="Закрыть">×</button>
+                  <h3>Язык приложения</h3>
+                  <p>Выбери язык, на котором будет работать Metti.</p>
+                  <div class="language-options" data-language-options>
+                    <button type="button" class="is-selected" data-language-option="RU"><span>RU</span><b>Русский</b><i>✓</i></button>
+                    <button type="button" data-language-option="EN"><span>EN</span><b>English</b><i>✓</i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="variant-note"><strong>Плюс:</strong> самый понятный путь: название настройки и текущее значение всегда на виду.</p>
+        </article>
+
+        <article class="variant">
+          <div class="variant-label">03 · В ОКНЕ «ИЗМЕНИТЬ»</div>
+          <div class="phone-frame">
+            <div class="phone-screen" data-example="modal">
+              <div class="statusbar"><span>9:41</span><span>•••⌄▮</span></div>
+              <div class="demo-page blurred-page">
+                <div class="profile-topline"><span class="demo-eyebrow">ПРОФИЛЬ</span><button class="edit-link" type="button">Изменить</button></div>
+                <div class="profile-heading"><div><h2>Наталия</h2><p>Твой стиль, собранный<br />в одном месте.</p></div><span class="avatar">Н</span></div>
+                <div class="profile-card"><strong>Наталия</strong><small>Спокойный · Элегантный</small><div class="chips"><span>Спокойный</span><span>Элегантный</span></div></div>
+                <div class="stats"><div><strong>128</strong><small>вещей</small></div><div><strong>24</strong><small>образа</small></div><div><strong>6</strong><small>коллекций</small></div></div>
+              </div>
+              <nav class="bottom-nav"><span>⌂<small>Главная</small></span><span>▦<small>Гардероб</small></span><span class="nav-active">✦<small>Стилист</small></span><span>▧<small>Образы</small></span><span>♙<small>Профиль</small></span></nav>
+              <div class="modal-backdrop">
+                <form class="profile-modal" onsubmit="return false">
+                  <button class="sheet-close" type="button" aria-label="Закрыть">×</button>
+                  <h3>Твой профиль</h3>
+                  <p>Настройте данные, чтобы стилист точнее подбирал образы.</p>
+                  <label class="language-field">Язык приложения
+                    <span class="segmented-language" data-language-control aria-label="Язык: русский">
+                      <button type="button" class="is-active">Русский</button><button type="button">English</button>
+                    </span>
+                  </label>
+                  <label>Имя<input value="Наталия" /></label>
+                  <label>Город<input value="Prague" /></label>
+                  <div class="form-two"><label>Посадка<select><option>Не указано</option></select></label><label>Размер<input placeholder="M" /></label></div>
+                  <div class="form-actions"><button class="outline" type="button">Отмена</button><button class="primary" type="button">Сохранить</button></div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <p class="variant-note"><strong>Плюс:</strong> логично поставить рядом с данными профиля. Но кнопка будет доступна только после открытия окна.</p>
+        </article>
+      </main>
+
+      <footer class="recommendation">
+        <span class="recommendation-mark">✦</span>
+        <div><strong>Мой фаворит для этого экрана — вариант 02.</strong><small>Он заметный, понятный и не перегружает верхнюю часть профиля.</small></div>
+      </footer>
+    </div>
+
+    <script>
+      const setLanguageState = (control, language) => {
+        if (control.matches('.language-pill')) {
+          control.querySelectorAll('.language-code').forEach((code) => code.classList.toggle('is-active', code.textContent === language));
+          control.setAttribute('aria-label', `Язык: ${language === 'RU' ? 'русский' : 'English'}`);
+        }
+        if (control.matches('.segmented-language')) {
+          control.querySelectorAll('button').forEach((button) => button.classList.toggle('is-active', (language === 'RU' && button.textContent === 'Русский') || (language === 'EN' && button.textContent === 'English')));
+        }
+      };
+
+      document.querySelectorAll('[data-language-control]').forEach((control) => {
+        control.addEventListener('click', (event) => {
+          const button = event.target.closest('button');
+          const current = control.querySelector('.is-active');
+          const next = current?.textContent === 'RU' || current?.textContent === 'Русский' ? 'EN' : 'RU';
+          if (button && control.matches('.segmented-language')) setLanguageState(control, button.textContent === 'English' ? 'EN' : 'RU');
+          else setLanguageState(control, next);
+        });
+      });
+
+      const sheet = document.querySelector('[data-language-sheet]');
+      document.querySelector('[data-open-language-sheet]')?.addEventListener('click', () => { sheet.hidden = false; });
+      document.querySelector('[data-close-language-sheet]')?.addEventListener('click', () => { sheet.hidden = true; });
+      sheet?.addEventListener('click', (event) => { if (event.target === sheet) sheet.hidden = true; });
+      sheet?.querySelectorAll('[data-language-option]').forEach((option) => option.addEventListener('click', () => {
+        sheet.querySelectorAll('[data-language-option]').forEach((item) => item.classList.toggle('is-selected', item === option));
+      }));
+    </script>
+  </body>
+</html>

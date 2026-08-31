@@ -7,12 +7,13 @@
   const forms = { login: gate.querySelector('#login-form'), register: gate.querySelector('#register-form'), reset: gate.querySelector('#reset-form') };
   let mode = 'login';
   let oauthPending = false;
+  const translate = (value) => window.MettiI18n?.t?.(value) ?? value;
 
   const statusNode = (view = mode) => gate.querySelector(`#${view}-status`);
   const setStatus = (message = '', type = '') => {
     const node = statusNode();
     if (!node) return;
-    node.textContent = message;
+    node.textContent = translate(message);
     node.className = `auth-status${type ? ` ${type}` : ''}`;
   };
   const friendlyError = (error) => {
@@ -54,7 +55,7 @@
     if (!button) return;
     if (loading) {
       button.dataset.label = button.innerHTML;
-      button.innerHTML = 'Секунду…';
+      button.innerHTML = translate('Секунду…');
       button.disabled = true;
     } else {
       button.innerHTML = button.dataset.label || button.innerHTML;
@@ -242,7 +243,7 @@
       const visible = input.type === 'password';
       input.type = visible ? 'text' : 'password';
       passwordButton.classList.toggle('visible', visible);
-      passwordButton.setAttribute('aria-label', visible ? 'Скрыть пароль' : 'Показать пароль');
+      passwordButton.setAttribute('aria-label', translate(visible ? 'Скрыть пароль' : 'Показать пароль'));
     }
     const action = event.target.closest('[data-auth-action]')?.dataset.authAction;
     if (action === 'google') handleGoogle();

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500" role="img" aria-labelledby="title desc">
+  <title id="title">Metti AI Stylist</title>
+  <desc id="desc">A calm, editorial banner for the Metti personal AI stylist app.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff3ec"/>
+      <stop offset="0.52" stop-color="#f8d9d6"/>
+      <stop offset="1" stop-color="#edb6c0"/>
+    </linearGradient>
+    <linearGradient id="dress" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b95873"/>
+      <stop offset="0.52" stop-color="#e892a6"/>
+      <stop offset="1" stop-color="#8f3f61"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#fffaf5" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fffaf5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bg)"/>
+  <ellipse cx="420" cy="140" rx="440" ry="260" fill="url(#glow)"/>
+  <circle cx="935" cy="86" r="3" fill="#a96a54" opacity="0.55"/>
+  <circle cx="965" cy="118" r="5" fill="#a96a54" opacity="0.25"/>
+  <g fill="none" stroke="#b16b59" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M787 89c0-43 58-43 58 0 0 35-31 42-31 76v27" stroke-width="7"/>
+    <path d="M814 192 616 324c-27 18-18 36 17 36h362c35 0 44-18 17-36L814 192Z" stroke-width="7"/>
+  </g>
+  <path d="M773 250c-55 50-83 134-132 250h331c-57-83-72-170-126-250-20-29-53-29-73 0Z" fill="url(#dress)" opacity="0.96"/>
+  <path d="M814 238c-4 83-16 166-46 262h103c-27-96-42-180-45-262-3-9-9-9-12 0Z" fill="#f7b2bd" opacity="0.78"/>
+  <path d="M940 104 947 123 967 130 947 137 940 157 933 137 913 130 933 123Z" fill="#b47a46"/>
+  <text x="72" y="190" fill="#211b18" font-family="Georgia, 'Times New Roman', serif" font-size="90" letter-spacing="-3">metti</text>
+  <text x="78" y="244" fill="#7e5860" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="6">AI STYLIST</text>
+  <text x="78" y="310" fill="#4a3635" font-family="Arial, sans-serif" font-size="29">A calmer way to get dressed.</text>
+  <path d="M80 357h180" stroke="#b16b59" stroke-width="2" opacity="0.6"/>
+  <text x="78" y="397" fill="#875864" font-family="Arial, sans-serif" font-size="16" letter-spacing="2">YOUR WARDROBE · YOUR STYLE · YOUR DAY</text>
+</svg>

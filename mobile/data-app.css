@@ -18,7 +18,7 @@
 #wardrobe-sheet .form-actions .outline{font-size:15px!important}
 #wardrobe-sheet .form-actions .primary{font-size:17px!important}
 #wardrobe-sheet .photo-upload-field{padding:14px!important;border:2px dashed var(--rose)!important;border-radius:16px!important;background:var(--soft)!important;gap:8px!important}
-#wardrobe-sheet .photo-upload-field::before{content:"Добавьте фотографию вещи";color:var(--ink);font:600 17px var(--serif)}
+#wardrobe-sheet .photo-upload-field::before{content:"Add an item photo";color:var(--ink);font:600 17px var(--serif)}html[lang="ru"] #wardrobe-sheet .photo-upload-field::before{content:"Добавьте фотографию вещи"}
 #wardrobe-sheet .photo-upload-field input[type="file"]{height:54px!important;padding:12px!important;border:2px solid var(--rose)!important;border-radius:13px!important;background:var(--surface)!important;color:var(--ink)!important;font-size:14px!important}
 #wardrobe-sheet .photo-upload-field .form-help{color:var(--rose)!important;font-size:11px!important;font-weight:600}
 .screen[data-screen-id="wardrobe"]{padding-left:12px!important;padding-right:12px!important}
@@ -75,6 +75,7 @@ body.modal-open{overflow:hidden}
 #delete-account-sheet .danger-confirm-button{background:#ae4c58!important}
 #delete-account-sheet .form-actions{display:flex;gap:8px}
 #delete-account-sheet .form-actions button{flex:1}
+.screen[data-screen-id="profile"] .profile-language-row .profile-language-copy>span{font-size:14px!important}.screen[data-screen-id="profile"] .profile-language-row .profile-language-copy small{font-size:12px!important}.screen[data-screen-id="profile"] .profile-language-row .menu-icon svg{width:19px;height:19px}.language-data-sheet .language-option-name{font-size:14px}.language-data-sheet .language-option-code{width:34px;height:34px;font-size:11px}
 
 /* Stylist screen: scale the whole composer area up by about 20%. */
 .screen[data-screen-id="stylist"]{padding:24px 29px 29px!important}

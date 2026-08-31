@@ -62,6 +62,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const prompt = String(body?.prompt ?? '').trim().slice(0, 1000);
     if (!prompt) return json({ error: 'Prompt is required' }, 400);
+    const language = body?.language === 'en' ? 'en' : 'ru';
+    const isEnglish = language === 'en';
 
     const wardrobePage = await services.wardrobe.list({ status: 'active', limit: 100 });
     const wardrobe = wardrobePage.items;
@@ -69,13 +71,13 @@ Deno.serve(async (req) => {
     const weather = body?.weather && typeof body.weather === 'object' ? body.weather : { city: profile.city ?? 'Prague', temperature_c: 18, weather_code: 3 };
     const fallbackIds = fallbackItemIds(wardrobe ?? []);
     const localFallback = () => json({
-      title: prompt || 'Образ на сегодня',
+      title: prompt || (isEnglish ? "Today's look" : 'Образ на сегодня'),
       note: fallbackIds.length
-        ? 'Внешний AI временно недоступен, поэтому я собрала базовый вариант из вашего гардероба.'
-        : 'Добавьте несколько вещей в гардероб, чтобы я могла собрать образ.',
+        ? (isEnglish ? 'The external AI is temporarily unavailable, so I put together a basic look from your wardrobe.' : 'Внешний AI временно недоступен, поэтому я собрала базовый вариант из вашего гардероба.')
+        : (isEnglish ? 'Add a few items to your wardrobe so I can put together a look.' : 'Добавьте несколько вещей в гардероб, чтобы я могла собрать образ.'),
       message: fallbackIds.length
-        ? 'Я собрала базовый образ из вещей вашего гардероба. Попробуйте ещё раз позже для более точной AI-рекомендации.'
-        : 'Добавьте вещи в гардероб — и я соберу для вас образ.',
+        ? (isEnglish ? 'I put together a basic look from your wardrobe. Try again later for a more precise AI recommendation.' : 'Я собрала базовый образ из вещей вашего гардероба. Попробуйте ещё раз позже для более точной AI-рекомендации.')
+        : (isEnglish ? 'Add items to your wardrobe and I will put together a look for you.' : 'Добавьте вещи в гардероб — и я соберу для вас образ.'),
       item_ids: fallbackIds,
       temperature_c: Number.isFinite(Number(weather.temperature_c)) ? Number(weather.temperature_c) : null,
       weather_code: Number.isFinite(Number(weather.weather_code)) ? Number(weather.weather_code) : null,
@@ -86,12 +88,12 @@ Deno.serve(async (req) => {
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
     if (!geminiKey && !openAiKey) return localFallback();
     const instructions = [
-      'Ты — персональный AI-стилист приложения metti.',
-      'Подбирай образ только из переданных вещей пользователя. Не придумывай вещи и не добавляй предметы, которых нет в списке.',
-      'Учитывай запрос, погоду, город и предпочтения профиля. Ответ возвращай строго в JSON без markdown.',
-      'Формат: {"title": string, "note": string, "message": string, "item_ids": string[]}. item_ids должен содержать от 1 до 6 id из гардероба.'
+      isEnglish ? 'You are the personal AI stylist for the metti app.' : 'Ты — персональный AI-стилист приложения metti.',
+      isEnglish ? 'Build a look only from the user’s provided items. Do not invent items or add anything that is not in the list.' : 'Подбирай образ только из переданных вещей пользователя. Не придумывай вещи и не добавляй предметы, которых нет в списке.',
+      isEnglish ? 'Consider the request, weather, city, and profile preferences. Return the response strictly as JSON without markdown. Write all user-facing text in English.' : 'Учитывай запрос, погоду, город и предпочтения профиля. Ответ возвращай строго в JSON без markdown. Все пользовательские тексты пиши на русском языке.',
+      isEnglish ? 'Format: {"title": string, "note": string, "message": string, "item_ids": string[]}. item_ids must contain 1 to 6 wardrobe item ids.' : 'Формат: {"title": string, "note": string, "message": string, "item_ids": string[]}. item_ids должен содержать от 1 до 6 id из гардероба.'
     ].join('\n');
-    const context = JSON.stringify({ prompt, weather, profile, wardrobe });
+    const context = JSON.stringify({ prompt, language, weather, profile, wardrobe });
     const requestGemini = () => {
       const model = Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash-lite';
       return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -163,9 +165,9 @@ Deno.serve(async (req) => {
     const validIds = new Set((wardrobe ?? []).map((item: any) => String(item.id)));
     const itemIds = Array.isArray(parsed.item_ids) ? parsed.item_ids.map((id: unknown) => String(id)).filter((id: string) => validIds.has(id)).slice(0, 6) : [];
     return json({
-      title: String(parsed.title || 'Образ на сегодня').slice(0, 120),
-      note: String(parsed.note || 'Собрала этот образ с учётом погоды и вашего гардероба.').slice(0, 500),
-      message: String(parsed.message || 'Готово — образ собран из вещей вашего гардероба.').slice(0, 500),
+      title: String(parsed.title || (isEnglish ? "Today's look" : 'Образ на сегодня')).slice(0, 120),
+      note: String(parsed.note || (isEnglish ? 'I put together this look with the weather and your wardrobe in mind.' : 'Собрала этот образ с учётом погоды и вашего гардероба.')).slice(0, 500),
+      message: String(parsed.message || (isEnglish ? 'Done — the look is built from your wardrobe.' : 'Готово — образ собран из вещей вашего гардероба.')).slice(0, 500),
       item_ids: itemIds.length ? itemIds : fallbackIds,
       temperature_c: Number.isFinite(Number(weather.temperature_c)) ? Number(weather.temperature_c) : null,
       weather_code: Number.isFinite(Number(weather.weather_code)) ? Number(weather.weather_code) : null

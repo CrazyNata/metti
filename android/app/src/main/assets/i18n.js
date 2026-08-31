@@ -1,0 +1,450 @@
+(() => {
+  const storageKey = 'metti-language';
+  const russianToEnglish = Object.freeze({
+    'Metti загружается': 'Loading Metti',
+    'Ваш личный стилист': 'Your personal stylist',
+    'Вход в metti': 'Sign in to metti',
+    'METTI · ВХОД И РЕГИСТРАЦИЯ': 'METTI · SIGN IN & SIGN UP',
+    'С возвращением': 'Welcome back',
+    'Войдите, чтобы продолжить собирать образы.': 'Sign in to keep creating looks.',
+    'Пароль': 'Password',
+    'Введите пароль': 'Enter your password',
+    'Показать пароль': 'Show password',
+    'Скрыть пароль': 'Hide password',
+    'Запомнить меня': 'Remember me',
+    'Войти': 'Sign in',
+    'Забыли пароль?': 'Forgot password?',
+    'или': 'or',
+    'Продолжить с Google': 'Continue with Google',
+    'Нет аккаунта?': "Don't have an account?",
+    'Зарегистрироваться': 'Sign up',
+    'Начнём с тебя': "Let's start with you",
+    'Пара деталей — и стилист сможет лучше тебя почувствовать.': 'A few details — and your stylist will get to know you better.',
+    'Как тебя зовут?': "What's your name?",
+    'Придумайте пароль': 'Create a password',
+    'Минимум 8 символов': 'At least 8 characters',
+    'Создать аккаунт': 'Create account',
+    'Уже есть аккаунт?': 'Already have an account?',
+    'Новый пароль': 'New password',
+    'Придумайте новый пароль для своего аккаунта.': 'Create a new password for your account.',
+    'Сохранить пароль': 'Save password',
+    'Вернуться ко входу': 'Back to sign in',
+    'Продолжая, вы принимаете': 'By continuing, you accept',
+    'политику конфиденциальности': 'the privacy policy',
+    'Удаление аккаунта': 'Account deletion',
+    'На главную': 'Go home',
+    'Профиль': 'Profile',
+    'ПОНЕДЕЛЬНИК · 18 СЕНТ': 'MONDAY · SEP 18',
+    'Доброе утро,': 'Good morning,',
+    'Облачно · теплее к полудню': 'Cloudy · warmer by noon',
+    'ОБРАЗ НА СЕГОДНЯ': "TODAY'S LOOK",
+    'Собрано AI': 'AI curated',
+    'бежевый жакет': 'beige blazer',
+    'белый топ': 'white top',
+    'прямые джинсы': 'straight-leg jeans',
+    'лоферы': 'loafers',
+    'сумка-тоут': 'tote bag',
+    'золотые серьги': 'gold earrings',
+    'Надеть этот образ': 'Wear this look',
+    'Другой вариант': 'Another option',
+    'Спросить стилиста': 'Ask your stylist',
+    'ВАШ СТИЛИСТ': 'YOUR STYLIST',
+    'Для чего': 'What are we',
+    'одеваемся?': 'dressing for?',
+    'Спросите что угодно, приложите фото или выберите вещь из гардероба.': 'Ask anything, attach a photo, or choose an item from your wardrobe.',
+    'Спросите стилиста о чём угодно…': 'Ask your stylist anything…',
+    'Образ на вечер': 'An evening look',
+    'Образ на работу': 'A look for work',
+    'Свидание': 'Date night',
+    'Обыграй эти джинсы': 'Style these jeans',
+    'Что взять в поездку?': 'What should I pack?',
+    'Что-то элегантное': 'Something elegant',
+    'Ваш стилист': 'Your stylist',
+    'на связи': 'online',
+    'Что надеть на ужин сегодня? Что-то приятное, но не слишком нарядное.': "What should I wear to dinner tonight? Something comfortable, but not too dressy.",
+    'С удовольствием. Вечером будет 17°C — не замёрзнете. Секунду.': "Of course. It will be 17°C this evening — you won't be cold. One moment.",
+    'СОБИРАЮ ОБРАЗ…': 'PUTTING TOGETHER A LOOK…',
+    '✓ Смотрю погоду': '✓ Checking the weather',
+    '✓ Изучаю ваш гардероб': '✓ Looking through your wardrobe',
+    '○ Подбираю цвета': '○ Choosing the colors',
+    '○ Добавляю аксессуары': '○ Adding accessories',
+    'Напишите стилисту…': 'Message your stylist…',
+    'ЭЛЕГАНТНО · 17°C · ВЕЧЕР': 'ELEGANT · 17°C · EVENING',
+    'Ужин в Праге': 'Dinner in Prague',
+    'структурный жакет': 'structured blazer',
+    'кремовый топ': 'cream top',
+    'чёрные брюки': 'black trousers',
+    'сумка': 'bag',
+    '«Кремовый топ смягчает чёрные брюки, а структурный жакет делает образ уместным для ужина.»': '“The cream top softens the black trousers, while the structured blazer makes the look right for dinner.”',
+    'Сохранить': 'Save',
+    'Другой': 'Another',
+    'Изменить': 'Edit',
+    'Мой гардероб': 'My wardrobe',
+    '0 вещей': '0 items',
+    'Добавить вещь': 'Add item',
+    'Поиск по гардеробу': 'Search your wardrobe',
+    'Все': 'All',
+    'Верх': 'Tops',
+    'Низ': 'Bottoms',
+    'Верхняя одежда': 'Outerwear',
+    'Обувь': 'Shoes',
+    'белая рубашка': 'white shirt',
+    'чёрные брюки': 'black trousers',
+    'коричневые лоферы': 'brown loafers',
+    'кожаная сумка': 'leather bag',
+    'В гардеробе пока нет вещей.': 'Your wardrobe is empty.',
+    'Добавьте первую вещь — фотографию, цвет и детали.': 'Add your first item — a photo, color, and details.',
+    '‹　Мой гардероб': '‹　My wardrobe',
+    'AI ОПРЕДЕЛИЛ': 'AI IDENTIFIED',
+    'Бежевый жакет': 'Beige blazer',
+    'оверсайз': 'oversized',
+    'Жакет': 'Blazer',
+    'Бежевый': 'Beige',
+    'Оверсайз': 'Oversized',
+    'Осень / Весна': 'Fall / Spring',
+    'Добавить в гардероб': 'Add to wardrobe',
+    'В гардеробе ✓': 'In wardrobe ✓',
+    'Удалить вещь': 'Delete item',
+    'Этот жакет сочетается с 8 вещами': 'This blazer works with 8 items',
+    'из вашего гардероба.': 'from your wardrobe.',
+    'Посмотреть образы →': 'View looks →',
+    'Образы': 'Looks',
+    'Для вас': 'For you',
+    'Сохранённые': 'Saved',
+    'Надетые': 'Worn',
+    'Работа': 'Work',
+    'Офис в понедельник': 'Monday at the office',
+    'Воскресная прогулка': 'Sunday walk',
+    'Поездка': 'Trip',
+    'Капсула для Рима': 'Rome capsule',
+    'ПРОФИЛЬ': 'PROFILE',
+    'Твой стиль, собранный': 'Your style, brought together',
+    'в одном месте.': 'in one place.',
+    'Открыть профиль': 'Open profile',
+    'вещей': 'items',
+    'вещи': 'items',
+    'вещь': 'item',
+    'образа': 'looks',
+    'коллекций': 'collections',
+    'ТВОЙ СТИЛЬ': 'YOUR STYLE',
+    'Настроить': 'Customize',
+    'Подходит для работы, города и встреч.': 'Works for work, the city, and occasions.',
+    'НАСТРОЙКИ': 'SETTINGS',
+    'Язык приложения': 'App language',
+    'Русский': 'Russian',
+    'РАЗДЕЛЫ': 'SECTIONS',
+    'Сохранённые образы': 'Saved looks',
+    'Выйти из аккаунта': 'Sign out',
+    'Политика конфиденциальности': 'Privacy policy',
+    'Твой профиль': 'Your profile',
+    'Настройте данные, чтобы стилист точнее подбирал образы.': 'Add your details so your stylist can choose better looks.',
+    'Имя': 'Name',
+    'Город': 'City',
+    'Стиль': 'Style',
+    'Любимые цвета': 'Favorite colors',
+    'Посадка': 'Fit',
+    'Не указано': 'Not specified',
+    'Свободная': 'Relaxed',
+    'Классическая': 'Classic',
+    'По фигуре': 'Fitted',
+    'Размер': 'Size',
+    'Предпочтения': 'Preferences',
+    'Для работы, города, встреч…': 'For work, the city, and occasions…',
+    'Новая вещь': 'New item',
+    'Изменить вещь': 'Edit item',
+    'Добавьте вещь в свой гардероб. Фото хранится приватно и доступно только вам.': 'Add an item to your wardrobe. The photo stays private and is only visible to you.',
+    'Название': 'Item name',
+    'Например, бежевый жакет': 'For example, a beige blazer',
+    'Категория': 'Category',
+    'Цвет': 'Color',
+    'Молочный, бежевый, чёрный': 'Cream, beige, black',
+    'Сезон': 'Season',
+    'Бренд': 'Brand',
+    'Необязательно': 'Optional',
+    'Заметки': 'Notes',
+    'Посадка, сочетания, настроение…': 'Fit, pairings, mood…',
+    'Фотография вещи': 'Item photo',
+    'Белый фон добавится автоматически · до 5 МБ': 'White background added automatically · up to 5 MB',
+    'Удалить аккаунт?': 'Delete account?',
+    'Профиль, гардероб и сохранённые образы будут удалены без возможности восстановления.': 'Your profile, wardrobe, and saved looks will be deleted and cannot be restored.',
+    'Настройки стилиста': 'Stylist settings',
+    'Настройте параметры, чтобы образы точнее подходили вам.': 'Adjust the settings so your looks fit you better.',
+    'Твой стиль': 'Your style',
+    'Что хотите изменить?': 'What would you like to change?',
+    'Заменю только эту вещь, остальное оставлю.': 'I will replace only this item and leave the rest as is.',
+    'Сменить верх': 'Change top',
+    'Сменить низ': 'Change bottoms',
+    'Сменить обувь ✓': 'Change shoes ✓',
+    'Сменить сумку': 'Change bag',
+    'Теплее': 'Warmer',
+    'Проще': 'Simpler',
+    'Элегантнее': 'More elegant',
+    'Другие цвета': 'Different colors',
+    'НОВАЯ ОБУВЬ ИЗ ГАРДЕРОБА': 'NEW SHOES FROM YOUR WARDROBE',
+    'Отлично · Надеть': 'Great · Wear it',
+    'Выберите язык, на котором будет работать Metti.': 'Choose the language for Metti.',
+    'English': 'English',
+    'Вход в Google отменён.': 'Google sign-in was canceled.',
+    'Не удалось завершить вход Google. Нажмите кнопку ещё раз.': 'Google sign-in could not be completed. Try the button again.',
+    'Адрес возврата не разрешён в настройках Supabase.': 'This redirect address is not allowed in Supabase settings.',
+    'Введите корректный email.': 'Enter a valid email.',
+    'Введите пароль.': 'Enter your password.',
+    'Supabase пока не подключён.': 'Supabase is not connected yet.',
+    'Выполняю вход…': 'Signing in…',
+    'Сессия не создана. Попробуйте ещё раз.': 'The session was not created. Try again.',
+    'Готово.': 'Done.',
+    'Напишите, как к вам обращаться.': 'Tell us what we should call you.',
+    'Создаю аккаунт…': 'Creating your account…',
+    'Аккаунт создан, но в Supabase включено подтверждение email. Отключите «Confirm email», чтобы вход был сразу.': 'Your account was created, but Supabase requires email confirmation. Turn off “Confirm email” for instant sign-in.',
+    'Аккаунт создан. Теперь можно войти.': 'Account created. You can now sign in.',
+    'Обновление пароля пока недоступно.': 'Password updates are not available yet.',
+    'Сохраняю новый пароль…': 'Saving your new password…',
+    'Пароль обновлён. Теперь можно войти снова.': 'Password updated. You can sign in again.',
+    'Google-вход пока недоступен.': 'Google sign-in is not available yet.',
+    'Проверяю Google-вход…': 'Checking Google sign-in…',
+    'Google-вход ещё не включён в Supabase.': 'Google sign-in is not enabled in Supabase yet.',
+    'Сначала введите email.': 'Enter your email first.',
+    'Восстановление пока недоступно.': 'Password recovery is not available yet.',
+    'Отправляю ссылку…': 'Sending the link…',
+    'Ссылка для восстановления отправлена.': 'The recovery link has been sent.',
+    'Обмен кода Google пока недоступен.': 'Google code exchange is not available yet.',
+    'Google не вернул данные для входа.': 'Google did not return sign-in data.',
+    'Секунду…': 'One moment…',
+    'Введите название вещи.': 'Enter an item name.',
+    'Войдите, чтобы сохранять вещи.': 'Sign in to save items.',
+    'Файл должен быть меньше 5 МБ.': 'The file must be smaller than 5 MB.',
+    'Подготавливаю белый фон…': 'Preparing a white background…',
+    'Загружаю фотографию…': 'Uploading the photo…',
+    'После обработки файл получился больше 5 МБ. Выберите фото поменьше.': 'The processed file is larger than 5 MB. Choose a smaller photo.',
+    'Вещь не вернулась из Supabase.': 'The item was not returned by Supabase.',
+    'Вещь обновлена': 'Item updated',
+    'Вещь добавлена': 'Item added',
+    'Не удалось сохранить вещь.': 'Could not save the item.',
+    'Вещь уже в гардеробе': 'The item is already in your wardrobe',
+    'Войдите, чтобы удалить аккаунт.': 'Sign in to delete your account.',
+    'Удаляем…': 'Deleting…',
+    'Удаляю профиль и данные…': 'Deleting your profile and data…',
+    'Аккаунт удалён': 'Account deleted',
+    'Не удалось удалить аккаунт.': 'Could not delete the account.',
+    'Войдите, чтобы сохранять профиль.': 'Sign in to save your profile.',
+    'Заполните имя и город.': 'Fill in your name and city.',
+    'Сохраняю…': 'Saving…',
+    'Профиль сохранён': 'Profile saved',
+    'Не удалось сохранить профиль.': 'Could not save the profile.',
+    'Войдите, чтобы сохранять настройки стилиста.': 'Sign in to save stylist settings.',
+    'Настройки стилиста сохранены': 'Stylist settings saved',
+    'Не удалось сохранить настройки.': 'Could not save the settings.',
+    'Войдите, чтобы сохранять образы': 'Sign in to save looks',
+    'Образ отмечен как надетый': 'Look marked as worn',
+    'Образ сохранён': 'Look saved',
+    'Не удалось сохранить образ': 'Could not save the look',
+    'Metti собирает образ…': 'Metti is putting together a look…',
+    'Готово — образ собран из вашего гардероба.': 'Done — the look is built from your wardrobe.',
+    'Не получилось связаться со стилистом. Проверьте подключение и попробуйте ещё раз.': 'I could not reach your stylist. Check your connection and try again.',
+    'AI-стилист временно недоступен': 'The AI stylist is temporarily unavailable',
+    'Новый вариант готов': 'The new option is ready',
+    'Русский выбран': 'Russian selected',
+    'Коллаж образа': 'Outfit collage',
+    'Аксессуары': 'Accessories',
+    'Главная': 'Home',
+    'Гардероб': 'Wardrobe',
+    'Стилист': 'Stylist',
+    'Закрыть': 'Close',
+    'Отмена': 'Cancel',
+    'Удалить аккаунт': 'Delete account',
+    'Добавьте фотографию вещи': 'Add an item photo',
+    'Минимал': 'Minimal',
+    'Спокойный': 'Calm',
+    'Элегантный': 'Elegant',
+    'Спокойный, элегантный': 'Calm, elegant',
+    'Молочный': 'Cream',
+    'Чёрный': 'Black',
+    'Коричневый': 'Brown',
+    'Золотой': 'Gold',
+    'Белый': 'White',
+    'Тауп': 'Taupe',
+    'Круглый год': 'All year',
+    'Весна / Лето': 'Spring / Summer',
+    'Пыльная слива': 'Dusty plum',
+    'Бежевый жакет оверсайз': 'Oversized beige blazer',
+    'Белый топ': 'White top',
+    'Прямые джинсы': 'Straight-leg jeans',
+    'Коричневые лоферы': 'Brown loafers',
+    'Сумка-тоут': 'Tote bag',
+    'Золотые серьги': 'Gold earrings',
+    'Чёрная миди-юбка': 'Black midi skirt',
+    'Белые кеды': 'White sneakers',
+    'Шёлковый платок': 'Silk scarf',
+    'Вещь': 'Item',
+    'Вещь удалена': 'Item deleted',
+    'Не удалось загрузить гардероб': 'Could not load the wardrobe',
+    'Не удалось загрузить образы': 'Could not load looks',
+    'Не удалось удалить вещь': 'Could not delete the item',
+    'Другой вариант образа': 'Another look option',
+    'Образ надет ✓': 'Look worn ✓',
+    'эту вещь': 'this item',
+    'Надето': 'Worn',
+    'Сохранено': 'Saved',
+    'Надетых образов пока нет.': 'No worn looks yet.',
+    'Сохранённых образов пока нет.': 'No saved looks yet.',
+    'Ясно': 'Clear',
+    'Переменная облачность': 'Partly cloudy',
+    'Облачно': 'Cloudy',
+    'Туман': 'Foggy',
+    'Дождь': 'Rain',
+    'Снег': 'Snow',
+    'Ливни': 'Showers',
+    'Гроза': 'Thunderstorm',
+    'до': 'up to',
+    'сейчас': 'now',
+    'Проверьте email и пароль.': 'Check your email and password.',
+    'Этот email уже зарегистрирован. Войдите.': 'This email is already registered. Sign in.',
+    'Пароль должен содержать минимум 8 символов.': 'Password must contain at least 8 characters.',
+    'Не удалось выполнить действие. Попробуйте ещё раз.': 'Could not complete the action. Try again.',
+    'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.': 'I put together a calm look from items already in your wardrobe.',
+    'Собрала этот образ с учётом погоды и вашего гардероба.': 'I put together this look with the weather and your wardrobe in mind.',
+    'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.': 'Of course. I considered the weather and your wardrobe and put together a calm, elegant look.',
+    'Внешний AI временно недоступен, поэтому я собрала базовый вариант из вашего гардероба.': 'The external AI is temporarily unavailable, so I put together a basic look from your wardrobe.',
+    'Добавьте несколько вещей в гардероб, чтобы я могла собрать образ.': 'Add a few items to your wardrobe so I can put together a look.',
+    'Я собрала базовый образ из вещей вашего гардероба. Попробуйте ещё раз позже для более точной AI-рекомендации.': 'I put together a basic look from your wardrobe. Try again later for a more precise AI recommendation.',
+    'Добавьте вещи в гардероб — и я соберу для вас образ.': 'Add items to your wardrobe and I will put together a look for you.',
+    'Готово — образ собран из вещей вашего гардероба.': 'Done — the look is built from your wardrobe.',
+    'Удаление аккаунта · Metti': 'Account deletion · Metti',
+    '← Вернуться в Metti': '← Back to Metti',
+    'METTI · ДАННЫЕ': 'METTI · DATA',
+    'Войдите в аккаунт, чтобы безвозвратно удалить профиль и связанные с ним данные. Это действие нельзя отменить.': 'Sign in to permanently delete your profile and related data. This action cannot be undone.',
+    'Будут удалены:': 'Will be deleted:',
+    'профиль, вещи гардероба, фотографии, сохранённые образы и отметки «Надето».': 'your profile, wardrobe items, photos, saved looks, and “Worn” marks.',
+    'Если вы входили через Google, используйте эту кнопку — пароль Metti не нужен.': 'If you signed in with Google, use this button — no Metti password is needed.',
+    'Войти через Google и удалить аккаунт': 'Sign in with Google and delete account',
+    'Я понимаю, что удаление аккаунта и данных будет безвозвратным.': 'I understand that deleting the account and data is permanent.',
+    'Если вы не можете войти в аккаунт, обратитесь в ': 'If you cannot sign in, contact ',
+    'поддержку проекта': 'project support',
+    ' и укажите email аккаунта. Полная информация об обработке данных — в ': ' and include your account email. Full information about data processing is available in the ',
+    'Не удалось удалить аккаунт. Попробуйте ещё раз.': 'Could not delete the account. Try again.',
+    'Удаляю аккаунт…': 'Deleting the account…',
+    'Аккаунт и связанные данные удалены.': 'The account and related data have been deleted.',
+    'Вход через Google временно недоступен.': 'Google sign-in is temporarily unavailable.',
+    'Открываю Google…': 'Opening Google…',
+    'Проверяю вход через Google…': 'Checking Google sign-in…',
+    'Проверяю данные…': 'Checking your details…',
+    'Сервис временно недоступен.': 'The service is temporarily unavailable.',
+    'Политика конфиденциальности · Metti': 'Privacy policy · Metti',
+    'METTI · ДОКУМЕНТЫ': 'METTI · DOCUMENTS',
+    'Дата обновления: 31 августа 2026 года': 'Last updated: August 31, 2026',
+    'Metti — приложение для ведения личного гардероба и подбора образов. Мы собираем только данные, необходимые для работы аккаунта и функций стилиста.': 'Metti is an app for managing a personal wardrobe and putting together looks. We collect only the data needed for your account and stylist features.',
+    'Какие данные мы обрабатываем': 'What data we process',
+    'адрес электронной почты и имя, указанные при регистрации;': 'the email address and name provided during registration;',
+    'город, предпочтения стиля, размеры и другие данные профиля;': 'your city, style preferences, sizes, and other profile data;',
+    'фотографии вещей, названия, категории и заметки гардероба;': 'item photos, names, categories, and wardrobe notes;',
+    'сохранённые образы и отметки «Надето»;': 'saved looks and “Worn” marks;',
+    'тексты запросов стилисту и погодный контекст, необходимый для конкретной рекомендации.': 'your stylist requests and the weather context needed for a specific recommendation.',
+    'технические данные, необходимые для авторизации и восстановления сессии.': 'technical data needed for authentication and session recovery.',
+    'Зачем это нужно': 'Why we need it',
+    'Данные профиля и гардероба используются, чтобы показывать ваши вещи, сохранять образы и подбирать рекомендации. Запрос стилисту, погода и необходимые сведения о гардеробе могут передаваться защищённой серверной функции Metti. Для генерации ответа она может использовать Google Gemini или OpenAI; секретные ключи провайдеров не попадают в приложение.': 'Profile and wardrobe data are used to show your items, save looks, and provide recommendations. Your stylist request, weather, and the wardrobe details needed for a recommendation may be sent to a protected Metti server function. It may use Google Gemini or OpenAI to generate a response; provider secret keys never enter the app.',
+    'Фотографии': 'Photos',
+    'Перед загрузкой фотография вещи обрабатывается локально: фон заменяется на белый. Затем файл хранится в приватном Supabase Storage. Политики доступа разрешают чтение и изменение только владельцу аккаунта.': 'Before upload, an item photo is processed locally and its background is replaced with white. The file is then stored in private Supabase Storage. Access policies allow only the account owner to read and edit it.',
+    'Хранение и защита': 'Storage and security',
+    'Передача данных выполняется по HTTPS. Supabase Auth, база данных и приватное хранилище используются с ограничением доступа по аккаунту. Мы не продаём персональные данные и не используем их для рекламы.': 'Data is transferred over HTTPS. Supabase Auth, the database, and private storage use account-level access controls. We do not sell personal data or use it for advertising.',
+    'Удаление данных': 'Deleting data',
+    'Удалить аккаунт и связанные данные можно внутри приложения в разделе «': 'You can delete your account and related data in the app under “',
+    '» или через ': '” or via ',
+    'веб-форму удаления аккаунта': 'the web account deletion form',
+    'При удалении удаляются профиль, гардероб, сохранённые образы и фотографии.': 'Deleting your account removes your profile, wardrobe, saved looks, and photos.',
+    'Контакты': 'Contact',
+    'Вопросы по конфиденциальности можно задать через ': 'For privacy questions, contact us through ',
+    'раздел поддержки проекта': 'the project support section',
+    'Используя Metti, вы подтверждаете, что ознакомились с этой политикой. Если политика изменится, новая версия будет опубликована на этой странице.': 'By using Metti, you confirm that you have read this policy. If the policy changes, the new version will be published on this page.',
+    'English selected': 'English selected'
+  });
+  const englishToRussian = Object.freeze({
+    ...Object.fromEntries(Object.entries(russianToEnglish).map(([source, target]) => [target, source])),
+    items: 'вещей',
+    Saved: 'Сохранённые',
+    Worn: 'Надетые'
+  });
+  const languageIsEnglish = (language) => language === 'en';
+  const readLanguage = () => {
+    try { return window.localStorage.getItem(storageKey) === 'en' ? 'en' : 'ru'; } catch (_) { return 'ru'; }
+  };
+  const preserveWhitespace = (raw, replacement) => {
+    const leading = raw.match(/^\s*/)?.[0] || '';
+    const trailing = raw.match(/\s*$/)?.[0] || '';
+    return `${leading}${replacement}${trailing}`;
+  };
+  const translatePattern = (value, language) => {
+    if (languageIsEnglish(language)) {
+      let match = value.match(/^Вход через Google отменён: (.+)$/);
+      if (match) return `Google sign-in was canceled: ${match[1]}`;
+      match = value.match(/^Подходит для (.+), работы и встреч\.$/);
+      if (match) return `Works for ${match[1]}, work, and occasions.`;
+      match = value.match(/^(\d+) сохранённых образа(?: · (\d+) надето)?$/);
+      if (match) return `${match[1]} saved ${Number(match[1]) === 1 ? 'look' : 'looks'}${match[2] ? ` · ${match[2]} worn` : ''}`;
+      match = value.match(/^Надетых образов: (\d+)$/);
+      if (match) return `Worn looks: ${match[1]}`;
+      match = value.match(/^Сохранённых образов: (\d+)$/);
+      if (match) return `Saved looks: ${match[1]}`;
+      match = value.match(/^(\d+) вещей$/);
+      if (match) return `${match[1]} items`;
+      match = value.match(/^(\d+) вещи$/);
+      if (match) return `${match[1]} items`;
+      match = value.match(/^(\d+) вещь$/);
+      if (match) return `${match[1]} item`;
+    } else {
+      let match = value.match(/^Google sign-in was canceled: (.+)$/);
+      if (match) return `Вход через Google отменён: ${match[1]}`;
+      match = value.match(/^Works for (.+), work, and occasions\.$/);
+      if (match) return `Подходит для ${match[1]}, работы и встреч.`;
+      match = value.match(/^(\d+) saved (?:look|looks)(?: · (\d+) worn)?$/);
+      if (match) return `${match[1]} сохранённых образа${match[2] ? ` · ${match[2]} надето` : ''}`;
+      match = value.match(/^Worn looks: (\d+)$/);
+      if (match) return `Надетых образов: ${match[1]}`;
+      match = value.match(/^Saved looks: (\d+)$/);
+      if (match) return `Сохранённых образов: ${match[1]}`;
+      match = value.match(/^(\d+) items$/);
+      if (match) return `${match[1]} вещей`;
+      match = value.match(/^(\d+) item$/);
+      if (match) return `${match[1]} вещь`;
+    }
+    return undefined;
+  };
+  const translate = (value, language = readLanguage()) => {
+    if (value === null || value === undefined) return value;
+    const raw = String(value);
+    const trimmed = raw.trim();
+    if (!trimmed) return raw;
+    const map = languageIsEnglish(language) ? russianToEnglish : englishToRussian;
+    const replacement = map[trimmed] || translatePattern(trimmed, language);
+    return replacement ? preserveWhitespace(raw, replacement) : raw;
+  };
+  const shouldSkipTextNode = (node) => {
+    const parent = node.parentElement;
+    return !parent || parent.closest('script,style,[data-i18n-ignore]');
+  };
+  const apply = (language = readLanguage()) => {
+    document.documentElement.lang = language;
+    if (document.title) document.title = translate(document.title, language);
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+    textNodes.forEach((textNode) => {
+      if (!shouldSkipTextNode(textNode)) textNode.nodeValue = translate(textNode.nodeValue, language);
+    });
+    document.querySelectorAll('[aria-label],[placeholder],[title]').forEach((element) => {
+      ['aria-label', 'placeholder', 'title'].forEach((attribute) => {
+        if (element.hasAttribute(attribute)) element.setAttribute(attribute, translate(element.getAttribute(attribute), language));
+      });
+    });
+  };
+  const setLanguage = (language) => {
+    const next = languageIsEnglish(language) ? 'en' : 'ru';
+    try { window.localStorage.setItem(storageKey, next); } catch (_) { /* Storage can be unavailable in private file contexts. */ }
+    apply(next);
+    window.dispatchEvent(new CustomEvent('metti:language-changed', { detail: { language: next } }));
+    return next;
+  };
+
+  window.MettiI18n = Object.freeze({ getLanguage: readLanguage, setLanguage, t: translate, apply });
+  apply(readLanguage());
+})();

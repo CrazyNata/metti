@@ -10,9 +10,12 @@
   const weatherIcon = weatherCard?.querySelector('.weather-icon');
   const weatherUrl = 'https://api.open-meteo.com/v1/forecast?latitude=50.0755&longitude=14.4375&current=temperature_2m,weather_code&daily=temperature_2m_max&forecast_days=1&timezone=Europe%2FPrague';
   const demoMode = new URLSearchParams(window.location.search).get('demo') === '1';
+  const languageStorageKey = 'metti-language';
+  const readLanguage = () => { try { return window.localStorage.getItem(languageStorageKey) === 'en' ? 'en' : 'ru'; } catch (_) { return 'ru'; } };
   const state = {
     user: null,
     profile: null,
+    language: readLanguage(),
     wardrobe: [],
     outfits: [],
     activeItem: null,
@@ -47,18 +50,40 @@
   const uuid = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const byId = (id) => document.getElementById(id);
   const defaultLooksMarkup = document.querySelector('.looks-grid')?.innerHTML || '';
-  const setText = (selector, value) => { const node = document.querySelector(selector); if (node) node.textContent = value ?? ''; };
+  const translate = (value) => window.MettiI18n?.t?.(value, state.language) ?? value;
+  const applyLanguage = () => window.MettiI18n?.apply?.(state.language);
+  const categoryLabel = (category) => ({ outer: 'Верхняя одежда', top: 'Верх', bottom: 'Низ', shoes: 'Обувь', accessory: 'Аксессуары' }[category] || category);
+  const setText = (selector, value) => { const node = document.querySelector(selector); if (node) node.textContent = translate(value ?? ''); };
   const showToast = (message, type = '') => {
     if (!toast) return;
-    toast.textContent = message;
+    toast.textContent = translate(message);
     toast.className = `toast show${type ? ` ${type}` : ''}`;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.className = 'toast'; }, 2200);
   };
+  const languageLabel = (language = state.language) => language === 'en' ? 'English' : 'Русский';
+  const syncLanguageControls = () => {
+    window.MettiI18n?.apply?.(state.language);
+    document.documentElement.lang = state.language;
+    setText('#profile-language-value', languageLabel());
+    document.querySelectorAll('[data-language-option]').forEach((option) => {
+      const selected = option.dataset.languageOption === state.language;
+      option.classList.toggle('is-selected', selected);
+      option.setAttribute('aria-checked', String(selected));
+    });
+  };
+  const setLanguage = (language, { notify = true } = {}) => {
+    state.language = language === 'en' ? 'en' : 'ru';
+    if (window.MettiI18n?.setLanguage) window.MettiI18n.setLanguage(state.language);
+    else { try { window.localStorage.setItem(languageStorageKey, state.language); } catch (_) { /* Storage can be unavailable in private file contexts. */ } }
+    renderProfile(); renderLooks(); updateDate(); updateWeather();
+    syncLanguageControls();
+    if (notify) showToast(state.language === 'en' ? 'English selected' : 'Русский выбран', 'success');
+  };
   const setFormStatus = (id, message = '', type = '') => {
     const node = byId(id);
     if (!node) return;
-    node.textContent = message;
+    node.textContent = translate(message);
     node.className = `auth-status${type ? ` ${type}` : ''}`;
   };
   const setBusy = (form, busy, label = 'Сохранить') => {
@@ -66,7 +91,7 @@
     if (!button) return;
     if (busy) {
       button.dataset.label = button.innerHTML;
-      button.innerHTML = 'Секунду…';
+      button.innerHTML = translate('Секунду…');
       button.disabled = true;
     } else {
       button.innerHTML = button.dataset.label || label;
@@ -85,23 +110,24 @@
     if (appScroll) appScroll.scrollTo({ top: 0, behavior }); else phone?.scrollTo({ top: 0, behavior });
   };
   const weatherLabel = (code) => {
-    if (code === 0) return ['Ясно', '☀'];
-    if (code === 1 || code === 2) return ['Переменная облачность', '☁'];
-    if (code === 3) return ['Облачно', '☁'];
-    if (code === 45 || code === 48) return ['Туман', '☁'];
-    if (code >= 51 && code <= 67) return ['Дождь', '☂'];
-    if (code >= 71 && code <= 77) return ['Снег', '❄'];
-    if (code >= 80 && code <= 82) return ['Ливни', '☂'];
-    if (code >= 95) return ['Гроза', '⚡'];
-    return ['Облачно', '☁'];
+    if (code === 0) return [translate('Ясно'), '☀'];
+    if (code === 1 || code === 2) return [translate('Переменная облачность'), '☁'];
+    if (code === 3) return [translate('Облачно'), '☁'];
+    if (code === 45 || code === 48) return [translate('Туман'), '☁'];
+    if (code >= 51 && code <= 67) return [translate('Дождь'), '☂'];
+    if (code >= 71 && code <= 77) return [translate('Снег'), '❄'];
+    if (code >= 80 && code <= 82) return [translate('Ливни'), '☂'];
+    if (code >= 95) return [translate('Гроза'), '⚡'];
+    return [translate('Облачно'), '☁'];
   };
   const updateDate = () => {
     if (!dateNode) return;
     const now = new Date();
     const options = { timeZone: 'Europe/Prague' };
-    const weekday = new Intl.DateTimeFormat('ru-RU', { ...options, weekday: 'long' }).format(now).toUpperCase();
-    const day = new Intl.DateTimeFormat('ru-RU', { ...options, day: 'numeric' }).format(now);
-    const month = new Intl.DateTimeFormat('ru-RU', { ...options, month: 'short' }).format(now).replace(/\./g, '').toUpperCase();
+    const locale = state.language === 'en' ? 'en-US' : 'ru-RU';
+    const weekday = new Intl.DateTimeFormat(locale, { ...options, weekday: 'long' }).format(now).toUpperCase();
+    const day = new Intl.DateTimeFormat(locale, { ...options, day: 'numeric' }).format(now);
+    const month = new Intl.DateTimeFormat(locale, { ...options, month: 'short' }).format(now).replace(/\./g, '').toUpperCase();
     dateNode.textContent = `${weekday} · ${day} ${month}`;
   };
   const updateWeather = async () => {
@@ -119,7 +145,7 @@
       const [description, icon] = weatherLabel(code);
       state.weather = { temperature_c: temperature, weather_code: code, city: state.profile?.city || 'Prague' };
       if (Number.isFinite(temperature) && weatherStrong) weatherStrong.textContent = `${state.weather.city} · ${temperature}°C`;
-      if (weatherSmall) weatherSmall.textContent = Number.isFinite(maximum) ? `${description} · до ${maximum}°C` : `${description} · сейчас`;
+      if (weatherSmall) weatherSmall.textContent = Number.isFinite(maximum) ? `${description} · ${translate('до')} ${maximum}°C` : `${description} · ${translate('сейчас')}`;
       if (weatherIcon) weatherIcon.textContent = icon;
     } catch (_) {
       // Keep the bundled text when the prototype is offline or the request times out.
@@ -132,13 +158,16 @@
     const name = profileName();
     const city = state.profile?.city || 'Prague';
     const tags = styleTags();
-    const styleLabel = tags.slice(0, 2).join(' · ');
+    const displayStyleLabel = tags.slice(0, 2).map((tag) => translate(tag)).join(' · ');
     setText('.screen[data-screen-id="profile"] .profile-heading h1', name);
     setText('.screen[data-screen-id="profile"] .profile-card-copy strong', name);
-    setText('.screen[data-screen-id="profile"] .profile-card-copy small', styleLabel);
-    setText('.screen[data-screen-id="profile"] .profile-style-card strong', styleLabel);
-    setText('.screen[data-screen-id="profile"] .profile-style-card small', `Подходит для ${city}, работы и встреч.`);
-    document.querySelectorAll('.profile-style-chips span').forEach((chip, index) => { chip.textContent = tags[index] || ''; chip.hidden = !tags[index]; });
+    const greeting = document.querySelector('.screen[data-screen-id="home"] h1');
+    if (greeting) { greeting.innerHTML = ''; const greetingText = document.createElement('span'); greetingText.textContent = translate('Доброе утро,'); const lineBreak = document.createElement('br'); const greetingName = document.createElement('span'); greetingName.textContent = name; greeting.append(greetingText, lineBreak, greetingName); }
+    setText('.screen[data-screen-id="profile"] .profile-card-copy small', displayStyleLabel);
+    setText('.screen[data-screen-id="profile"] .profile-style-card strong', displayStyleLabel);
+    setText('.screen[data-screen-id="profile"] .profile-style-card small', state.language === 'en' ? `Works for ${city}, work, and occasions.` : `Подходит для ${city}, работы и встреч.`);
+    setText('#profile-language-value', languageLabel());
+    document.querySelectorAll('.profile-style-chips span').forEach((chip, index) => { chip.textContent = translate(tags[index] || ''); chip.hidden = !tags[index]; });
     document.querySelectorAll('.profile-hero-avatar,.profile-button,.large-avatar').forEach((node) => { node.textContent = name.slice(0, 1).toUpperCase(); });
     const count = state.wardrobe.length;
     setText('#wardrobe-count', `${count} ${count === 1 ? 'вещь' : count >= 2 && count <= 4 ? 'вещи' : 'вещей'}`);
@@ -173,7 +202,7 @@
       const art = document.createElement('div');
       art.className = `item-art ${itemClass(item)}`;
       const label = document.createElement('span');
-      label.textContent = item.name || 'Вещь';
+      label.textContent = translate(item.name || 'Вещь');
       art.append(label); button.append(art); grid.append(button);
       if (item.image_path) addImageBackground(art, item.image_path);
     });
@@ -186,17 +215,17 @@
     if (art) {
       art.className = `item-detail-art placeholder ${itemClass(item)}`;
       art.innerHTML = '';
-      const label = document.createElement('span'); label.textContent = item.name || 'Вещь'; art.append(label);
+      const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); art.append(label);
       if (item.image_path) addImageBackground(art, item.image_path);
     }
     setText('.screen[data-screen-id="item"] .detail-title', item.name || 'Вещь');
     const chips = document.querySelector('.detail-chips');
     if (chips) {
       chips.innerHTML = '';
-      [item.category, item.color, item.size, item.season].filter(Boolean).slice(0, 4).forEach((value) => { const node = document.createElement('span'); node.textContent = value; chips.append(node); });
+      [categoryLabel(item.category), item.color, item.size, item.season].filter(Boolean).slice(0, 4).forEach((value) => { const node = document.createElement('span'); node.textContent = translate(value); chips.append(node); });
     }
     const addButton = document.querySelector('[data-action="add-item"]');
-    if (addButton) addButton.textContent = item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб';
+    if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
     await imageUrl(item.image_path);
   };
   const prepareWardrobeImage = async (file) => {
@@ -300,9 +329,9 @@
       const art = document.createElement('div');
       art.className = `look-art ${artClasses[index % artClasses.length]}`;
       const badge = document.createElement('span');
-      badge.textContent = outfit.is_worn ? 'Надето' : 'Сохранено';
+      badge.textContent = translate(outfit.is_worn ? 'Надето' : 'Сохранено');
       const title = document.createElement('strong');
-      title.textContent = outfit.title || 'Образ на сегодня';
+      title.textContent = translate(outfit.title || 'Образ на сегодня');
       art.append(badge); button.append(art, title); grid.append(button);
     });
   };
@@ -315,24 +344,25 @@
     if (tab === 'recommended') {
       grid.innerHTML = defaultLooksMarkup;
       grid.hidden = false;
-      if (!state.outfits.length) { note.classList.remove('show'); return; }
+      if (!state.outfits.length) { note.classList.remove('show'); applyLanguage(); return; }
       const worn = state.outfits.filter((outfit) => outfit.is_worn).length;
-      note.textContent = `${state.outfits.length} сохранённых образа${worn ? ` · ${worn} надето` : ''}`;
+      note.textContent = translate(`${state.outfits.length} сохранённых образа${worn ? ` · ${worn} надето` : ''}`);
       note.classList.add('show');
-      return;
+      applyLanguage(); return;
     }
     const matches = tab === 'worn' ? state.outfits.filter((outfit) => outfit.is_worn) : state.outfits;
     if (!matches.length) {
       grid.innerHTML = '';
       grid.hidden = true;
-      note.textContent = tab === 'worn' ? 'Надетых образов пока нет.' : 'Сохранённых образов пока нет.';
+      note.textContent = translate(tab === 'worn' ? 'Надетых образов пока нет.' : 'Сохранённых образов пока нет.');
       note.classList.add('show');
-      return;
+      applyLanguage(); return;
     }
     renderOutfitCards(matches);
     grid.hidden = false;
-    note.textContent = tab === 'worn' ? `Надетых образов: ${matches.length}` : `Сохранённых образов: ${matches.length}`;
+    note.textContent = translate(tab === 'worn' ? `Надетых образов: ${matches.length}` : `Сохранённых образов: ${matches.length}`);
     note.classList.add('show');
+    applyLanguage();
   };
   const loadData = async () => {
     if (!state.user || !supabase?.data) return;
@@ -348,13 +378,13 @@
     }
     renderProfile(); await renderWardrobe(); renderLooks(); updateWeather();
   };
-  const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; renderProfile(); renderWardrobe(); renderLooks(); };
+  const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; renderProfile(); renderWardrobe(); renderLooks(); };
 
   const openWardrobeSheet = (item = null) => {
     const backdrop = byId('wardrobe-sheet'); const form = byId('wardrobe-form'); if (!backdrop || !form) return;
     const persistedItem = item && !String(item.id).startsWith('demo-');
     form.dataset.itemId = persistedItem ? item.id : '';
-    byId('wardrobe-form-title').textContent = persistedItem ? 'Изменить вещь' : 'Новая вещь';
+    byId('wardrobe-form-title').textContent = translate(persistedItem ? 'Изменить вещь' : 'Новая вещь');
     ['name','color','size','season','brand','notes'].forEach((name) => { if (form.elements[name]) form.elements[name].value = item?.[name] || ''; });
     if (form.elements.category) form.elements.category.value = item?.category || 'outer';
     if (form.elements.image) form.elements.image.value = '';
@@ -392,7 +422,9 @@
   };
   const deleteActiveItem = async () => {
     const item = state.activeItem; if (!item) return;
-    if (!window.confirm(`Удалить «${item.name || 'эту вещь'}»?`)) return;
+    const itemName = translate(item.name || 'эту вещь');
+    const deletePrompt = state.language === 'en' ? `Delete “${itemName}”?` : `Удалить «${itemName}»?`;
+    if (!window.confirm(deletePrompt)) return;
     try {
       if (state.user && supabase?.data && !String(item.id).startsWith('demo-')) {
         await supabase.data.deleteWardrobeItem(item.id);
@@ -410,6 +442,12 @@
     setFormStatus('profile-form-status'); byId('profile-sheet').hidden = false; document.body.classList.add('modal-open'); setTimeout(() => form.elements.display_name?.focus(), 0);
   };
   const closeProfileSheet = () => { const node = byId('profile-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
+  const openLanguageSheet = () => {
+    const node = byId('language-sheet'); if (!node) return;
+    syncLanguageControls(); node.hidden = false; document.body.classList.add('modal-open');
+    setTimeout(() => node.querySelector(`[data-language-option="${state.language}"]`)?.focus(), 0);
+  };
+  const closeLanguageSheet = () => { const node = byId('language-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
   const openDeleteAccountSheet = () => {
     const node = byId('delete-account-sheet'); if (!node) return;
     setFormStatus('delete-account-status'); node.hidden = false; document.body.classList.add('modal-open');
@@ -418,13 +456,13 @@
   const closeDeleteAccountSheet = () => { const node = byId('delete-account-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
   const confirmDeleteAccount = async (button) => {
     if (!state.user || !supabase?.data?.deleteAccount) return setFormStatus('delete-account-status', 'Войдите, чтобы удалить аккаунт.', 'error');
-    button.disabled = true; button.textContent = 'Удаляем…'; setFormStatus('delete-account-status', 'Удаляю профиль и данные…');
+    button.disabled = true; button.textContent = translate('Удаляем…'); setFormStatus('delete-account-status', 'Удаляю профиль и данные…');
     try {
       await supabase.data.deleteAccount();
       closeDeleteAccountSheet(); state.user = null; state.profile = null; state.wardrobe = []; state.outfits = [];
       await window.MettiAuth?.signOut(); showToast('Аккаунт удалён', 'success');
     } catch (error) {
-      button.disabled = false; button.textContent = 'Удалить аккаунт';
+      button.disabled = false; button.textContent = translate('Удалить аккаунт');
       setFormStatus('delete-account-status', error?.message || 'Не удалось удалить аккаунт.', 'error');
     }
   };
@@ -465,7 +503,7 @@
     } catch (error) { setFormStatus('style-form-status', error?.message || 'Не удалось сохранить настройки.', 'error'); } finally { setBusy(form, false); }
   };
 
-  const addMessage = (text, role) => { const log = byId('chat-log'); if (!log) return null; const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = text; log.append(node); log.scrollTop = log.scrollHeight; return node; };
+  const addMessage = (text, role) => { const log = byId('chat-log'); if (!log) return null; const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = translate(text); log.append(node); log.scrollTop = log.scrollHeight; return node; };
   const setThinking = (visible) => { const node = document.querySelector('.chat-log .thinking'); if (node) node.hidden = !visible; };
   const fallbackOutfit = (prompt) => ({ title: prompt || 'Образ на сегодня', note: 'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.', item_ids: state.wardrobe.slice(0, 4).map((item) => item.id), temperature_c: state.weather.temperature_c, weather_code: state.weather.weather_code, message: 'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.' });
   const renderResult = async (outfit = state.currentOutfit) => {
@@ -474,11 +512,11 @@
     const selected = (outfit.item_ids || []).map((id) => state.wardrobe.find((item) => item.id === id)).filter(Boolean);
     const hero = document.querySelector('.result-hero');
     if (hero) {
-      const item = selected[0] || state.wardrobe[0]; hero.className = `result-hero placeholder tall ${item ? itemClass(item) : 'photo-outfit'}`; hero.innerHTML = `<span>${item?.name || 'структурный жакет'}</span>`; if (item?.image_path) addImageBackground(hero, item.image_path);
+      const item = selected[0] || state.wardrobe[0]; hero.className = `result-hero placeholder tall ${item ? itemClass(item) : 'photo-outfit'}`; hero.innerHTML = `<span>${translate(item?.name || 'структурный жакет')}</span>`; if (item?.image_path) addImageBackground(hero, item.image_path);
     }
     const grid = document.querySelector('.result-grid'); if (!grid) return;
     grid.innerHTML = '';
-    selected.slice(1, 5).forEach((item) => { const node = document.createElement('div'); node.className = `placeholder ${itemClass(item)}`; const label = document.createElement('span'); label.textContent = item.name; node.append(label); grid.append(node); if (item.image_path) addImageBackground(node, item.image_path); });
+    selected.slice(1, 5).forEach((item) => { const node = document.createElement('div'); node.className = `placeholder ${itemClass(item)}`; const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); node.append(label); grid.append(node); if (item.image_path) addImageBackground(node, item.image_path); });
   };
   const saveCurrentOutfit = async (worn = false) => {
     if (!state.currentOutfit) state.currentOutfit = fallbackOutfit('Образ на сегодня');
@@ -491,13 +529,14 @@
   };
   const ask = async (prompt) => {
     const clean = String(prompt || '').trim(); if (!clean) return;
-    go('chat'); addMessage(clean, 'user'); setThinking(true); const requestId = ++state.requestNumber; showToast('Metti собирает образ…');
+    const promptForStylist = state.language === 'en' ? translate(clean) : clean;
+    go('chat'); addMessage(promptForStylist, 'user'); setThinking(true); const requestId = ++state.requestNumber; showToast('Metti собирает образ…');
     try {
       let result;
-      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: clean, weather: state.weather, wardrobe: state.wardrobe.map(({ id, name, category, color, size, season, brand, notes }) => ({ id, name, category, color, size, season, brand, notes })), profile: state.profile });
-      else result = fallbackOutfit(clean);
+      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, wardrobe: state.wardrobe.map(({ id, name, category, color, size, season, brand, notes }) => ({ id, name, category, color, size, season, brand, notes })), profile: state.profile });
+      else result = fallbackOutfit(promptForStylist);
       if (requestId !== state.requestNumber) return;
-      state.currentOutfit = { ...result, prompt: clean }; setThinking(false); addMessage(result.message || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
+      state.currentOutfit = { ...result, prompt: promptForStylist }; setThinking(false); addMessage(result.message || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
     } catch (error) {
       setThinking(false); addMessage('Не получилось связаться со стилистом. Проверьте подключение и попробуйте ещё раз.', 'assistant'); showToast(error?.message || 'AI-стилист временно недоступен', 'error');
     }
@@ -505,13 +544,14 @@
 
   document.addEventListener('click', (event) => {
     const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
+    const languageOption = event.target.closest('[data-language-option]'); if (languageOption) { setLanguage(languageOption.dataset.languageOption); closeLanguageSheet(); return; }
     const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
     const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } go(screenButton.dataset.screen); return; }
     const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item); go('item'); } return; }
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
     const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); const filter = tab.dataset.filter; document.querySelectorAll('.wardrobe-item').forEach((item) => { item.hidden = filter !== 'all' && item.dataset.category !== filter; }); return; }
     const action = event.target.closest('[data-action]')?.dataset.action;
-    if (action === 'wear') { event.target.textContent = 'Образ надет ✓'; saveCurrentOutfit(true); }
+    if (action === 'wear') { event.target.textContent = translate('Образ надет ✓'); saveCurrentOutfit(true); }
     if (action === 'other') ask('Другой вариант образа');
     if (action === 'save') saveCurrentOutfit(false);
     if (action === 'edit') byId('edit-sheet').hidden = false;
@@ -529,6 +569,8 @@
     if (action === 'close-wardrobe-sheet') closeWardrobeSheet();
     if (action === 'profile-edit') openProfileSheet();
     if (action === 'close-profile-sheet') closeProfileSheet();
+    if (action === 'open-language-sheet') openLanguageSheet();
+    if (action === 'close-language-sheet') closeLanguageSheet();
     if (action === 'open-delete-account') openDeleteAccountSheet();
     if (action === 'close-delete-account') closeDeleteAccountSheet();
     if (action === 'confirm-delete-account') confirmDeleteAccount(event.target.closest('[data-action="confirm-delete-account"]'));
@@ -547,7 +589,7 @@
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { node.hidden = true; document.body.classList.remove('modal-open'); } }));
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
   window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; });
-  updateDate(); updateWeather();
+  syncLanguageControls(); updateDate(); updateWeather();
   if (demoMode) seedDemo();
   else if (supabase?.auth) {
     supabase.auth.restoreSession().then(async (session) => { if (session) { state.user = session.user || supabase.currentUser?.(); if (!state.user) state.user = await supabase.auth.getUser().catch(() => null); await loadData(); } else if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); }).catch(() => { if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); });

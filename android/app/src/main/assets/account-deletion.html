@@ -32,13 +32,15 @@
     </main>
     <script src="./supabase-config.js"></script>
     <script src="./supabase-client.js"></script>
+    <script src="./i18n.js"></script>
     <script>
       (() => {
         const form = document.getElementById('delete-account-form');
         const status = document.getElementById('delete-account-status');
         const googleAction = document.getElementById('google-delete-action');
         const googleButton = document.getElementById('google-delete-button');
-        const setStatus = (message, type = '') => { status.textContent = message; status.className = `legal-status${type ? ` ${type}` : ''}`; };
+        const translate = (value) => window.MettiI18n?.t?.(value) ?? value;
+        const setStatus = (message, type = '') => { status.textContent = translate(message); status.className = `legal-status${type ? ` ${type}` : ''}`; };
         const friendly = (error) => /invalid login credentials/i.test(String(error?.message || '')) ? 'Проверьте email и пароль.' : String(error?.message || 'Не удалось удалить аккаунт. Попробуйте ещё раз.');
         const finishDelete = async (client) => {
           setStatus('Удаляю аккаунт…');
