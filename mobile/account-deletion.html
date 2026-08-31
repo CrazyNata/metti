@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7e9e8" />
+    <title>Удаление аккаунта · Metti</title>
+    <link rel="stylesheet" href="./legal.css" />
+  </head>
+  <body>
+    <main class="legal-shell">
+      <a class="legal-back" href="./index.html">← Вернуться в Metti</a>
+      <p class="legal-eyebrow">METTI · ДАННЫЕ</p>
+      <h1>Удаление аккаунта</h1>
+      <p>Войдите в аккаунт, чтобы безвозвратно удалить профиль и связанные с ним данные. Это действие нельзя отменить.</p>
+      <div class="legal-callout"><strong>Будут удалены:</strong> профиль, вещи гардероба, фотографии, сохранённые образы и отметки «Надето».</div>
+
+      <div class="legal-provider" id="google-delete-action" hidden>
+        <p>Если вы входили через Google, используйте эту кнопку — пароль Metti не нужен.</p>
+        <button class="legal-google" id="google-delete-button" type="button">Войти через Google и удалить аккаунт</button>
+      </div>
+
+      <form class="legal-form" id="delete-account-form">
+        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+        <label>Пароль<input name="password" type="password" autocomplete="current-password" required /></label>
+        <label class="legal-confirm"><input name="confirm" type="checkbox" required /><span>Я понимаю, что удаление аккаунта и данных будет безвозвратным.</span></label>
+        <button class="legal-danger" type="submit">Удалить аккаунт</button>
+      </form>
+      <p class="legal-status" id="delete-account-status" role="status" aria-live="polite"></p>
+
+      <p class="legal-footer">Если вы не можете войти в аккаунт, обратитесь в <a href="https://github.com/CrazyNata/metti/issues">поддержку проекта</a> и укажите email аккаунта. Полная информация об обработке данных — в <a href="./privacy.html">политике конфиденциальности</a>.</p>
+    </main>
+    <script src="./supabase-config.js"></script>
+    <script src="./supabase-client.js"></script>
+    <script>
+      (() => {
+        const form = document.getElementById('delete-account-form');
+        const status = document.getElementById('delete-account-status');
+        const googleAction = document.getElementById('google-delete-action');
+        const googleButton = document.getElementById('google-delete-button');
+        const setStatus = (message, type = '') => { status.textContent = message; status.className = `legal-status${type ? ` ${type}` : ''}`; };
+        const friendly = (error) => /invalid login credentials/i.test(String(error?.message || '')) ? 'Проверьте email и пароль.' : String(error?.message || 'Не удалось удалить аккаунт. Попробуйте ещё раз.');
+        const finishDelete = async (client) => {
+          setStatus('Удаляю аккаунт…');
+          await client.data.deleteAccount();
+          try { await client.auth.signOut(); } catch (_) { /* account is already gone */ }
+          form.hidden = true;
+          googleAction.hidden = true;
+          setStatus('Аккаунт и связанные данные удалены.', 'success');
+        };
+        const startGoogleDelete = async () => {
+          try {
+            if (!window.MettiSupabase?.auth?.signInWithGoogle) throw new Error('Вход через Google временно недоступен.');
+            googleButton.disabled = true;
+            setStatus('Открываю Google…');
+            await window.MettiSupabase.auth.signInWithGoogle(window.location.href);
+          } catch (error) {
+            setStatus(friendly(error), 'error');
+            googleButton.disabled = false;
+          }
+        };
+        googleButton?.addEventListener('click', startGoogleDelete);
+        if (/^https?:$/.test(window.location.protocol)) googleAction.hidden = false;
+        const completeGoogleDelete = async () => {
+          const params = new URLSearchParams(window.location.search);
+          const code = params.get('code');
+          const oauthError = params.get('error_description') || params.get('error');
+          if (oauthError) setStatus(`Вход через Google отменён: ${oauthError}`, 'error');
+          if (!code || !window.MettiSupabase?.auth?.exchangeCodeForSession) return;
+          try {
+            setStatus('Проверяю вход через Google…');
+            await window.MettiSupabase.auth.exchangeCodeForSession(code, false);
+            await finishDelete(window.MettiSupabase);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (error) {
+            setStatus(friendly(error), 'error');
+          }
+        };
+        completeGoogleDelete();
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!form.reportValidity()) return;
+          const submit = form.querySelector('button');
+          submit.disabled = true;
+          setStatus('Проверяю данные…');
+          try {
+            const client = window.MettiSupabase;
+            if (!client?.auth || !client?.data?.deleteAccount) throw new Error('Сервис временно недоступен.');
+            await client.auth.signIn(form.elements.email.value.trim(), form.elements.password.value, false);
+            await finishDelete(client);
+          } catch (error) {
+            setStatus(friendly(error), 'error');
+            submit.disabled = false;
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

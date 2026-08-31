@@ -25,18 +25,29 @@ Metti подключён к отдельному Supabase-проекту. Кли
 
 Удаление аккаунта выполняет отдельная защищённая Edge Function `metti-delete-account`: она удаляет приватные фотографии, затем Auth-пользователя, а связанные профиль, гардероб и образы удаляются каскадно. Секретный service-role ключ используется только внутри функции.
 
-## Android APK
+## Android release
 
-Готовая debug-сборка находится здесь:
+Для установки на подключённый телефон используется debug-сборка:
 
 `android/app/build/outputs/apk/debug/app-debug.apk`
 
-Проверочная release-сборка находится здесь:
+Подписанный production App Bundle для Google Play собирается здесь:
 
-`android/app/build/outputs/apk/release/app-release-unsigned.apk`
+`android/app/build/outputs/bundle/release/app-release.aab`
 
-Она собрана без production-keystore и предназначена для передачи разработчику на подпись. Для установки на телефон используйте debug APK выше.
+Android-проект целится в API 36, а `versionCode` первой публикации равен `1`. Ключ загрузки хранится вне Git в `.tools/metti-upload-key.jks`; локальные параметры подписи находятся в игнорируемом `android/keystore.properties`. Не удаляйте и не публикуйте их: тот же upload-key нужен для будущих обновлений.
 
-Это самостоятельный WebView-прототип Metti. APK проверен установкой на подключённый Android-телефон; главная страница помещается в один экран, а нижняя навигация остаётся закреплённой.
+Подробные команды сборки и шаги Play Console находятся в `docs/android-release.md`. Debug APK проверен установкой на подключённый Android-телефон; системные отступы для target API 36 обработаны в `MainActivity`.
 
 Для Google-входа в Android используется redirect URI `metti://auth-callback`; он уже добавлен в Supabase Auth → URL Configuration → Redirect URLs рядом с web-адресом прототипа.
+
+## Legal pages and Play Console
+
+Страницы `mobile/privacy.html` и `mobile/account-deletion.html` опубликованы через workflow GitHub Pages. После включения GitHub Pages с источником **GitHub Actions** в настройках репозитория будут доступны:
+
+- `https://crazynata.github.io/metti/privacy.html`;
+- `https://crazynata.github.io/metti/account-deletion.html`.
+
+После включения Pages добавьте адрес `https://crazynata.github.io/metti/account-deletion.html` в Supabase Auth → URL Configuration → Redirect URLs, чтобы Google-пользователь мог подтвердить удаление через веб-форму. Внутри приложения удаление доступно из профиля независимо от способа входа.
+
+Перед отправкой релиза в Play Console остаётся заполнить карточку приложения, Data Safety, контентные анкеты, возрастной рейтинг, контакты поддержки и загрузить скриншоты/иконку. Для Google-входа после первой загрузки также добавьте SHA-1/SHA-256 сертификата Play App Signing в Google Cloud OAuth client.

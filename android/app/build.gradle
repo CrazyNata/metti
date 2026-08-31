@@ -2,23 +2,38 @@ plugins {
     id 'com.android.application'
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace 'com.metti.app'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.metti.app'
         minSdk 23
-        // Keep the classic system-bar behavior for this WebView prototype.
-        // Target 35 enables Android 15 edge-to-edge enforcement and makes
-        // the native light header transparent over the window background.
-        targetSdk 34
+        targetSdk 36
         versionCode 1
-        versionName '0.1.0'
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProperties['storeFile']) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (keystoreProperties['storeFile']) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

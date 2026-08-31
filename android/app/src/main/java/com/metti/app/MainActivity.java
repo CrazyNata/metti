@@ -4,8 +4,10 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowInsets;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -16,6 +18,8 @@ import java.util.Locale;
 public final class MainActivity extends Activity {
     private static final int METTI_BG = Color.rgb(251, 239, 238);
     private WebView webView;
+    private int nativeTopInset;
+    private int nativeBottomInset;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,9 +32,33 @@ public final class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(METTI_BG);
-        // With targetSdk 34 the WebView is laid out below the native status
-        // bar, so no extra CSS inset is needed inside the prototype.
-        String nativeInsetsCss = String.format(Locale.US, ".app-scroll{padding-top:0!important}");
+        // Android 15+ enforces edge-to-edge for apps targeting recent API
+        // levels. Keep the WebView content clear of the system bars while
+        // retaining the full-screen layout on older Android versions.
+        webView.setOnApplyWindowInsetsListener((view, insets) -> {
+            int top = 0;
+            int bottom = 0;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.graphics.Insets bars = insets.getInsets(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                android.graphics.Insets stableBars = insets.getInsetsIgnoringVisibility(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                if (bars.top == 0) bars = stableBars;
+                if (bars.bottom == 0) bars = android.graphics.Insets.of(bars.left, bars.top, bars.right, stableBars.bottom);
+                top = bars.top;
+                bottom = bars.bottom;
+            } else {
+                top = insets.getSystemWindowInsetTop();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            nativeTopInset = top;
+            nativeBottomInset = bottom;
+            view.setPadding(0, 0, 0, 0);
+            view.post(this::applyNativeInsetsToWeb);
+            return insets;
+        });
+        String nativeInsetsCss = String.format(Locale.US,
+                ".app-scroll{padding-top:var(--metti-native-top-inset,0px)!important;padding-bottom:calc(112px + var(--metti-native-bottom-inset,0px))!important}.bottom-nav{bottom:calc(var(--metti-native-bottom-inset,0px) - 14px)!important}");
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -58,6 +86,8 @@ public final class MainActivity extends Activity {
                                 + "var s=document.createElement('style');s.id='native-insets';s.textContent='"
                                 + nativeInsetsCss
                                 + "';document.head.appendChild(s);"
+                                + "document.documentElement.style.setProperty('--metti-native-top-inset','" + nativeTopInset + "px');"
+                                + "document.documentElement.style.setProperty('--metti-native-bottom-inset','" + nativeBottomInset + "px');"
                                 + "})();",
                         null
                 );
@@ -79,6 +109,16 @@ public final class MainActivity extends Activity {
 
         setContentView(webView);
         if (!handleAuthRedirect(getIntent().getData())) webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    private void applyNativeInsetsToWeb() {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+                "(function(){var r=document.documentElement;"
+                        + "r.style.setProperty('--metti-native-top-inset','" + nativeTopInset + "px');"
+                        + "r.style.setProperty('--metti-native-bottom-inset','" + nativeBottomInset + "px');})();",
+                null
+        );
     }
 
     @Override
