@@ -41,6 +41,12 @@ const outputText = (payload: any) => {
     .join('\n');
 };
 
+const geminiOutputText = (payload: any) => (payload?.candidates ?? [])
+  .flatMap((candidate: any) => candidate?.content?.parts ?? [])
+  .map((part: any) => part?.text ?? '')
+  .filter(Boolean)
+  .join('\n');
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -69,9 +75,9 @@ Deno.serve(async (req) => {
     const profile = profileRows?.[0] ?? { display_name: user?.user_metadata?.full_name ?? '', city: 'Prague', preferences: {}, style_tags: [], style_profile: {} };
     const weather = body?.weather && typeof body.weather === 'object' ? body.weather : { city: profile.city ?? 'Prague', temperature_c: 18, weather_code: 3 };
 
-    const apiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!apiKey) return json({ error: 'AI provider is not configured yet' }, 503);
-    const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    const openAiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!geminiKey && !openAiKey) return json({ error: 'AI provider is not configured yet' }, 503);
     const instructions = [
       'Ты — персональный AI-стилист приложения metti.',
       'Подбирай образ только из переданных вещей пользователя. Не придумывай вещи и не добавляй предметы, которых нет в списке.',
@@ -79,14 +85,34 @@ Deno.serve(async (req) => {
       'Формат: {"title": string, "note": string, "message": string, "item_ids": string[]}. item_ids должен содержать от 1 до 6 id из гардероба.'
     ].join('\n');
     const context = JSON.stringify({ prompt, weather, profile, wardrobe });
-    const aiResponse = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, instructions, input: context, temperature: 0.7, max_output_tokens: 500 })
-    });
+    let provider = 'openai';
+    let aiResponse: Response;
+    if (geminiKey) {
+      provider = 'gemini';
+      const model = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash-lite';
+      aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'x-goog-api-key': geminiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: instructions }] },
+          contents: [{ role: 'user', parts: [{ text: context }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+        })
+      });
+    } else {
+      const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
+      aiResponse = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, instructions, input: context, temperature: 0.7, max_output_tokens: 500 })
+      });
+    }
     const aiPayload = await aiResponse.json().catch(() => ({}));
-    if (!aiResponse.ok) return json({ error: 'AI provider request failed' }, 502);
-    const parsed = cleanJson(outputText(aiPayload)) ?? {};
+    if (!aiResponse.ok) {
+      console.error(`${provider} request failed`, aiResponse.status, aiPayload?.error?.message || aiPayload?.error?.status || 'unknown error');
+      return json({ error: 'AI provider request failed' }, 502);
+    }
+    const parsed = cleanJson(provider === 'gemini' ? geminiOutputText(aiPayload) : outputText(aiPayload)) ?? {};
     const validIds = new Set((wardrobe ?? []).map((item: any) => String(item.id)));
     const itemIds = Array.isArray(parsed.item_ids) ? parsed.item_ids.map((id: unknown) => String(id)).filter((id: string) => validIds.has(id)).slice(0, 6) : [];
     const fallbackIds = (wardrobe ?? []).slice(0, 4).map((item: any) => String(item.id));
