@@ -38,6 +38,10 @@
 .screen[data-screen-id="chat"] .chat-camera{font-size:20px}
 .screen[data-screen-id="chat"] .chat-compose-field{padding-top:11px;padding-bottom:11px}
 
+/* Home actions use a softer editorial weight, matching the reference screen. */
+.screen[data-screen-id="home"] .primary{font-weight:500}
+.screen[data-screen-id="home"] .button-row .outline{font-weight:500}
+
 /* Give the chat its own viewport so messages never slide beneath the composer. */
 .screen[data-screen-id="chat"].active{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0;padding-bottom:0}
 .screen[data-screen-id="chat"] .chat-log{flex:1 1 auto;min-height:0;overflow-y:auto;padding-bottom:22px}
