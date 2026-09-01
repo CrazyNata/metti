@@ -140,3 +140,26 @@ body.modal-open{overflow:hidden}
 .metti-select-option.is-selected{border-color:var(--rose);background:var(--soft);color:var(--rose);font-weight:600}
 .metti-select-check{width:20px;flex:none;color:var(--rose);font-size:18px;font-weight:700;line-height:1;text-align:right}
 @media(max-width:500px){.metti-select-data-sheet{max-height:82vh;padding-right:18px;padding-left:18px;border-radius:23px 23px 0 0}.metti-select-options{max-height:calc(82vh - 130px)}.metti-select-option{min-height:50px;font-size:14px}}
+
+/* Keep long pickers inside the visible sheet and let them scroll on Android. */
+.metti-select-backdrop{overflow:hidden}
+.metti-select-backdrop{bottom:var(--metti-native-bottom-inset,0px)}
+.subcategory-sheet-backdrop{bottom:var(--metti-native-bottom-inset,0px)}
+.sheet-backdrop{bottom:var(--metti-native-bottom-inset,0px);overflow:hidden}
+.data-sheet{box-sizing:border-box;max-height:min(calc(92vh - var(--metti-native-bottom-inset,0px)),760px);-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.data-sheet.data-form{display:flex;min-height:0;flex-direction:column}
+.data-form .form-actions{flex:none}
+.subcategory-data-sheet{display:flex;min-height:0;flex-direction:column;box-sizing:border-box;padding-bottom:calc(58px + max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px)))}
+.subcategory-sheet-options{min-height:0;flex:1 1 auto;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.subcategory-sheet-option{touch-action:pan-y}
+.metti-select-data-sheet{display:flex;min-height:0;flex-direction:column;box-sizing:border-box;padding-bottom:calc(24px + max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px)));max-height:min(78vh,600px);max-height:min(78dvh,600px)}
+.metti-select-options{min-height:0;flex:1 1 auto;overflow-y:auto;max-height:calc(78vh - 135px);max-height:calc(78dvh - 135px);-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
+.metti-select-option{touch-action:pan-y}
+@media(max-width:500px){.data-sheet{max-height:calc(94vh - var(--metti-native-bottom-inset,0px))}.metti-select-data-sheet{max-height:min(82vh,620px);max-height:min(82dvh,620px)}.metti-select-options{max-height:calc(82vh - 130px);max-height:calc(82dvh - 130px)}}
+
+/* Make the stylist media controls real, accessible buttons. */
+.screen[data-screen-id="stylist"] .composer-media-button{display:grid;width:28px;height:28px;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}
+.screen[data-screen-id="stylist"] .composer-media-button:active,.screen[data-screen-id="stylist"] .composer-media-button.is-selected{color:var(--rose)}
+.screen[data-screen-id="stylist"] .composer-media-button:focus-visible{outline:2px solid var(--rose);outline-offset:2px}
+.screen[data-screen-id="stylist"] .composer-media-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.screen[data-screen-id="stylist"] .composer-photo-status{display:block;max-width:calc(100% - 8px);margin:4px 0 0;color:var(--rose);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -22,6 +22,7 @@
     outfits: [],
     activeItem: null,
     currentOutfit: null,
+    stylistPhoto: null,
     activeLooksTab: 'recommended',
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
@@ -29,6 +30,8 @@
   let toastTimer;
   let activeMettiSelect = null;
   let mettiSelectId = 0;
+  let screenHistory = [];
+  let stylistVoiceRecognition = null;
 
   const wardrobeSubcategoryOptions = Object.freeze({
     top: Object.freeze([
@@ -448,6 +451,83 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.className = 'toast'; }, 2200);
   };
+  const ensureStylistComposer = () => {
+    const icons = document.querySelector('.screen[data-screen-id="stylist"] .composer-media-icons');
+    if (!icons || icons.dataset.ready === 'true') return;
+    icons.dataset.ready = 'true';
+    const createButton = (id, action, label, svg) => {
+      const button = document.createElement('button');
+      button.id = id;
+      button.type = 'button';
+      button.className = 'composer-media-button';
+      button.dataset.action = action;
+      button.setAttribute('aria-label', label);
+      button.innerHTML = svg;
+      return button;
+    };
+    const camera = createButton('stylist-camera-button', 'open-stylist-photo', 'Приложить фото', '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5 9.5 3h5L16 5"/><circle cx="12" cy="12" r="3"/></svg>');
+    const voice = createButton('stylist-voice-button', 'start-voice-input', 'Голосовой ввод', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>');
+    icons.replaceChildren(camera, voice);
+    const input = document.createElement('input');
+    input.id = 'stylist-photo-input';
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.hidden = true;
+    input.tabIndex = -1;
+    icons.parentElement?.append(input);
+    const status = document.createElement('div');
+    status.id = 'stylist-photo-status';
+    status.className = 'composer-photo-status';
+    status.hidden = true;
+    icons.closest('.composer-card')?.append(status);
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!String(file.type || '').startsWith('image/')) {
+        input.value = '';
+        return showToast('Выберите изображение', 'error');
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        input.value = '';
+        return showToast('Фото должно быть меньше 5 МБ', 'error');
+      }
+      state.stylistPhoto = file;
+      status.textContent = state.language === 'en' ? `Photo attached: ${file.name}` : `Фото прикреплено: ${file.name}`;
+      status.hidden = false;
+      camera.classList.add('is-selected');
+      showToast(state.language === 'en' ? 'Photo attached' : 'Фото прикреплено', 'success');
+    });
+  };
+  const startBrowserVoiceInput = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return showToast(state.language === 'en' ? 'Voice input is unavailable' : 'Голосовой ввод недоступен', 'error');
+    if (stylistVoiceRecognition) {
+      stylistVoiceRecognition.stop();
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = state.language === 'en' ? 'en-US' : 'ru-RU';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => byId('stylist-voice-button')?.classList.add('is-selected');
+    recognition.onresult = (event) => {
+      const value = Array.from(event.results || []).map((result) => result[0]?.transcript || '').join(' ').trim();
+      const input = byId('prompt-input');
+      if (value && input) { input.value = `${input.value} ${value}`.trim(); input.focus(); }
+    };
+    recognition.onerror = () => showToast(state.language === 'en' ? 'Could not recognize speech' : 'Не удалось распознать речь', 'error');
+    recognition.onend = () => { stylistVoiceRecognition = null; byId('stylist-voice-button')?.classList.remove('is-selected'); };
+    stylistVoiceRecognition = recognition;
+    try {
+      recognition.start();
+      showToast(state.language === 'en' ? 'Listening…' : 'Говорите…');
+    } catch (_) {
+      stylistVoiceRecognition = null;
+      showToast(state.language === 'en' ? 'Voice input is unavailable' : 'Голосовой ввод недоступен', 'error');
+    }
+  };
+  const activeScreenId = () => document.querySelector('.screen.active')?.dataset.screenId || 'home';
   const languageLabel = (language = state.language) => language === 'en' ? 'English' : 'Русский';
   const syncLanguageControls = () => {
     window.MettiI18n?.apply?.(state.language);
@@ -486,9 +566,15 @@
       button.disabled = false;
     }
   };
-  const go = (screen, behavior = 'smooth') => {
+  const go = (screen, behavior = 'smooth', { pushHistory = true, resetHistory = false } = {}) => {
     const target = document.querySelector(`.screen[data-screen-id="${screen}"]`);
     if (!target) return;
+    const current = activeScreenId();
+    if (resetHistory) screenHistory = [];
+    else if (pushHistory && current !== screen) {
+      if (screenHistory[screenHistory.length - 1] !== current) screenHistory.push(current);
+      if (screenHistory.length > 20) screenHistory.shift();
+    }
     document.querySelectorAll('.screen').forEach((item) => item.classList.toggle('active', item === target));
     document.querySelectorAll('.bottom-nav button').forEach((item) => {
       const active = item.dataset.screen === screen;
@@ -496,6 +582,13 @@
       if (active) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current');
     });
     if (appScroll) appScroll.scrollTo({ top: 0, behavior }); else phone?.scrollTo({ top: 0, behavior });
+  };
+  const goBack = () => {
+    const current = activeScreenId();
+    const previous = screenHistory.pop();
+    if (previous && previous !== current) { go(previous, 'smooth', { pushHistory: false }); return true; }
+    if (current !== 'home') { go('home', 'smooth', { pushHistory: false, resetHistory: true }); return true; }
+    return false;
   };
   const weatherLabel = (code) => {
     if (code === 0) return [translate('Ясно'), '☀'];
@@ -951,6 +1044,31 @@
     setTimeout(() => form.elements.style_tags?.focus(), 0);
   };
   const closeStyleSheet = () => { const node = byId('style-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
+  const closeVisibleModal = () => {
+    if (activeMettiSelect) { closeMettiSelectSheet({ restoreFocus: false }); return true; }
+    const subcategory = byId('wardrobe-subcategory-sheet');
+    if (subcategory && !subcategory.hidden) { closeWardrobeSubcategorySheet({ restoreFocus: false }); return true; }
+    const backdrop = document.querySelector('.sheet-backdrop:not([hidden])');
+    if (backdrop) {
+      if (backdrop.id === 'wardrobe-sheet') closeWardrobeSheet();
+      else if (backdrop.id === 'profile-sheet') closeProfileSheet();
+      else if (backdrop.id === 'language-sheet') closeLanguageSheet();
+      else if (backdrop.id === 'delete-account-sheet') closeDeleteAccountSheet();
+      else if (backdrop.id === 'style-sheet') closeStyleSheet();
+      else { backdrop.hidden = true; document.body.classList.remove('modal-open'); }
+      return true;
+    }
+    const sheet = document.querySelector('.sheet:not([hidden])');
+    if (sheet) { sheet.hidden = true; return true; }
+    return false;
+  };
+  window.MettiNativeBack = () => closeVisibleModal() || goBack();
+  window.addEventListener('metti:voice-result', (event) => {
+    const value = String(event.detail || '').trim();
+    const input = byId('prompt-input');
+    if (value && input) { input.value = `${input.value} ${value}`.trim(); input.focus(); showToast(state.language === 'en' ? 'Text added' : 'Текст добавлен', 'success'); }
+  });
+  window.addEventListener('metti:voice-error', () => showToast(state.language === 'en' ? 'Voice input is unavailable' : 'Голосовой ввод недоступен', 'error'));
   const saveProfileForm = async (event) => {
     event.preventDefault(); const form = event.currentTarget; const displayName = form.elements.display_name.value.trim(); const city = form.elements.city.value.trim();
     if (!displayName || !city) return setFormStatus('profile-form-status', 'Заполните имя и город.', 'error');
@@ -1021,7 +1139,7 @@
     const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
     const languageOption = event.target.closest('[data-language-option]'); if (languageOption) { setLanguage(languageOption.dataset.languageOption); closeLanguageSheet(); return; }
     const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
-    const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } go(screenButton.dataset.screen); return; }
+    const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } const isBottomNav = Boolean(screenButton.closest('.bottom-nav')); go(screenButton.dataset.screen, 'smooth', { pushHistory: !isBottomNav, resetHistory: isBottomNav }); return; }
     const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item); go('item'); } return; }
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
     const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); state.wardrobeFilter = tab.dataset.filter || 'all'; state.wardrobeSubcategory = 'all'; renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); return; }
@@ -1055,6 +1173,8 @@
     if (action === 'confirm-delete-account') confirmDeleteAccount(event.target.closest('[data-action="confirm-delete-account"]'));
     if (action === 'style-edit') openStyleSheet();
     if (action === 'close-style-sheet') closeStyleSheet();
+    if (action === 'open-stylist-photo') byId('stylist-photo-input')?.click();
+    if (action === 'start-voice-input') { if (window.MettiAndroid?.startVoiceInput) window.MettiAndroid.startVoiceInput(state.language === 'en' ? 'en-US' : 'ru-RU'); else startBrowserVoiceInput(); }
     if (action === 'logout') window.MettiAuth?.signOut();
     if (action === 'dismiss') event.target.closest('.hint').hidden = true;
     if (action === 'send') { const input = byId('prompt-input'); const value = input.value.trim(); if (value) { input.value = ''; ask(value); } }
@@ -1069,8 +1189,9 @@
   document.querySelector('.search-box input')?.addEventListener('input', applyWardrobeFilters);
   ensureWardrobeSubcategoryPicker();
   ensureMettiSelectPickers();
+  ensureStylistComposer();
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
-  document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) closeWardrobeSubcategorySheet(); });
+  document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) { closeWardrobeSubcategorySheet(); return; } closeVisibleModal(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
   window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; });
   renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateGreeting(); updateWeather();
