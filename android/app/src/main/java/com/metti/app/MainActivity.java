@@ -1,6 +1,7 @@
 package com.metti.app;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.graphics.Color;
@@ -12,12 +13,15 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.ValueCallback;
 
 import java.util.Locale;
 
 public final class MainActivity extends Activity {
     private static final int METTI_BG = Color.rgb(251, 239, 238);
+    private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
     private WebView webView;
+    private ValueCallback<Uri[]> filePathCallback;
     private int nativeTopInset;
     private int nativeBottomInset;
 
@@ -93,14 +97,37 @@ public final class MainActivity extends Activity {
                 );
             }
         });
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                    WebView view,
+                    ValueCallback<Uri[]> callback,
+                    FileChooserParams fileChooserParams) {
+                if (MainActivity.this.filePathCallback != null) {
+                    MainActivity.this.filePathCallback.onReceiveValue(null);
+                }
+                MainActivity.this.filePathCallback = callback;
+                try {
+                    Intent intent = fileChooserParams.createIntent();
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
+                    return true;
+                } catch (ActivityNotFoundException | SecurityException error) {
+                    MainActivity.this.filePathCallback = null;
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+            }
+        });
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(false);
+        // Android's picker returns a content:// Uri. WebView must be allowed
+        // to read that Uri when it populates the HTML file input.
+        settings.setAllowContentAccess(true);
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setBuiltInZoomControls(false);
@@ -109,6 +136,16 @@ public final class MainActivity extends Activity {
 
         setContentView(webView);
         if (!handleAuthRedirect(getIntent().getData())) webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE && filePathCallback != null) {
+            Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            filePathCallback.onReceiveValue(results);
+            filePathCallback = null;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     private void applyNativeInsetsToWeb() {

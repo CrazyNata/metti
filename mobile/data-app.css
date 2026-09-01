@@ -118,3 +118,25 @@ body.modal-open{overflow:hidden}
 .subcategory-sheet-option.is-selected{border-color:var(--rose);background:var(--soft);color:var(--rose);font-weight:600}
 .subcategory-sheet-check{width:20px;color:var(--rose);font-size:18px;font-weight:700;line-height:1;text-align:right}
 @media(max-width:500px){.subcategory-data-sheet{max-height:82vh;padding-right:18px;padding-left:18px;border-radius:23px 23px 0 0}.subcategory-sheet-options{max-height:calc(82vh - 145px)}.subcategory-sheet-option{min-height:49px;font-size:14px}}
+
+/* Keep every form picker inside the Metti visual language instead of opening the native Android list. */
+.metti-select-trigger{display:flex!important;width:100%;min-height:45px;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fffaf8;color:var(--ink);font:13px var(--sans);line-height:1.2;text-align:left;cursor:pointer;outline:0;-webkit-appearance:none;appearance:none}
+.metti-select-trigger:focus-visible,.metti-select-trigger[aria-expanded="true"]{border-color:var(--rose);box-shadow:0 0 0 3px #8b4e7020}
+.metti-select-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metti-select-chevron{flex:none;color:var(--rose);font-size:19px;line-height:1;transform:translateY(-1px)}
+.data-form select[data-metti-select-enhanced="true"]{display:none!important}
+#wardrobe-sheet .data-form .metti-select-trigger{min-height:51px;font-size:15px!important}
+.metti-select-backdrop{z-index:20!important;padding:0!important;place-items:end center!important;background:#211e1a66!important}
+.metti-select-data-sheet{position:relative;width:min(100%,420px);max-height:min(78vh,600px);overflow:hidden;padding:13px 20px calc(24px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}
+.metti-select-sheet-handle{width:42px;height:4px;margin:0 auto 14px;border-radius:99px;background:#ddc9c3}
+.metti-select-data-sheet>.data-sheet-close{position:absolute;top:13px;right:17px;float:none;width:30px;height:30px;background:var(--soft);color:var(--rose);font-size:22px;line-height:1}
+.metti-select-data-sheet h2{margin:0 40px 6px 0;font:500 30px/.98 var(--serif)}
+.metti-select-sheet-note{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.35}
+.metti-select-options{display:grid;gap:7px;max-height:calc(78vh - 135px);overflow:auto;padding:1px 1px 2px;scrollbar-width:none;-ms-overflow-style:none}
+.metti-select-options::-webkit-scrollbar{display:none}
+.metti-select-option{display:flex;width:100%;min-height:49px;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:#fffaf8;color:var(--ink);font:14px var(--sans);text-align:left;cursor:pointer;outline:0;-webkit-appearance:none;appearance:none}
+.metti-select-option:focus-visible{box-shadow:0 0 0 3px #8b4e7020}
+.metti-select-option:disabled{cursor:default;opacity:.45}
+.metti-select-option.is-selected{border-color:var(--rose);background:var(--soft);color:var(--rose);font-weight:600}
+.metti-select-check{width:20px;flex:none;color:var(--rose);font-size:18px;font-weight:700;line-height:1;text-align:right}
+@media(max-width:500px){.metti-select-data-sheet{max-height:82vh;padding-right:18px;padding-left:18px;border-radius:23px 23px 0 0}.metti-select-options{max-height:calc(82vh - 130px)}.metti-select-option{min-height:50px;font-size:14px}}

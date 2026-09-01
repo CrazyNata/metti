@@ -27,6 +27,8 @@
     requestNumber: 0
   };
   let toastTimer;
+  let activeMettiSelect = null;
+  let mettiSelectId = 0;
 
   const wardrobeSubcategoryOptions = Object.freeze({
     top: Object.freeze([
@@ -196,6 +198,126 @@
     return Object.values(wardrobeSubcategoryOptions).flat().find((option) => option.value === canonical)?.label || value;
   };
   const filterSubcategoryOptions = (category) => category === 'all' ? [{ value: 'all', label: 'Все виды' }] : [{ value: 'all', label: 'Все виды' }, ...(wardrobeSubcategoryOptions[category] || [])];
+  const mettiSelectLabel = (select) => {
+    const label = select?.closest('label');
+    const text = label ? Array.from(label.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent).join(' ').replace(/\s+/g, ' ').trim() : '';
+    return text || select?.getAttribute('aria-label') || 'Выберите вариант';
+  };
+  const mettiSelectTitle = (select) => translate({ category: 'Выберите категорию', subcategory: 'Выберите вид', fit: 'Выберите посадку' }[select?.name] || 'Выберите вариант');
+  const ensureMettiSelectSheet = () => {
+    const existing = byId('metti-select-sheet');
+    if (existing) return existing;
+    const backdrop = document.createElement('div');
+    backdrop.id = 'metti-select-sheet';
+    backdrop.className = 'sheet-backdrop metti-select-backdrop';
+    backdrop.hidden = true;
+    backdrop.innerHTML = '<div class="data-sheet metti-select-data-sheet" role="dialog" aria-modal="true" aria-labelledby="metti-select-sheet-title"><div class="metti-select-sheet-handle" aria-hidden="true"></div><button class="data-sheet-close" type="button" data-action="close-metti-select" aria-label="Закрыть">×</button><h2 id="metti-select-sheet-title">Выберите вариант</h2><p id="metti-select-sheet-note" class="metti-select-sheet-note">Выберите один вариант</p><div id="metti-select-options" class="metti-select-options" role="listbox" aria-label="Варианты"></div></div>';
+    document.body.append(backdrop);
+    return backdrop;
+  };
+  const syncMettiSelectPicker = (select) => {
+    if (!select || select.id === 'wardrobe-subcategory-filter' || select.dataset.mettiSelectEnhanced !== 'true') return;
+    const trigger = select.previousElementSibling?.matches?.('.metti-select-trigger') ? select.previousElementSibling : null;
+    if (!trigger) return;
+    const value = trigger.querySelector('.metti-select-value');
+    const selected = Array.from(select.options).find((option) => option.value === select.value) || select.options[select.selectedIndex] || select.options[0];
+    if (value) value.textContent = selected ? selected.textContent.trim() : translate('Выберите вариант');
+    trigger.setAttribute('aria-label', `${mettiSelectLabel(select)}: ${value?.textContent || ''}`.trim());
+  };
+  const syncMettiSelectPickers = () => document.querySelectorAll('select:not(#wardrobe-subcategory-filter)').forEach((select) => syncMettiSelectPicker(select));
+  const ensureMettiSelectPicker = (select) => {
+    if (!select || select.id === 'wardrobe-subcategory-filter' || select.dataset.mettiSelectEnhanced === 'true') return;
+    if (!select.id) select.id = `metti-select-${++mettiSelectId}`;
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'metti-select-trigger';
+    trigger.dataset.action = 'open-metti-select';
+    trigger.dataset.mettiSelectTarget = select.id;
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', 'metti-select-sheet');
+    const value = document.createElement('span');
+    value.className = 'metti-select-value';
+    const chevron = document.createElement('span');
+    chevron.className = 'metti-select-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    chevron.textContent = '⌄';
+    trigger.append(value, chevron);
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openMettiSelectSheet(select);
+    });
+    select.dataset.mettiSelectEnhanced = 'true';
+    select.hidden = true;
+    select.tabIndex = -1;
+    select.setAttribute('aria-hidden', 'true');
+    select.parentNode?.insertBefore(trigger, select);
+    syncMettiSelectPicker(select);
+  };
+  const ensureMettiSelectPickers = () => {
+    ensureMettiSelectSheet();
+    document.querySelectorAll('select:not(#wardrobe-subcategory-filter)').forEach((select) => ensureMettiSelectPicker(select));
+    syncMettiSelectPickers();
+  };
+  const renderMettiSelectSheet = (select) => {
+    const sheet = ensureMettiSelectSheet();
+    const title = byId('metti-select-sheet-title');
+    const note = byId('metti-select-sheet-note');
+    const optionsNode = byId('metti-select-options');
+    if (!sheet || !title || !note || !optionsNode || !select) return;
+    title.textContent = mettiSelectTitle(select);
+    note.textContent = translate('Выберите один вариант');
+    optionsNode.setAttribute('aria-label', mettiSelectLabel(select));
+    optionsNode.innerHTML = '';
+    Array.from(select.options).forEach((option) => {
+      const optionButton = document.createElement('button');
+      const isSelected = option.value === select.value;
+      optionButton.type = 'button';
+      optionButton.className = `metti-select-option${isSelected ? ' is-selected' : ''}`;
+      optionButton.dataset.mettiSelectOption = option.value;
+      optionButton.setAttribute('role', 'option');
+      optionButton.setAttribute('aria-selected', String(isSelected));
+      optionButton.disabled = option.disabled;
+      const optionLabel = document.createElement('span');
+      optionLabel.textContent = translate(option.textContent.trim());
+      const check = document.createElement('span');
+      check.className = 'metti-select-check';
+      check.setAttribute('aria-hidden', 'true');
+      check.textContent = isSelected ? '✓' : '';
+      optionButton.append(optionLabel, check);
+      optionsNode.append(optionButton);
+    });
+  };
+  const openMettiSelectSheet = (select) => {
+    if (!select) return;
+    activeMettiSelect = select;
+    renderMettiSelectSheet(select);
+    const sheet = byId('metti-select-sheet');
+    if (!sheet) return;
+    sheet.hidden = false;
+    document.body.classList.add('modal-open');
+    select.previousElementSibling?.setAttribute('aria-expanded', 'true');
+    setTimeout(() => sheet.querySelector('.metti-select-option[aria-selected="true"]')?.focus(), 0);
+  };
+  const closeMettiSelectSheet = ({ restoreFocus = true } = {}) => {
+    const select = activeMettiSelect;
+    const sheet = byId('metti-select-sheet');
+    if (sheet) sheet.hidden = true;
+    activeMettiSelect = null;
+    const trigger = select?.previousElementSibling?.matches?.('.metti-select-trigger') ? select.previousElementSibling : null;
+    trigger?.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) trigger?.focus();
+    if (!document.querySelector('.sheet-backdrop:not([hidden]), .sheet:not([hidden])')) document.body.classList.remove('modal-open');
+  };
+  const chooseMettiSelectOption = (value) => {
+    const select = activeMettiSelect;
+    if (!select) return;
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    syncMettiSelectPicker(select);
+    closeMettiSelectSheet();
+  };
   const ensureWardrobeSubcategoryPicker = () => {
     const select = byId('wardrobe-subcategory-filter');
     const source = select?.closest('.subcategory-filter');
@@ -336,6 +458,7 @@
       option.classList.toggle('is-selected', selected);
       option.setAttribute('aria-checked', String(selected));
     });
+    syncMettiSelectPickers();
   };
   const setLanguage = (language, { notify = true } = {}) => {
     state.language = language === 'en' ? 'en' : 'ru';
@@ -719,6 +842,7 @@
       select.append(node);
     });
     select.value = canonicalSubcategory(selected);
+    syncMettiSelectPicker(select);
   };
 
   const openWardrobeSheet = (item = null) => {
@@ -730,6 +854,7 @@
     const category = item ? categoryForItem(item) : 'top';
     if (form.elements.category) form.elements.category.value = category;
     renderWardrobeFormSubcategories(category, item ? itemSubcategory(item) : '');
+    syncMettiSelectPickers();
     if (form.elements.image) form.elements.image.value = '';
     setFormStatus('wardrobe-form-status'); backdrop.hidden = false; document.body.classList.add('modal-open');
     setTimeout(() => form.elements.name?.focus(), 0);
@@ -785,6 +910,7 @@
     const form = byId('profile-form'); const profile = state.profile || {}; if (!form) return;
     const preferences = profile.preferences && typeof profile.preferences === 'object' ? profile.preferences : {};
     form.elements.display_name.value = profileName(); form.elements.city.value = profile.city || 'Prague'; form.elements.style_tags.value = (profile.style_tags || []).join(', '); form.elements.favorite_colors.value = Array.isArray(preferences.favorite_colors) ? preferences.favorite_colors.join(', ') : (preferences.favorite_colors || ''); form.elements.fit.value = profile.style_profile?.fit || ''; form.elements.size.value = profile.style_profile?.size || ''; form.elements.preferences.value = preferences.note || '';
+    syncMettiSelectPickers();
     setFormStatus('profile-form-status'); byId('profile-sheet').hidden = false; document.body.classList.add('modal-open'); setTimeout(() => form.elements.display_name?.focus(), 0);
   };
   const closeProfileSheet = () => { const node = byId('profile-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
@@ -820,6 +946,7 @@
     form.elements.fit.value = profile.style_profile?.fit || '';
     form.elements.size.value = profile.style_profile?.size || '';
     form.elements.preferences.value = preferences.note || '';
+    syncMettiSelectPickers();
     setFormStatus('style-form-status'); byId('style-sheet').hidden = false; document.body.classList.add('modal-open');
     setTimeout(() => form.elements.style_tags?.focus(), 0);
   };
@@ -889,6 +1016,7 @@
   };
 
   document.addEventListener('click', (event) => {
+    const mettiSelectOption = event.target.closest('[data-metti-select-option]'); if (mettiSelectOption) { chooseMettiSelectOption(mettiSelectOption.dataset.mettiSelectOption); return; }
     const subcategoryOption = event.target.closest('[data-subcategory-option]'); if (subcategoryOption) { chooseWardrobeSubcategory(subcategoryOption.dataset.subcategoryOption); return; }
     const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
     const languageOption = event.target.closest('[data-language-option]'); if (languageOption) { setLanguage(languageOption.dataset.languageOption); closeLanguageSheet(); return; }
@@ -900,6 +1028,8 @@
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'open-wardrobe-subcategory') { openWardrobeSubcategorySheet(); return; }
     if (action === 'close-wardrobe-subcategory') { closeWardrobeSubcategorySheet(); return; }
+    if (action === 'open-metti-select') { openMettiSelectSheet(byId(event.target.closest('[data-metti-select-target]')?.dataset.mettiSelectTarget)); return; }
+    if (action === 'close-metti-select') { closeMettiSelectSheet(); return; }
     if (action === 'wear') { event.target.textContent = translate('Образ надет ✓'); saveCurrentOutfit(true); }
     if (action === 'other') ask('Другой вариант образа');
     if (action === 'save') saveCurrentOutfit(false);
@@ -938,8 +1068,9 @@
   byId('style-form')?.addEventListener('submit', saveStyleForm);
   document.querySelector('.search-box input')?.addEventListener('input', applyWardrobeFilters);
   ensureWardrobeSubcategoryPicker();
-  document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
-  document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); if (event.key === 'Escape' && node && !node.hidden) closeWardrobeSubcategorySheet(); });
+  ensureMettiSelectPickers();
+  document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
+  document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) closeWardrobeSubcategorySheet(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
   window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; });
   renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateGreeting(); updateWeather();
