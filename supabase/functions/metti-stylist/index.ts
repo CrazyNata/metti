@@ -41,12 +41,73 @@ const geminiOutputText = (payload: any) => (payload?.candidates ?? [])
   .filter(Boolean)
   .join('\n');
 
+const MAX_VISION_ITEMS = 24;
+const MAX_GEMINI_IMAGE_BYTES = 900_000;
+const MAX_GEMINI_TOTAL_BYTES = 10_000_000;
+const VISION_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+const bytesToBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
+};
+
+const fetchWithTimeout = async (url: string, timeoutMs = 4000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const fetchGeminiImage = async (url: unknown) => {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return null;
+  try {
+    const response = await fetchWithTimeout(url);
+    if (!response.ok) return null;
+    const contentLength = Number(response.headers.get('content-length') ?? 0);
+    if (contentLength > MAX_GEMINI_IMAGE_BYTES) return null;
+    const mimeType = String(response.headers.get('content-type') || 'image/jpeg').split(';')[0].trim().toLowerCase();
+    if (!VISION_MIME_TYPES.has(mimeType)) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.length || bytes.byteLength > MAX_GEMINI_IMAGE_BYTES) return null;
+    return { mimeType, data: bytesToBase64(bytes), byteLength: bytes.byteLength };
+  } catch (_) {
+    return null;
+  }
+};
+
 const fallbackItemIds = (items: any[]) => {
-  const categories = ['outer', 'top', 'bottom', 'shoes', 'accessory'];
-  const preferred = categories.map((category) => items.find((item) => item?.category === category));
-  return [...new Set([...preferred, ...items]
-    .map((item) => String(item?.id ?? ''))
-    .filter(Boolean))].slice(0, 4);
+  const available = Array.isArray(items) ? items.filter((item) => item?.id) : [];
+  const selected: any[] = [];
+  const used = new Set<string>();
+  const subcategory = (item: any) => String(item?.subcategory || item?.metadata?.subcategory || '').toLowerCase();
+  const take = (predicate: (item: any) => boolean) => {
+    const item = available.find((value) => !used.has(String(value.id)) && predicate(value));
+    if (!item) return;
+    used.add(String(item.id)); selected.push(item);
+  };
+  const hero = available.find((item) => ['outerwear', 'blazer'].includes(subcategory(item)) || item.category === 'outer')
+    || available.find((item) => item.category === 'top' && subcategory(item) === 'dress')
+    || available.find((item) => item.category === 'top');
+  if (hero) {
+    used.add(String(hero.id)); selected.push(hero);
+    if (subcategory(hero) !== 'dress') take((item) => item.category === 'top' && !['outerwear', 'blazer', 'dress'].includes(subcategory(item)));
+  }
+  take((item) => item.category === 'bottom');
+  take((item) => item.category === 'shoes');
+  take((item) => item.category === 'accessory' && subcategory(item) === 'bag');
+  take((item) => item.category === 'accessory');
+  available.forEach((item) => {
+    if (selected.length >= 6 || used.has(String(item.id))) return;
+    used.add(String(item.id)); selected.push(item);
+  });
+  return selected.slice(0, 6).map((item) => String(item.id));
 };
 
 Deno.serve(async (req) => {
@@ -87,21 +148,53 @@ Deno.serve(async (req) => {
     const geminiKey = Deno.env.get('GEMINI_API_KEY');
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
     if (!geminiKey && !openAiKey) return localFallback();
+    const visionItems = (wardrobe ?? [])
+      .filter((item: any) => typeof item?.imageUrl === 'string' && /^https?:\/\//i.test(item.imageUrl))
+      .slice(0, MAX_VISION_ITEMS);
+    const wardrobeContext = (wardrobe ?? []).map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      subcategory: item.subcategory,
+      colors: item.colors,
+      color: item.color,
+      size: item.size,
+      season: item.season,
+      brand: item.brand,
+      notes: item.notes,
+      image_available: Boolean(item.imageUrl)
+    }));
     const instructions = [
       isEnglish ? 'You are the personal AI stylist for the metti app.' : 'Ты — персональный AI-стилист приложения metti.',
       isEnglish ? 'Build a look only from the user’s provided items. Do not invent items or add anything that is not in the list.' : 'Подбирай образ только из переданных вещей пользователя. Не придумывай вещи и не добавляй предметы, которых нет в списке.',
+      isEnglish ? 'Inspect the wardrobe photos when they are provided. Each photo is immediately preceded by its exact wardrobe item id; use the photo to verify the garment type, color, pattern, and compatibility. Metadata remains the source of truth for the item id and category.' : 'Изучай фотографии вещей, если они переданы. Перед каждой фотографией указан точный id вещи; используй фото, чтобы проверить тип, цвет, принт и сочетаемость. Метаданные остаются источником истины для id и категории.',
       isEnglish ? 'Consider the request, weather, city, and profile preferences. Return the response strictly as JSON without markdown. Write all user-facing text in English.' : 'Учитывай запрос, погоду, город и предпочтения профиля. Ответ возвращай строго в JSON без markdown. Все пользовательские тексты пиши на русском языке.',
       isEnglish ? 'Format: {"title": string, "note": string, "message": string, "item_ids": string[]}. item_ids must contain 1 to 6 wardrobe item ids.' : 'Формат: {"title": string, "note": string, "message": string, "item_ids": string[]}. item_ids должен содержать от 1 до 6 id из гардероба.'
     ].join('\n');
-    const context = JSON.stringify({ prompt, language, weather, profile, wardrobe });
-    const requestGemini = () => {
+    const context = JSON.stringify({ prompt, language, weather, profile, wardrobe: wardrobeContext, visual_items: visionItems.map((item: any) => ({ id: item.id, name: item.name })) });
+    const buildGeminiImageParts = async () => {
+      const parts: any[] = [];
+      let totalBytes = 0;
+      for (const item of visionItems) {
+        if (totalBytes >= MAX_GEMINI_TOTAL_BYTES) break;
+        const image = await fetchGeminiImage(item.imageUrl);
+        if (!image || totalBytes + image.byteLength > MAX_GEMINI_TOTAL_BYTES) continue;
+        totalBytes += image.byteLength;
+        parts.push(
+          { text: `WARDROBE PHOTO ${item.id}: the next image is the actual photo of "${item.name}". Use this exact id when selecting it.` },
+          { inlineData: { mimeType: image.mimeType, data: image.data } },
+        );
+      }
+      return parts;
+    };
+    const requestGemini = async () => {
       const model = Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash-lite';
       return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: { 'x-goog-api-key': geminiKey as string, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: instructions }] },
-          contents: [{ role: 'user', parts: [{ text: context }] }],
+          contents: [{ role: 'user', parts: [{ text: context }, ...(await buildGeminiImageParts())] }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
         })
       });
@@ -109,10 +202,17 @@ Deno.serve(async (req) => {
     const requestOpenAi = () => {
       if (!openAiKey) throw new Error('OPENAI_API_KEY is not configured');
       const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
+      const content = [
+        { type: 'input_text', text: context },
+        ...visionItems.flatMap((item: any) => [
+          { type: 'input_text', text: `WARDROBE PHOTO ${item.id}: the next image is the actual photo of "${item.name}". Use this exact id when selecting it.` },
+          { type: 'input_image', image_url: item.imageUrl, detail: 'auto' }
+        ])
+      ];
       return fetch('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, instructions, input: context, temperature: 0.7, max_output_tokens: 500 })
+        body: JSON.stringify({ model, instructions, input: [{ role: 'user', content }], temperature: 0.7, max_output_tokens: 500 })
       });
     };
     const requestOpenAiSafely = async () => {

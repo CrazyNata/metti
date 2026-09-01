@@ -134,12 +134,56 @@
   const itemClass = (item) => {
     if (item?.photoClass) return item.photoClass;
     const value = `${item.name || ''} ${item.category || ''}`.toLowerCase();
-    if (value.includes('жакет') || item.category === 'outer') return 'item-jacket photo-jacket';
+    const subcategory = itemSubcategory(item);
+    if (subcategory === 'bag' || value.includes('сум')) return 'item-bag photo-bag';
+    if (subcategory === 'jewelry' || value.includes('серьг')) return 'photo-earrings';
+    if (subcategory === 'headwear') return 'photo-scarf';
+    if (value.includes('жакет') || item.category === 'outer' || ['blazer', 'outerwear'].includes(subcategory)) return 'item-jacket photo-jacket';
     if (value.includes('джин') || value.includes('брюк') || item.category === 'bottom') return 'item-jeans photo-jeans';
     if (value.includes('лофер') || item.category === 'shoes') return 'item-loafers photo-loafers';
-    if (value.includes('сум') || item.category === 'accessory' && value.includes('сум')) return 'item-bag photo-bag';
-    if (value.includes('серьг')) return 'photo-earrings';
     return 'item-shirt photo-shirt';
+  };
+  const pickOutfitItems = (items) => {
+    const available = Array.isArray(items) ? items.filter((item) => item?.id) : [];
+    const selected = [];
+    const used = new Set();
+    const take = (predicate) => {
+      const item = available.find((value) => !used.has(String(value.id)) && predicate(value));
+      if (!item) return null;
+      used.add(String(item.id)); selected.push(item); return item;
+    };
+    const hero = take((item) => ['outerwear', 'blazer'].includes(itemSubcategory(item))) || take((item) => itemSubcategory(item) === 'dress') || take((item) => categoryForItem(item) === 'top');
+    if (hero && itemSubcategory(hero) !== 'dress') take((item) => categoryForItem(item) === 'top' && !['outerwear', 'blazer', 'dress'].includes(itemSubcategory(item)));
+    take((item) => categoryForItem(item) === 'bottom');
+    take((item) => categoryForItem(item) === 'shoes');
+    take((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) === 'bag');
+    take((item) => categoryForItem(item) === 'accessory');
+    available.forEach((item) => {
+      if (selected.length >= 6 || used.has(String(item.id))) return;
+      used.add(String(item.id)); selected.push(item);
+    });
+    return selected.slice(0, 6);
+  };
+  const outfitItemIds = (outfit) => Array.isArray(outfit?.item_ids) ? outfit.item_ids : Array.isArray(outfit?.itemIds) ? outfit.itemIds : [];
+  const selectedOutfitItems = (outfit) => {
+    const selected = outfitItemIds(outfit).map((id) => state.wardrobe.find((item) => String(item.id) === String(id))).filter(Boolean);
+    return selected.length ? selected : pickOutfitItems(state.wardrobe);
+  };
+  const collageSlots = (items) => {
+    const available = Array.isArray(items) ? items.filter((item) => item?.id) : [];
+    const used = new Set();
+    const take = (predicate) => {
+      const item = available.find((value) => !used.has(String(value.id)) && predicate(value));
+      if (!item) return null;
+      used.add(String(item.id)); return item;
+    };
+    const hero = take((item) => ['outerwear', 'blazer'].includes(itemSubcategory(item))) || take((item) => itemSubcategory(item) === 'dress') || take((item) => categoryForItem(item) === 'top') || take(() => true);
+    const top = itemSubcategory(hero) === 'dress' ? null : take((item) => categoryForItem(item) === 'top' && !['outerwear', 'blazer', 'dress'].includes(itemSubcategory(item)));
+    const bottom = take((item) => categoryForItem(item) === 'bottom');
+    const shoes = take((item) => categoryForItem(item) === 'shoes');
+    const bag = take((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) === 'bag');
+    const accent = take((item) => categoryForItem(item) === 'accessory');
+    return { hero, top, bottom, shoes, bag, accent };
   };
   const uuid = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const byId = (id) => document.getElementById(id);
@@ -205,7 +249,7 @@
     state.language = language === 'en' ? 'en' : 'ru';
     if (window.MettiI18n?.setLanguage) window.MettiI18n.setLanguage(state.language);
     else { try { window.localStorage.setItem(languageStorageKey, state.language); } catch (_) { /* Storage can be unavailable in private file contexts. */ } }
-    renderProfile(); renderLooks(); renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); updateDate(); updateWeather();
+    renderProfile(); renderLooks(); renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderHomeCollage(); updateDate(); updateWeather();
     syncLanguageControls();
     if (notify) showToast(state.language === 'en' ? 'English selected' : 'Русский выбран', 'success');
   };
@@ -312,7 +356,40 @@
     // The editorial placeholder classes use !important background rules. Set the
     // signed private image with the same priority so uploaded photos win.
     node.style.setProperty('background-image', `url("${url.replace(/"/g, '\\"')}")`, 'important');
+    node.style.setProperty('background-position', 'center', 'important');
+    node.style.setProperty('background-size', 'cover', 'important');
+    node.style.setProperty('background-repeat', 'no-repeat', 'important');
     node.classList.add('has-image');
+  };
+  const renderVisualNode = async (node, item, layoutClass, emptyLabel) => {
+    if (!node) return;
+    const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
+    const canUseDemoArt = item && String(item.id).startsWith('demo-');
+    const visualClasses = item && (item.image_path || canUseDemoArt) ? itemClass(item).split(/\s+/) : ['collage-empty'];
+    node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
+    ['background-image', 'background-position', 'background-size', 'background-repeat'].forEach((property) => node.style.removeProperty(property));
+    node.classList.remove('has-image');
+    node.innerHTML = '';
+    const label = document.createElement('span');
+    label.textContent = translate(item?.name || emptyLabel || 'Вещь');
+    node.append(label);
+    node.setAttribute('aria-label', label.textContent);
+    if (item?.image_path) await addImageBackground(node, item.image_path);
+  };
+  const renderHomeCollage = async (outfit = state.currentOutfit) => {
+    const collage = document.querySelector('.screen[data-screen-id="home"] .outfit-collage');
+    if (!collage) return;
+    const slots = collageSlots(selectedOutfitItems(outfit));
+    const definitions = [
+      ['hero', '.collage-main', 'collage-main', 'Главная вещь'],
+      ['top', '[data-collage-slot="top"]', 'pink', 'Верх'],
+      ['bottom', '[data-collage-slot="bottom"]', '', 'Низ'],
+      ['shoes', '[data-collage-slot="shoes"]', '', 'Обувь'],
+      ['bag', '[data-collage-slot="bag"]', 'pink', 'Аксессуар'],
+      ['accent', '[data-collage-slot="accent"]', '', 'Аксессуар']
+    ];
+    await Promise.all(definitions.map(([key, selector, layoutClass, emptyLabel]) => renderVisualNode(collage.querySelector(selector), slots[key], layoutClass, emptyLabel)));
+    collage.setAttribute('aria-label', translate('Коллаж образа из вашего гардероба'));
   };
   const renderWardrobe = async () => {
     const grid = byId('wardrobe-grid');
@@ -506,9 +583,10 @@
       state.profile = { id: state.user.id, display_name: state.user.user_metadata?.full_name || state.user.email?.split('@')[0] || 'Наталия', city: 'Prague', preferences: {}, style_tags: ['Спокойный', 'Элегантный'], style_profile: {} };
       supabase.data.saveProfile(state.profile).catch(() => {});
     }
-    renderProfile(); await renderWardrobe(); renderLooks(); updateWeather();
+    if (!state.currentOutfit) state.currentOutfit = state.outfits[0] || { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) };
+    renderProfile(); await renderWardrobe(); renderLooks(); await renderHomeCollage(); updateWeather();
   };
-  const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; renderProfile(); renderWardrobe(); renderLooks(); };
+  const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; state.currentOutfit = { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) }; renderProfile(); renderWardrobe(); renderLooks(); renderHomeCollage(); };
 
   const renderWardrobeFormSubcategories = (category, selected = '') => {
     const select = byId('wardrobe-form')?.elements.subcategory;
@@ -567,7 +645,7 @@
       if (existing?.image_path && newPath && existing.image_path !== newPath) await supabase.data.removeWardrobeImage(existing.image_path).catch(() => {});
       const index = state.wardrobe.findIndex((item) => item.id === existing?.id);
       if (index >= 0) state.wardrobe[index] = saved; else state.wardrobe.unshift(saved);
-      closeWardrobeSheet(); await renderWardrobe(); renderProfile(); showToast(existing ? 'Вещь обновлена' : 'Вещь добавлена', 'success');
+      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile(); showToast(existing ? 'Вещь обновлена' : 'Вещь добавлена', 'success');
     } catch (error) {
       if (newPath && newPath !== existing?.image_path) await supabase.data.removeWardrobeImage(newPath).catch(() => {});
       setFormStatus('wardrobe-form-status', error?.message || 'Не удалось сохранить вещь.', 'error');
@@ -584,7 +662,7 @@
         if (item.image_path) await supabase.data.removeWardrobeImage(item.image_path).catch(() => {});
       }
       state.wardrobe = state.wardrobe.filter((value) => value.id !== item.id); state.activeItem = null;
-      await renderWardrobe(); renderProfile(); go('wardrobe'); showToast('Вещь удалена', 'success');
+      await renderWardrobe(); await renderHomeCollage(); renderProfile(); go('wardrobe'); showToast('Вещь удалена', 'success');
     } catch (error) { showToast(error?.message || 'Не удалось удалить вещь', 'error'); }
   };
 
@@ -658,18 +736,18 @@
 
   const addMessage = (text, role) => { const log = byId('chat-log'); if (!log) return null; const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = translate(text); log.append(node); log.scrollTop = log.scrollHeight; return node; };
   const setThinking = (visible) => { const node = document.querySelector('.chat-log .thinking'); if (node) node.hidden = !visible; };
-  const fallbackOutfit = (prompt) => ({ title: prompt || 'Образ на сегодня', note: 'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.', item_ids: state.wardrobe.slice(0, 4).map((item) => item.id), temperature_c: state.weather.temperature_c, weather_code: state.weather.weather_code, message: 'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.' });
+  const fallbackOutfit = (prompt) => ({ title: prompt || 'Образ на сегодня', note: 'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.', item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id), temperature_c: state.weather.temperature_c, weather_code: state.weather.weather_code, message: 'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.' });
   const renderResult = async (outfit = state.currentOutfit) => {
     if (!outfit) return;
     setText('.screen[data-screen-id="result"] h1', outfit.title || 'Образ на сегодня'); setText('.screen[data-screen-id="result"] .result-note p', `«${outfit.note || 'Собрала этот образ с учётом погоды и вашего гардероба.'}»`);
-    const selected = (outfit.item_ids || []).map((id) => state.wardrobe.find((item) => item.id === id)).filter(Boolean);
+    const slots = collageSlots(selectedOutfitItems(outfit));
     const hero = document.querySelector('.result-hero');
-    if (hero) {
-      const item = selected[0] || state.wardrobe[0]; hero.className = `result-hero placeholder tall ${item ? itemClass(item) : 'photo-outfit'}`; hero.innerHTML = `<span>${translate(item?.name || 'структурный жакет')}</span>`; if (item?.image_path) addImageBackground(hero, item.image_path);
-    }
+    if (hero) await renderVisualNode(hero, slots.hero, 'result-hero tall', 'Главная вещь');
     const grid = document.querySelector('.result-grid'); if (!grid) return;
     grid.innerHTML = '';
-    selected.slice(1, 5).forEach((item) => { const node = document.createElement('div'); node.className = `placeholder ${itemClass(item)}`; const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); node.append(label); grid.append(node); if (item.image_path) addImageBackground(node, item.image_path); });
+    const gridItems = [slots.top, slots.bottom, slots.shoes, slots.bag, slots.accent].filter(Boolean);
+    await Promise.all(gridItems.map(async (item) => { const node = document.createElement('div'); grid.append(node); await renderVisualNode(node, item, '', 'Вещь'); }));
+    await renderHomeCollage(outfit);
   };
   const saveCurrentOutfit = async (worn = false) => {
     if (!state.currentOutfit) state.currentOutfit = fallbackOutfit('Образ на сегодня');
