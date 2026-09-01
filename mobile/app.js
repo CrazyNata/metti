@@ -27,6 +27,9 @@
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
   };
+  const EDITORIAL_IMAGE_BACKGROUND = 'metti-editorial-v1';
+  const pendingImageNormalizations = new Set();
+  let lastDataSyncAt = 0;
   let toastTimer;
   let activeMettiSelect = null;
   let mettiSelectId = 0;
@@ -684,6 +687,7 @@
     node.style.setProperty('background-position', 'center', 'important');
     node.style.setProperty('background-size', 'cover', 'important');
     node.style.setProperty('background-repeat', 'no-repeat', 'important');
+    node.style.setProperty('background-color', '#f0e9df', 'important');
     node.classList.add('has-image');
   };
   const renderVisualNode = async (node, item, layoutClass, emptyLabel) => {
@@ -694,7 +698,7 @@
     const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
     const visualClasses = item && (item.image_path || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
     node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
-    ['background-image', 'background-position', 'background-size', 'background-repeat'].forEach((property) => node.style.removeProperty(property));
+    ['background-image', 'background-position', 'background-size', 'background-repeat', 'background-color'].forEach((property) => node.style.removeProperty(property));
     node.classList.remove('has-image');
     node.innerHTML = '';
     const label = document.createElement('span');
@@ -839,18 +843,78 @@
       output.width = width; output.height = height;
       const outputContext = output.getContext('2d');
       if (!outputContext) return file;
-      outputContext.fillStyle = '#ffffff';
+      const editorialBackground = outputContext.createLinearGradient(0, 0, width, height);
+      editorialBackground.addColorStop(0, '#f7f2ea');
+      editorialBackground.addColorStop(0.56, '#f0e9df');
+      editorialBackground.addColorStop(1, '#e7ded1');
+      outputContext.fillStyle = editorialBackground;
       outputContext.fillRect(0, 0, width, height);
       outputContext.drawImage(canvas, 0, 0);
       const blob = await new Promise((resolve) => output.toBlob(resolve, 'image/jpeg', 0.9));
       if (!blob) return file;
-      return new File([blob], `${String(file.name || 'wardrobe').replace(/\.[^.]+$/, '')}-white.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+      return new File([blob], `${String(file.name || 'wardrobe').replace(/\.[^.]+$/, '')}-metti-editorial.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
     } catch (_) {
       return file;
     } finally {
       URL.revokeObjectURL(objectUrl);
       if (canvas) { canvas.width = 0; canvas.height = 0; }
       if (output) { output.width = 0; output.height = 0; }
+    }
+  };
+  const isPendingMcpImage = (item) => Boolean(item?.id && item?.image_path && item?.metadata?.image_source === 'mcp' && item?.metadata?.image_background !== EDITORIAL_IMAGE_BACKGROUND);
+  const normalizePendingMcpImage = async (item) => {
+    if (!isPendingMcpImage(item) || pendingImageNormalizations.has(item.id)) return false;
+    pendingImageNormalizations.add(item.id);
+    const userId = state.user?.id;
+    const originalPath = item.image_path;
+    let replacementPath = '';
+    try {
+      const sourceUrl = await imageUrl(originalPath);
+      if (!sourceUrl) return false;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      let response;
+      try {
+        response = await fetch(sourceUrl, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!response.ok) return false;
+      const blob = await response.blob();
+      const mimeType = String(blob.type || '').toLowerCase().split(';')[0];
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return false;
+      const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const sourceFile = new File([blob], `mcp-${item.id}.${extension}`, { type: mimeType, lastModified: Date.now() });
+      const processedFile = await prepareWardrobeImage(sourceFile);
+      if (!processedFile || processedFile === sourceFile) return false;
+      if (!userId || state.user?.id !== userId) return false;
+      replacementPath = await supabase.data.uploadWardrobeImage(processedFile, userId, item.id);
+      const metadata = item.metadata && typeof item.metadata === 'object' ? { ...item.metadata } : {};
+      metadata.image_background = EDITORIAL_IMAGE_BACKGROUND;
+      const saved = await supabase.data.updateWardrobeItem(item.id, { image_path: replacementPath, metadata });
+      if (!saved) throw new Error('Не удалось обновить фотографию вещи.');
+      if (originalPath && originalPath !== replacementPath) await supabase.data.removeWardrobeImage(originalPath).catch(() => {});
+      const index = state.wardrobe.findIndex((value) => value.id === item.id);
+      if (index >= 0) state.wardrobe[index] = saved;
+      return true;
+    } catch (_) {
+      if (replacementPath) await supabase.data.removeWardrobeImage(replacementPath).catch(() => {});
+      return false;
+    } finally {
+      pendingImageNormalizations.delete(item.id);
+    }
+  };
+  const normalizePendingMcpImages = async () => {
+    if (!state.user || !supabase?.data) return;
+    const pending = state.wardrobe.filter(isPendingMcpImage).slice(0, 12);
+    let changed = false;
+    for (const item of pending) {
+      if (await normalizePendingMcpImage(item)) changed = true;
+    }
+    if (changed) {
+      await renderWardrobe();
+      await renderHomeCollage();
+      showToast('Фото оформлены в стиле Metti', 'success');
     }
   };
   const renderOutfitCards = (outfits) => {
@@ -904,6 +968,7 @@
   };
   const loadData = async () => {
     if (!state.user || !supabase?.data) return;
+    lastDataSyncAt = Date.now();
     const [wardrobe, outfits, profile] = await Promise.allSettled([supabase.data.listWardrobe(), supabase.data.listSavedOutfits(), supabase.data.getProfile()]);
     if (wardrobe.status === 'fulfilled') state.wardrobe = wardrobe.value || [];
     else showToast('Не удалось загрузить гардероб', 'error');
@@ -916,6 +981,7 @@
     }
     if (!state.currentOutfit) state.currentOutfit = state.outfits[0] || { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) };
     renderProfile(); await renderWardrobe(); renderLooks(); await renderHomeCollage(); updateWeather();
+    void normalizePendingMcpImages();
   };
   const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; state.currentOutfit = { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) }; renderProfile(); renderWardrobe(); renderLooks(); renderHomeCollage(); };
 
@@ -964,13 +1030,14 @@
     const existing = state.wardrobe.find((item) => item.id === form.dataset.itemId && !String(item.id).startsWith('demo-'));
     const file = form.elements.image.files?.[0];
     if (file && file.size > 5 * 1024 * 1024) return setFormStatus('wardrobe-form-status', 'Файл должен быть меньше 5 МБ.', 'error');
-    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Подготавливаю белый фон…' : 'Сохраняю…');
+    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Оформляю фото в стиле Metti…' : 'Сохраняю…');
     let newPath = existing?.image_path || null;
     try {
       const processedFile = file ? await prepareWardrobeImage(file) : null;
       if (processedFile && processedFile.size > 5 * 1024 * 1024) throw new Error('После обработки файл получился больше 5 МБ. Выберите фото поменьше.');
       if (processedFile) { setFormStatus('wardrobe-form-status', 'Загружаю фотографию…'); newPath = await supabase.data.uploadWardrobeImage(processedFile, state.user.id, existing?.id || uuid()); }
       const metadata = existing?.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
+      if (file) { delete metadata.image_source; delete metadata.image_background; }
       metadata.subcategory = subcategory;
       const payload = { user_id: state.user.id, name, category, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null, image_path: newPath, metadata };
       const saved = existing ? await supabase.data.updateWardrobeItem(existing.id, payload) : await supabase.data.saveWardrobeItem(payload);
@@ -1199,6 +1266,6 @@
   else if (supabase?.auth) {
     supabase.auth.restoreSession().then(async (session) => { if (session) { state.user = session.user || supabase.currentUser?.(); if (!state.user) state.user = await supabase.auth.getUser().catch(() => null); await loadData(); } else if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); }).catch(() => { if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); });
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateDate(); updateGreeting(); updateWeather(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateDate(); updateGreeting(); updateWeather(); if (state.user && Date.now() - lastDataSyncAt > 15000) void loadData(); } });
   window.setInterval(() => { if (!document.hidden) { updateDate(); updateGreeting(); } }, 60000);
 })();

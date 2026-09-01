@@ -207,6 +207,17 @@ then stores the user-scoped `image_path` on the wardrobe row. It never stores
 base64 in the database and never returns image bytes; read responses contain a
 short-lived signed `imageUrl` where available.
 
+When an image was added through MCP, the shared wardrobe service marks it with
+an internal `image_source=mcp` and `image_background=pending` metadata value.
+On the next authenticated app sync, the existing browser image flow downloads
+that image, removes a connected plain-color border when possible, composites it
+onto the warm cream editorial background used by the mockup, uploads the
+formatted JPEG to the same private bucket and removes the old object only
+after the new database link succeeds. This is deterministic client-side image
+processing; MCP still does not call an LLM or an image-generation API. If the
+browser cannot process the format or the Storage request fails, the original
+MCP image remains available and can be retried on the next sync.
+
 The accepted inline image formats are JPEG, PNG, WebP, HEIC and HEIF, with a
 default maximum of 5 MiB. A remote `resource_link` is fetched only when its
 HTTPS hostname is explicitly in `MCP_ALLOWED_IMAGE_HOSTS`.

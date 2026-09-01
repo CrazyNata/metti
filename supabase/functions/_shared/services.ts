@@ -3,7 +3,10 @@ import type { UserDataClient } from "./supabase-client.ts";
 import { ImageService, type ImageServiceOptions } from "./image-service.ts";
 import { OutfitService } from "./outfit-service.ts";
 import { ProfileService } from "./profile-service.ts";
-import { WardrobeService } from "./wardrobe-service.ts";
+import {
+  WardrobeService,
+  type WardrobeServiceOptions,
+} from "./wardrobe-service.ts";
 
 export interface ApplicationServices {
   wardrobe: WardrobeService;
@@ -14,6 +17,7 @@ export interface ApplicationServices {
 
 export interface ApplicationServiceOptions {
   image?: ImageServiceOptions;
+  wardrobe?: WardrobeServiceOptions;
 }
 
 export function createApplicationServices(
@@ -22,7 +26,7 @@ export function createApplicationServices(
   options: ApplicationServiceOptions = {},
 ): ApplicationServices {
   const images = new ImageService(client, user, options.image);
-  const wardrobe = new WardrobeService(client, user, images);
+  const wardrobe = new WardrobeService(client, user, images, options.wardrobe);
   return {
     wardrobe,
     images,

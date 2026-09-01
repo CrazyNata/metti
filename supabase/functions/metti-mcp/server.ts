@@ -250,7 +250,10 @@ const servicesFor = (
   createApplicationServices(
     new SupabaseRestClient(config, context.accessToken, fetchImpl),
     context.user,
-    { image: imageOptions ?? imageOptionsFromEnv() },
+    {
+      image: imageOptions ?? imageOptionsFromEnv(),
+      wardrobe: { imageOrigin: "mcp" },
+    },
   );
 
 const categoryAliases: Record<
@@ -405,7 +408,7 @@ export function registerTools(
 
   server.registerTool("create_wardrobe_item", {
     description:
-      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If an image resource is available, first infer only reliable characteristics from it and pass the structured fields plus image; do not invent an unknown brand, material or size. The optional image accepts standard MCP image, resource_link or resource shapes. Do not send user_id: ownership comes from the bearer token. If the host cannot provide the original image, the item is still created and reports imageStatus=pending.",
+      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If an image resource is available, first infer only reliable characteristics from it and pass the structured fields plus image; do not invent an unknown brand, material or size. The optional image accepts standard MCP image, resource_link or resource shapes. An attached photo is automatically queued for the existing app's deterministic Metti editorial-background treatment; no separate image service or LLM is used. Do not send user_id: ownership comes from the bearer token. If the host cannot provide the original image, the item is still created and reports imageStatus=pending.",
     inputSchema: createWardrobeItemSchema,
     annotations: { ...writeAnnotations, idempotentHint: false },
   }, (args) =>
@@ -441,7 +444,7 @@ export function registerTools(
     "attach_image_to_wardrobe_item",
     {
       description:
-        "Attach an available user-provided image resource to an existing wardrobe item owned by the authenticated user. Use this only when the MCP client provides an image, resource_link or embedded resource. The image is validated and stored in the existing private wardrobe Storage bucket; use replace_wardrobe_item_image when the item already has a photo.",
+        "Attach an available user-provided image resource to an existing wardrobe item owned by the authenticated user. Use this only when the MCP client provides an image, resource_link or embedded resource. The image is validated, stored in the existing private wardrobe Storage bucket and queued for the app's deterministic Metti editorial-background treatment; use replace_wardrobe_item_image when the item already has a photo.",
       inputSchema: attachImageSchema,
       annotations: { ...writeAnnotations, idempotentHint: false },
     },
@@ -453,7 +456,7 @@ export function registerTools(
     "replace_wardrobe_item_image",
     {
       description:
-        "Replace the photo of an existing wardrobe item owned by the authenticated user with an available MCP image or resource. The existing private Storage path is updated safely and the item remains usable if the host cannot provide the original image.",
+        "Replace the photo of an existing wardrobe item owned by the authenticated user with an available MCP image or resource. The existing private Storage path is updated safely, the new image is queued for the app's deterministic Metti editorial-background treatment, and the item remains usable if the host cannot provide the original image.",
       inputSchema: attachImageSchema,
       annotations: { ...writeAnnotations, idempotentHint: false },
     },

@@ -54,6 +54,15 @@ export const WARDROBE_SELECT = [
 const PAGE_MAX = 10_000;
 const LIST_MAX = 100;
 
+export interface WardrobeServiceOptions {
+  /**
+   * The MCP path keeps the original upload in the existing bucket and marks
+   * it for the app's deterministic editorial-background pass. The ordinary
+   * app path does not set this marker.
+   */
+  imageOrigin?: "app" | "mcp";
+}
+
 function queryValue(value: string): string {
   return value.replace(/[*,%(),]/g, " ").trim();
 }
@@ -312,7 +321,17 @@ export class WardrobeService {
     private readonly client: UserDataClient,
     private readonly user: AuthenticatedUser,
     private readonly images = new ImageService(client, user),
+    private readonly options: WardrobeServiceOptions = {},
   ) {}
+
+  private markMcpImageMetadata(metadata: unknown): JsonObject | undefined {
+    if (this.options.imageOrigin !== "mcp") return undefined;
+    return {
+      ...asJsonObject(metadata),
+      image_source: "mcp",
+      image_background: "pending",
+    };
+  }
 
   private async withImageUrls(
     rows: WardrobeItemRow[],
@@ -526,6 +545,11 @@ export class WardrobeService {
     const imageResolution = input.image !== undefined
       ? await this.images.resolve(input.image)
       : null;
+    const metadata = wardrobeMetadata({ ...input, name, category }, {}, "active");
+    if (imageResolution?.file) {
+      const imageMetadata = this.markMcpImageMetadata(metadata);
+      if (imageMetadata) Object.assign(metadata, imageMetadata);
+    }
     const payload = {
       user_id: this.user.id,
       name,
@@ -536,7 +560,7 @@ export class WardrobeService {
       brand: optionalString(input.brand, "brand", 120) ?? null,
       notes: optionalString(input.notes, "notes", 1000) ?? null,
       image_path: imagePath ?? null,
-      metadata: wardrobeMetadata({ ...input, name, category }, {}, "active"),
+      metadata,
     };
     const row = await this.client.insertRow<WardrobeItemRow>(
       "wardrobe_items",
@@ -668,11 +692,14 @@ export class WardrobeService {
   private async updateImagePath(
     itemId: string,
     imagePath: string | null,
+    metadata?: JsonObject,
   ): Promise<WardrobeItemRow> {
+    const patch: Record<string, unknown> = { image_path: imagePath };
+    if (metadata !== undefined) patch.metadata = metadata;
     const rows = await this.client.updateRows<WardrobeItemRow>(
       "wardrobe_items",
       new URLSearchParams({ id: `eq.${idValue(itemId, "itemId")}`, limit: "1" }),
-      { image_path: imagePath },
+      patch,
     );
     if (!rows[0]) {
       throw new AppError(
@@ -697,8 +724,9 @@ export class WardrobeService {
         image,
         existingPath,
       );
-      if (uploadedPath !== current.image_path) {
-        await this.updateImagePath(current.id, uploadedPath);
+      const imageMetadata = this.markMcpImageMetadata(current.metadata);
+      if (uploadedPath !== current.image_path || imageMetadata) {
+        await this.updateImagePath(current.id, uploadedPath, imageMetadata);
       }
       return this.actionDto(await this.get(current.id), true, "attached");
     } catch (error) {
@@ -755,7 +783,18 @@ export class WardrobeService {
     }
 
     const imagePath = current.image_path;
-    await this.updateImagePath(current.id, null);
+    const currentMetadata = asJsonObject(current.metadata);
+    const hasMcpImageMetadata =
+      currentMetadata.image_source === "mcp" ||
+      currentMetadata.image_background !== undefined;
+    const metadata = hasMcpImageMetadata
+      ? { ...currentMetadata }
+      : undefined;
+    if (metadata) {
+      delete metadata.image_source;
+      delete metadata.image_background;
+    }
+    await this.updateImagePath(current.id, null, metadata);
     try {
       await this.images.removePath(imagePath);
     } catch (_) {

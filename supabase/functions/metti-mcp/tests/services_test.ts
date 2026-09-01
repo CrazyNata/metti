@@ -246,6 +246,26 @@ Deno.test("wardrobe image operations use one private storage path and compensate
   db.failImageUpload = false;
 });
 
+Deno.test("MCP image uploads are marked for the app editorial background pass", async () => {
+  const db = new MemoryDataClient(userA.id);
+  const services = createApplicationServices(db, userA, {
+    wardrobe: { imageOrigin: "mcp" },
+  });
+  const item = await services.wardrobe.add({
+    name: "MCP blouse",
+    category: "top",
+    image: { type: "image", data: "/9j/2Q==", mimeType: "image/jpeg" },
+  });
+  const metadata = db.wardrobe(item.id)?.metadata as Record<string, unknown>;
+  assertEquals(metadata.image_source, "mcp");
+  assertEquals(metadata.image_background, "pending");
+
+  await services.wardrobe.removeImage(item.id);
+  const removedMetadata = db.wardrobe(item.id)?.metadata as Record<string, unknown>;
+  assertEquals(removedMetadata.image_source, undefined);
+  assertEquals(removedMetadata.image_background, undefined);
+});
+
 Deno.test("remote image resources require an allowlisted HTTPS host", async () => {
   const db = new MemoryDataClient(userA.id);
   let fetchCalls = 0;
