@@ -46,3 +46,7 @@
 .screen[data-screen-id="chat"].active{display:flex;flex-direction:column;height:calc(100% - 42px);min-height:0;padding-bottom:0}
 .screen[data-screen-id="chat"] .chat-log{flex:1 1 auto;min-height:0;overflow-y:auto;padding-bottom:22px}
 .screen[data-screen-id="chat"] .chat-compose{position:relative;flex:0 0 auto;z-index:3}
+/* Keep the chat composer close to the bottom navigation and replace the broken glyph with a pen icon. */
+.screen[data-screen-id="chat"] .chat-compose{margin-top:auto}
+.chat-pen{display:grid;width:24px;height:24px;place-items:center;color:#8A7B64}
+.chat-pen svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.55;stroke-linecap:round;stroke-linejoin:round}
