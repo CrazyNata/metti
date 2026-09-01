@@ -10,6 +10,8 @@ const config: SupabaseConfig = {
   publishableKey: "publishable-test-key",
 };
 
+const jpegData = "\/9j\/2Q==";
+
 function dependencies(
   db: MemoryDataClient,
   fetchImpl: typeof fetch,
@@ -124,7 +126,7 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assertEquals(listed.response.status, 200);
   const tools = listed.payload.result.tools as Array<Record<string, any>>;
   const names = tools.map((tool) => tool.name);
-  assertEquals(names.length, 17);
+  assertEquals(names.length, 20);
   for (const tool of tools) {
     assert(
       typeof tool.description === "string" && tool.description.length > 20,
@@ -133,8 +135,17 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   }
   assert(names.includes("get_profile"));
   assert(names.includes("search_wardrobe"));
+  assert(names.includes("create_wardrobe_item"));
+  assert(names.includes("attach_image_to_wardrobe_item"));
+  assert(names.includes("replace_wardrobe_item_image"));
+  assert(names.includes("remove_wardrobe_item_image"));
   assert(names.includes("save_outfit"));
+  assert(!names.includes("add_wardrobe_item"));
   assert(!names.includes("ask_ai_stylist"));
+
+  const createTool = tools.find((tool) => tool.name === "create_wardrobe_item");
+  assert(createTool?.inputSchema.required.includes("name"));
+  assert(createTool?.inputSchema.required.includes("category"));
 });
 
 Deno.test("authenticated read and write tool calls use shared data and return structured results", async () => {
@@ -183,9 +194,37 @@ Deno.test("authenticated read and write tool calls use shared data and return st
     ["a-jeans"],
   );
 
+  const created = await mcpRequest(db, {
+    jsonrpc: "2.0",
+    id: 45,
+    method: "tools/call",
+    params: {
+      name: "create_wardrobe_item",
+      arguments: {
+        name: "Black blazer",
+        category: "outerwear",
+        subcategory: "blazer",
+        colors: ["чёрный"],
+        seasons: ["осень"],
+        styles: ["Minimal"],
+        image: { type: "image", data: jpegData, mimeType: "image/jpeg" },
+      },
+    },
+  });
+  assertEquals(created.payload.result.structuredContent.imageAttached, true);
+  assertEquals(
+    created.payload.result.structuredContent.imageStatus,
+    "attached",
+  );
+  const createdId = created.payload.result.structuredContent.id as string;
+  assertEquals(db.wardrobe(createdId)?.category, "outer");
+  assertEquals(db.wardrobe(createdId)?.color, "black");
+  assert(db.wardrobe(createdId)?.image_path?.startsWith(`${userA.id}/`));
+  assertEquals(db.uploadedImages.size, 1);
+
   const foreign = await mcpRequest(db, {
     jsonrpc: "2.0",
-    id: 5,
+    id: 6,
     method: "tools/call",
     params: { name: "get_wardrobe_item", arguments: { itemId: "b-item" } },
   });
@@ -197,7 +236,7 @@ Deno.test("authenticated read and write tool calls use shared data and return st
 
   const saved = await mcpRequest(db, {
     jsonrpc: "2.0",
-    id: 6,
+    id: 7,
     method: "tools/call",
     params: {
       name: "save_outfit",
@@ -215,7 +254,7 @@ Deno.test("authenticated read and write tool calls use shared data and return st
 
   const favorited = await mcpRequest(db, {
     jsonrpc: "2.0",
-    id: 7,
+    id: 8,
     method: "tools/call",
     params: {
       name: "favorite_outfit",
@@ -225,7 +264,7 @@ Deno.test("authenticated read and write tool calls use shared data and return st
   assertEquals(favorited.payload.result.isError, undefined);
   const favoriteList = await mcpRequest(db, {
     jsonrpc: "2.0",
-    id: 8,
+    id: 9,
     method: "tools/call",
     params: {
       name: "list_outfits",
@@ -241,7 +280,7 @@ Deno.test("authenticated read and write tool calls use shared data and return st
 
   const invalid = await mcpRequest(db, {
     jsonrpc: "2.0",
-    id: 9,
+    id: 10,
     method: "tools/call",
     params: {
       name: "get_wardrobe_item",

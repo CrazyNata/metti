@@ -1,6 +1,9 @@
 import { AppError } from "../../_shared/errors.ts";
 import { createApplicationServices } from "../../_shared/services.ts";
-import type { AuthenticatedUser } from "../../_shared/types.ts";
+import type {
+  AuthenticatedUser,
+  WardrobeImageInput,
+} from "../../_shared/types.ts";
 import { assert, assertEquals, assertRejects } from "./assert.ts";
 import { MemoryDataClient, outfitRow, wardrobeRow } from "./fake-client.ts";
 
@@ -102,9 +105,15 @@ Deno.test("wardrobe service adds, partially updates and archives an item", async
   const updated = await services.wardrobe.update(added.id, {
     color: "espresso",
     favorite: true,
+    seasons: ["осень"],
+    styles: ["Smart Casual"],
+    length: "Midi",
   });
   assertEquals(updated.color, "espresso");
   assertEquals(updated.favorite, true);
+  assertEquals(updated.seasons, ["autumn"]);
+  assertEquals(updated.styles, ["smart-casual"]);
+  assertEquals(updated.length, "midi");
 
   const archived = await services.wardrobe.archive(added.id);
   assertEquals(archived.status, "archived");
@@ -116,6 +125,166 @@ Deno.test("wardrobe service adds, partially updates and archives an item", async
     [added.id],
   );
   assertEquals((await services.wardrobe.archive(added.id)).status, "archived");
+});
+
+Deno.test("wardrobe image operations use one private storage path and compensate failures", async () => {
+  const db = new MemoryDataClient(userA.id);
+  const services = createApplicationServices(db, userA);
+  const inlineImage: WardrobeImageInput = {
+    type: "image",
+    data: "/9j/2Q==",
+    mimeType: "image/jpeg",
+  };
+
+  const created = await services.wardrobe.add({
+    name: "Image blouse",
+    category: "top",
+    colors: ["black"],
+    image: inlineImage,
+  });
+  assertEquals(created.imageAttached, true);
+  assertEquals(created.imageStatus, "attached");
+  const originalPath = db.wardrobe(created.id)?.image_path;
+  assert(originalPath?.startsWith(`${userA.id}/`));
+  assertEquals(db.uploadedImages.size, 1);
+  assertEquals(
+    (await services.wardrobe.search({ colors: ["ЧЁРНЫЙ"] })).items.map((item) =>
+      item.id
+    ),
+    [created.id],
+  );
+  await services.wardrobe.removeImage(created.id);
+  assertEquals(db.uploadedImages.size, 0);
+
+  const withoutImage = await services.wardrobe.add({
+    name: "Image-free blouse",
+    category: "top",
+  });
+  assertEquals(withoutImage.imageAttached, false);
+  assertEquals(withoutImage.imageStatus, "none");
+  const attached = await services.wardrobe.attachImage(withoutImage.id, {
+    type: "resource",
+    resource: {
+      uri: "mcp://attachment/image-1",
+      mimeType: "image/jpeg",
+      blob: "/9j/2Q==",
+    },
+  });
+  assertEquals(attached.imageAttached, true);
+  const attachedPath = db.wardrobe(withoutImage.id)?.image_path;
+  assert(attachedPath?.startsWith(`${userA.id}/`));
+
+  const replaced = await services.wardrobe.replaceImage(
+    withoutImage.id,
+    inlineImage,
+  );
+  assertEquals(replaced.imageAttached, true);
+  assertEquals(db.uploadedImages.get(`wardrobe/${attachedPath}`)?.upsert, true);
+
+  const removed = await services.wardrobe.removeImage(withoutImage.id);
+  assertEquals(removed.imageStatus, "none");
+  assertEquals(db.wardrobe(withoutImage.id)?.image_path, null);
+  assert(db.removedImagePaths.includes(attachedPath!));
+
+  db.seedWardrobe(wardrobeRow("b-image", userB.id, { category: "top" }));
+  await assertRejects(
+    () => services.wardrobe.attachImage("b-image", inlineImage),
+    appError("not_found"),
+    "A user must not attach an image to another user item.",
+  );
+
+  const invalidMime = {
+    type: "image",
+    data: "/9j/2Q==",
+    mimeType: "image/gif",
+  } as unknown as WardrobeImageInput;
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "Invalid",
+        category: "top",
+        image: invalidMime,
+      }),
+    appError("invalid_input"),
+    "Unsupported image MIME types must be rejected.",
+  );
+
+  const smallServices = createApplicationServices(db, userA, {
+    image: { maxBytes: 3 },
+  });
+  await assertRejects(
+    () =>
+      smallServices.wardrobe.add({
+        name: "Large",
+        category: "top",
+        image: inlineImage,
+      }),
+    appError("invalid_input"),
+    "Oversized images must be rejected.",
+  );
+
+  db.failImageLinkUpdate = true;
+  const compensated = await services.wardrobe.add({
+    name: "Compensated image",
+    category: "top",
+    image: inlineImage,
+  });
+  assertEquals(compensated.imageAttached, false);
+  assertEquals(compensated.imageStatus, "pending");
+  assertEquals(db.wardrobe(compensated.id)?.image_path, null);
+  assertEquals(db.uploadedImages.size, 0);
+
+  db.failImageUpload = true;
+  const failedUpload = await services.wardrobe.add({
+    name: "Failed upload",
+    category: "top",
+    image: inlineImage,
+  });
+  assertEquals(failedUpload.imageAttached, false);
+  assertEquals(failedUpload.imageStatus, "pending");
+  assertEquals(db.wardrobe(failedUpload.id)?.image_path, null);
+  db.failImageUpload = false;
+});
+
+Deno.test("remote image resources require an allowlisted HTTPS host", async () => {
+  const db = new MemoryDataClient(userA.id);
+  let fetchCalls = 0;
+  const remoteFetch = async (input: RequestInfo | URL): Promise<Response> => {
+    fetchCalls += 1;
+    const url = new URL(input.toString());
+    if (url.hostname !== "images.example") {
+      return new Response("blocked", { status: 404 });
+    }
+    return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+      headers: { "content-type": "image/jpeg" },
+    });
+  };
+  const services = createApplicationServices(db, userA, {
+    image: { allowedHosts: ["images.example"], fetchImpl: remoteFetch },
+  });
+
+  const pending = await services.wardrobe.add({
+    name: "Unconfigured remote",
+    category: "top",
+    image: {
+      type: "resource_link",
+      uri: "https://not-allowlisted.example/image.jpg",
+      mimeType: "image/jpeg",
+    },
+  });
+  assertEquals(pending.imageStatus, "pending");
+  assertEquals(fetchCalls, 0);
+
+  const attached = await services.wardrobe.add({
+    name: "Allowlisted remote",
+    category: "top",
+    image: {
+      type: "resource_link",
+      uri: "https://images.example/image.jpg",
+    },
+  });
+  assertEquals(attached.imageStatus, "attached");
+  assertEquals(fetchCalls, 1);
 });
 
 Deno.test("profile and outfit services share ownership, metadata and wear history", async () => {

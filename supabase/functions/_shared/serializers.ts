@@ -80,8 +80,11 @@ export function wardrobeItemFromRow(
   const metadata = asJsonObject(row.metadata);
   const color = firstString(row.color, metadata.color);
   const colors = stringList(metadata.colors ?? (color ? [color] : []));
+  const season = firstString(row.season, metadata.season);
+  const seasons = stringList(metadata.seasons ?? (season ? [season] : []));
   const occasions = stringList(metadata.occasions ?? metadata.occasion);
   const tags = stringList(metadata.tags);
+  const styles = stringList(metadata.styles);
 
   return {
     id: row.id,
@@ -92,10 +95,13 @@ export function wardrobeItemFromRow(
     color,
     colors,
     size: asString(row.size),
-    season: asString(row.season),
+    season,
+    seasons,
     material: asString(metadata.material),
     pattern: asString(metadata.pattern),
     fit: asString(metadata.fit),
+    length: asString(metadata.length),
+    styles,
     occasions,
     tags,
     notes: asString(row.notes),

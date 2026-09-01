@@ -166,6 +166,201 @@ export function cloneMetadata(value: unknown): JsonObject {
   return { ...asRecord(value) } as JsonObject;
 }
 
+type WardrobeNormalizedField =
+  | "color"
+  | "season"
+  | "subcategory"
+  | "style"
+  | "tag"
+  | "length";
+
+function tokenKey(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/[‐‑–—-]/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+const COLOR_ALIASES: Record<string, string> = {
+  black: "black",
+  "jet black": "black",
+  черный: "black",
+  чёрный: "black",
+  черная: "black",
+  чёрная: "black",
+  черное: "black",
+  чёрное: "black",
+  черные: "black",
+  чёрные: "black",
+  white: "white",
+  белый: "white",
+  белая: "white",
+  белое: "white",
+  белые: "white",
+  beige: "beige",
+  бежевый: "beige",
+  бежевая: "beige",
+  бежевое: "beige",
+  cream: "cream",
+  молочный: "cream",
+  молочная: "cream",
+  brown: "brown",
+  коричневый: "brown",
+  коричневая: "brown",
+  burgundy: "burgundy",
+  wine: "burgundy",
+  бордовый: "burgundy",
+  бордовая: "burgundy",
+  винный: "burgundy",
+  navy: "navy",
+  "navy blue": "navy",
+  "темно-синий": "navy",
+  "темно синий": "navy",
+  "тёмно-синий": "navy",
+  "тёмно синий": "navy",
+  blue: "blue",
+  "dark blue": "blue",
+  синий: "blue",
+  синяя: "blue",
+  голубой: "blue",
+  green: "green",
+  зеленый: "green",
+  зелёный: "green",
+  red: "red",
+  красный: "red",
+  pink: "pink",
+  розовый: "pink",
+  purple: "purple",
+  фиолетовый: "purple",
+  yellow: "yellow",
+  желтый: "yellow",
+  жёлтый: "yellow",
+  orange: "orange",
+  оранжевый: "orange",
+  gray: "gray",
+  grey: "gray",
+  серый: "gray",
+  taupe: "taupe",
+  тауп: "taupe",
+  золотой: "gold",
+  gold: "gold",
+  серебряный: "silver",
+  silver: "silver",
+};
+
+const SEASON_ALIASES: Record<string, string> = {
+  spring: "spring",
+  весна: "spring",
+  summer: "summer",
+  лето: "summer",
+  autumn: "autumn",
+  fall: "autumn",
+  осень: "autumn",
+  winter: "winter",
+  зима: "winter",
+  "all season": "all-season",
+  "all seasons": "all-season",
+  "year round": "all-season",
+  "круглый год": "all-season",
+};
+
+const SUBCATEGORY_ALIASES: Record<string, string> = {
+  "t shirt": "tshirt",
+  tshirt: "tshirt",
+  футболка: "tshirt",
+  футболки: "tshirt",
+  sweater: "sweater",
+  свитер: "sweater",
+  кофта: "sweater",
+  hoodie: "hoodie",
+  худи: "hoodie",
+  толстовка: "hoodie",
+  blazer: "blazer",
+  пиджак: "blazer",
+  жакет: "blazer",
+  shirt: "shirt",
+  рубашка: "shirt",
+  dress: "dress",
+  платье: "dress",
+  outerwear: "outerwear",
+  coat: "outerwear",
+  пальто: "outerwear",
+  куртка: "outerwear",
+  плащ: "outerwear",
+  trench: "trench",
+  "trench coat": "trench",
+  тренч: "trench",
+  skirt: "skirt",
+  юбка: "skirt",
+  shorts: "shorts",
+  шорты: "shorts",
+  pants: "pants",
+  trousers: "pants",
+  брюки: "pants",
+  штаны: "pants",
+  jeans: "jeans",
+  джинсы: "jeans",
+  sneakers: "sneakers",
+  кеды: "sneakers",
+  кроссовки: "sneakers",
+  pumps: "pumps",
+  туфли: "pumps",
+  boots: "boots",
+  сапоги: "boots",
+  "ankle boots": "ankle-boots",
+  ботинки: "ankle-boots",
+  bag: "bag",
+  сумка: "bag",
+  сумки: "bag",
+  "shoulder bag": "shoulder_bag",
+  glasses: "glasses",
+  очки: "glasses",
+  headwear: "headwear",
+  "головной убор": "headwear",
+  jewelry: "jewelry",
+  jewellery: "jewelry",
+  украшения: "jewelry",
+  бижутерия: "jewelry",
+};
+
+function normalizeWardrobeToken(
+  value: string,
+  field: WardrobeNormalizedField,
+): string {
+  const normalized = value.normalize("NFKC").replace(/\s+/g, " ").trim();
+  const key = tokenKey(normalized);
+  if (field === "color") return COLOR_ALIASES[key] ?? key;
+  if (field === "season") return SEASON_ALIASES[key] ?? key;
+  if (field === "subcategory") {
+    return SUBCATEGORY_ALIASES[key] ?? key.replace(/\s+/g, "_");
+  }
+  if (field === "style" || field === "tag") return key.replace(/\s+/g, "-");
+  return key;
+}
+
+export function normalizeWardrobeString(
+  value: unknown,
+  field: string,
+  normalizedField: WardrobeNormalizedField,
+  max = 80,
+): string | null | undefined {
+  const result = optionalString(value, field, max);
+  if (result === undefined || result === null) return result;
+  return normalizeWardrobeToken(result, normalizedField) || null;
+}
+
+export function normalizeWardrobeArray(
+  value: unknown,
+  field: string,
+  normalizedField: WardrobeNormalizedField,
+  maxItems = 30,
+  maxLength = 80,
+): string[] | undefined {
+  const values = stringArray(value, field, maxItems, maxLength);
+  if (values === undefined) return undefined;
+  return [...new Set(values.map((item) =>
+    normalizeWardrobeToken(item, normalizedField)
+  ).filter(Boolean))];
+}
+
 function setOptional(
   metadata: Record<string, unknown>,
   key: string,
@@ -185,7 +380,7 @@ export function wardrobeMetadata(
   setOptional(
     metadata,
     "subcategory",
-    optionalString(input.subcategory, "subcategory", 80),
+    normalizeWardrobeString(input.subcategory, "subcategory", "subcategory"),
   );
   setOptional(
     metadata,
@@ -199,6 +394,55 @@ export function wardrobeMetadata(
   );
   setOptional(metadata, "fit", optionalString(input.fit, "fit", 80));
 
+  const length = normalizeWardrobeString(
+    input.length,
+    "length",
+    "length",
+    80,
+  );
+  setOptional(metadata, "length", length);
+
+  const seasons = normalizeWardrobeArray(
+    input.seasons,
+    "seasons",
+    "season",
+    8,
+    40,
+  );
+  const season = normalizeWardrobeString(
+    input.season,
+    "season",
+    "season",
+    80,
+  );
+  if (seasons !== undefined) {
+    metadata.seasons = seasons;
+    setOptional(metadata, "season", seasons[0] ?? null);
+  }
+  if (season !== undefined) {
+    setOptional(metadata, "season", season);
+    if (season === null) delete metadata.seasons;
+    else {
+      const existingSeasons = Array.isArray(metadata.seasons)
+        && seasons !== undefined
+        ? metadata.seasons.filter((item): item is string => typeof item === "string")
+        : [];
+      metadata.seasons = [
+        season,
+        ...existingSeasons.filter((item) => item !== season),
+      ];
+    }
+  }
+
+  const styles = normalizeWardrobeArray(
+    input.styles,
+    "styles",
+    "style",
+    12,
+    60,
+  );
+  if (styles !== undefined) metadata.styles = styles;
+
   const occasions = stringArray(input.occasions, "occasions", 12, 60);
   const occasion = optionalString(input.occasion, "occasion", 60);
   if (occasions !== undefined) {
@@ -211,10 +455,31 @@ export function wardrobeMetadata(
     else if (occasions === undefined) metadata.occasions = [occasion];
   }
 
-  const colors = stringArray(input.colors, "colors", 12, 50);
+  const colors = normalizeWardrobeArray(
+    input.colors,
+    "colors",
+    "color",
+    12,
+    50,
+  );
   if (colors !== undefined) setOptional(metadata, "colors", colors);
+  const color = normalizeWardrobeString(input.color, "color", "color", 80);
+  if (color !== undefined) {
+    setOptional(metadata, "color", color);
+    if (color === null) delete metadata.colors;
+    else {
+      const existingColors = Array.isArray(metadata.colors)
+        && colors !== undefined
+        ? metadata.colors.filter((item): item is string => typeof item === "string")
+        : [];
+      metadata.colors = [
+        color,
+        ...existingColors.filter((item) => item !== color),
+      ];
+    }
+  }
   if (input.favorite !== undefined) metadata.favorite = Boolean(input.favorite);
-  const tags = stringArray(input.tags, "tags", 20, 50);
+  const tags = normalizeWardrobeArray(input.tags, "tags", "tag", 20, 50);
   if (tags !== undefined) metadata.tags = tags;
   if (status) metadata.status = status;
   return metadata as JsonObject;

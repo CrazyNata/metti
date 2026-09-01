@@ -1,4 +1,5 @@
 import { AppError } from "./errors.ts";
+import { ImageService, type PreparedImage } from "./image-service.ts";
 import {
   asJsonObject,
   stringList,
@@ -10,6 +11,8 @@ import {
   type JsonObject,
   type Page,
   WARDROBE_CATEGORIES,
+  type WardrobeImageInput,
+  type WardrobeItemActionDto,
   type WardrobeItemDto,
   type WardrobeItemInput,
   type WardrobeItemRow,
@@ -21,12 +24,13 @@ import {
   idValue,
   limitValue,
   lower,
+  normalizeWardrobeArray,
+  normalizeWardrobeString,
   optionalString,
   pageValue,
   requiredString,
   safeImagePath,
   searchTerm,
-  stringArray,
   wardrobeMetadata,
 } from "./validation.ts";
 
@@ -55,13 +59,21 @@ function queryValue(value: string): string {
 }
 
 function categoryValue(value: unknown): WardrobeItemInput["category"] {
+  const aliases: Record<string, WardrobeItemInput["category"]> = {
+    outerwear: "outer",
+    jeans: "bottom",
+    bag: "accessory",
+  };
+  const normalized = typeof value === "string"
+    ? aliases[value.trim().toLocaleLowerCase()] ?? value.trim()
+    : value;
   if (
-    typeof value !== "string" ||
-    !WARDROBE_CATEGORIES.includes(value as WardrobeItemInput["category"])
+    typeof normalized !== "string" ||
+    !WARDROBE_CATEGORIES.includes(normalized as WardrobeItemInput["category"])
   ) {
     throw new AppError("invalid_input", "category is invalid.");
   }
-  return value as WardrobeItemInput["category"];
+  return normalized as WardrobeItemInput["category"];
 }
 
 function hasOwn(value: object, key: string): boolean {
@@ -85,6 +97,7 @@ function rowMatches(
   ) return false;
   const availableColors = [
     ...stringList(metadata.colors),
+    ...stringList(metadata.color),
     ...stringList(row.color),
   ];
   const colors = options.colors?.length
@@ -102,6 +115,11 @@ function rowMatches(
     : options.season
     ? [options.season]
     : [];
+  const availableSeasons = [
+    ...stringList(metadata.seasons),
+    ...stringList(metadata.season),
+    ...stringList(row.season),
+  ];
   if (
     colors.length &&
     !colors.some((value) =>
@@ -116,7 +134,11 @@ function rowMatches(
   ) return false;
   if (
     seasons.length &&
-    !seasons.some((value) => lower(row.season).includes(lower(value)))
+    !seasons.some((value) =>
+      availableSeasons.some((candidate) =>
+        lower(candidate).includes(lower(value))
+      )
+    )
   ) return false;
   const occasions = options.occasions?.length
     ? options.occasions
@@ -138,6 +160,23 @@ function rowMatches(
     const tags = stringList(metadata.tags).map(lower);
     if (!options.tags.every((tag) => tags.includes(lower(tag)))) return false;
   }
+  const styles = options.styles?.length
+    ? options.styles
+    : options.style
+    ? [options.style]
+    : [];
+  if (
+    styles.length &&
+    !styles.some((style) =>
+      stringList(metadata.styles).some((candidate) =>
+        lower(candidate) === lower(style)
+      )
+    )
+  ) return false;
+  if (
+    options.length &&
+    lower(metadata.length) !== lower(options.length)
+  ) return false;
   if (options.query) {
     const term = lower(options.query);
     const searchable = [
@@ -148,6 +187,14 @@ function rowMatches(
       row.season,
       row.notes,
       metadata.subcategory,
+      metadata.material,
+      metadata.pattern,
+      metadata.fit,
+      metadata.length,
+      ...stringList(metadata.colors),
+      ...stringList(metadata.seasons),
+      ...stringList(metadata.styles),
+      ...stringList(metadata.tags),
     ]
       .map(lower).join(" ");
     if (!searchable.includes(term)) return false;
@@ -161,9 +208,12 @@ function hasWardrobeExtensions(
   return [
     "subcategory",
     "colors",
+    "seasons",
     "material",
     "pattern",
     "fit",
+    "length",
+    "styles",
     "occasion",
     "occasions",
     "tags",
@@ -171,10 +221,97 @@ function hasWardrobeExtensions(
   ].some((key) => hasOwn(input, key));
 }
 
+function normalizeListOptions(
+  options: WardrobeListOptions,
+): WardrobeListOptions {
+  const normalized: WardrobeListOptions = { ...options };
+  if (options.category !== undefined) {
+    normalized.category = categoryValue(options.category);
+  }
+  if (hasOwn(options, "subcategory")) {
+    normalized.subcategory = normalizeWardrobeString(
+      options.subcategory,
+      "subcategory",
+      "subcategory",
+      80,
+    ) ?? undefined;
+  }
+  if (hasOwn(options, "color")) {
+    normalized.color = normalizeWardrobeString(
+      options.color,
+      "color",
+      "color",
+      80,
+    ) ?? undefined;
+  }
+  if (options.colors !== undefined) {
+    normalized.colors = normalizeWardrobeArray(
+      options.colors,
+      "colors",
+      "color",
+      12,
+      50,
+    ) ?? [];
+  }
+  if (hasOwn(options, "season")) {
+    normalized.season = normalizeWardrobeString(
+      options.season,
+      "season",
+      "season",
+      80,
+    ) ?? undefined;
+  }
+  if (options.seasons !== undefined) {
+    normalized.seasons = normalizeWardrobeArray(
+      options.seasons,
+      "seasons",
+      "season",
+      12,
+      80,
+    ) ?? [];
+  }
+  if (hasOwn(options, "style")) {
+    normalized.style = normalizeWardrobeString(
+      options.style,
+      "style",
+      "style",
+      80,
+    ) ?? undefined;
+  }
+  if (options.styles !== undefined) {
+    normalized.styles = normalizeWardrobeArray(
+      options.styles,
+      "styles",
+      "style",
+      12,
+      60,
+    ) ?? [];
+  }
+  if (hasOwn(options, "length")) {
+    normalized.length = normalizeWardrobeString(
+      options.length,
+      "length",
+      "length",
+      80,
+    ) ?? undefined;
+  }
+  if (options.tags !== undefined) {
+    normalized.tags = normalizeWardrobeArray(
+      options.tags,
+      "tags",
+      "tag",
+      20,
+      50,
+    ) ?? [];
+  }
+  return normalized;
+}
+
 export class WardrobeService {
   constructor(
     private readonly client: UserDataClient,
     private readonly user: AuthenticatedUser,
+    private readonly images = new ImageService(client, user),
   ) {}
 
   private async withImageUrls(
@@ -197,6 +334,14 @@ export class WardrobeService {
         row.image_path ? urls.get(row.image_path) ?? null : null,
       )
     );
+  }
+
+  private actionDto(
+    item: WardrobeItemDto,
+    imageAttached: boolean,
+    imageStatus: WardrobeItemActionDto["imageStatus"],
+  ): WardrobeItemActionDto {
+    return { ...item, imageAttached, imageStatus };
   }
 
   private baseQuery(options: WardrobeListOptions): URLSearchParams {
@@ -238,6 +383,12 @@ export class WardrobeService {
     if (options.tags?.length) {
       query.set("metadata->tags", `cs.${JSON.stringify(options.tags)}`);
     }
+    if (options.style) {
+      query.set("metadata->styles", `cs.${JSON.stringify([options.style])}`);
+    }
+    if (options.length) {
+      query.set("metadata->>length", `eq.${queryValue(options.length)}`);
+    }
     if (options.query) {
       const term = queryValue(options.query);
       query.set(
@@ -251,13 +402,14 @@ export class WardrobeService {
   async list(
     options: WardrobeListOptions = {},
   ): Promise<Page<WardrobeItemDto>> {
-    const page = pageValue(options.page, 1, PAGE_MAX);
-    const limit = limitValue(options.limit, 40, LIST_MAX);
+    const normalizedOptions = normalizeListOptions(options);
+    const page = pageValue(normalizedOptions.page, 1, PAGE_MAX);
+    const limit = limitValue(normalizedOptions.limit, 40, LIST_MAX);
     const rows = await this.client.listRows<WardrobeItemRow>(
       "wardrobe_items",
-      this.baseQuery(options),
+      this.baseQuery(normalizedOptions),
     );
-    const matched = rows.filter((row) => rowMatches(row, options));
+    const matched = rows.filter((row) => rowMatches(row, normalizedOptions));
     const pageRows = matched.slice(0, limit);
     const items = await this.withImageUrls(pageRows);
     const hasMore = rows.length > limit || matched.length > limit;
@@ -340,19 +492,47 @@ export class WardrobeService {
     );
   }
 
-  async add(input: WardrobeItemInput): Promise<WardrobeItemDto> {
+  async add(input: WardrobeItemInput): Promise<WardrobeItemActionDto> {
     const name = requiredString(input.name, "name", 160);
     const category = categoryValue(input.category);
-    const color = optionalString(input.color, "color", 80);
-    const colors = stringArray(input.colors, "colors", 12, 50);
+    const color = normalizeWardrobeString(input.color, "color", "color", 80);
+    const colors = normalizeWardrobeArray(
+      input.colors,
+      "colors",
+      "color",
+      12,
+      50,
+    );
+    const season = normalizeWardrobeString(
+      input.season,
+      "season",
+      "season",
+      80,
+    );
+    const seasons = normalizeWardrobeArray(
+      input.seasons,
+      "seasons",
+      "season",
+      8,
+      40,
+    );
     const imagePath = safeImagePath(input.imagePath, this.user.id);
+    if (input.image !== undefined && imagePath) {
+      throw new AppError(
+        "invalid_input",
+        "Use image or imagePath, not both.",
+      );
+    }
+    const imageResolution = input.image !== undefined
+      ? await this.images.resolve(input.image)
+      : null;
     const payload = {
       user_id: this.user.id,
       name,
       category,
       color: color === undefined ? colors?.[0] ?? null : color,
       size: optionalString(input.size, "size", 40) ?? null,
-      season: optionalString(input.season, "season", 80) ?? null,
+      season: season === undefined ? seasons?.[0] ?? null : season,
       brand: optionalString(input.brand, "brand", 120) ?? null,
       notes: optionalString(input.notes, "notes", 1000) ?? null,
       image_path: imagePath ?? null,
@@ -369,7 +549,40 @@ export class WardrobeService {
         502,
       );
     }
-    return this.get(row.id);
+    const withoutImage = () => this.get(row.id);
+    if (!imageResolution?.file) {
+      return this.actionDto(
+        await withoutImage(),
+        Boolean(imagePath),
+        imagePath ? "attached" : input.image !== undefined ? "pending" : "none",
+      );
+    }
+
+    let uploadedPath: string | null = null;
+    try {
+      uploadedPath = await this.images.uploadForItem(
+        row.id,
+        imageResolution.file,
+      );
+      const updated = await this.client.updateRows<WardrobeItemRow>(
+        "wardrobe_items",
+        new URLSearchParams({ id: `eq.${idValue(row.id, "itemId")}`, limit: "1" }),
+        { image_path: uploadedPath },
+      );
+      if (!updated[0]) {
+        throw new AppError(
+          "data_access_error",
+          "Не удалось привязать фотографию к вещи.",
+          502,
+        );
+      }
+      return this.actionDto(await withoutImage(), true, "attached");
+    } catch (_) {
+      // The item remains valid without a photo. Remove a successfully uploaded
+      // object if the database link could not be written, so no orphan is left.
+      if (uploadedPath) await this.images.removePath(uploadedPath).catch(() => {});
+      return this.actionDto(await withoutImage(), false, "pending");
+    }
   }
 
   async update(
@@ -385,13 +598,41 @@ export class WardrobeService {
       patch.category = categoryValue(input.category);
     }
     if (hasOwn(input, "color")) {
-      patch.color = optionalString(input.color, "color", 80) ?? null;
+      patch.color = normalizeWardrobeString(
+        input.color,
+        "color",
+        "color",
+        80,
+      ) ?? null;
+    } else if (hasOwn(input, "colors")) {
+      const colors = normalizeWardrobeArray(
+        input.colors,
+        "colors",
+        "color",
+        12,
+        50,
+      );
+      patch.color = colors?.[0] ?? null;
     }
     if (hasOwn(input, "size")) {
       patch.size = optionalString(input.size, "size", 40) ?? null;
     }
     if (hasOwn(input, "season")) {
-      patch.season = optionalString(input.season, "season", 80) ?? null;
+      patch.season = normalizeWardrobeString(
+        input.season,
+        "season",
+        "season",
+        80,
+      ) ?? null;
+    } else if (hasOwn(input, "seasons")) {
+      const seasons = normalizeWardrobeArray(
+        input.seasons,
+        "seasons",
+        "season",
+        8,
+        40,
+      );
+      patch.season = seasons?.[0] ?? null;
     }
     if (hasOwn(input, "brand")) {
       patch.brand = optionalString(input.brand, "brand", 120) ?? null;
@@ -422,6 +663,115 @@ export class WardrobeService {
       throw new AppError("not_found", "Wardrobe item not found.", 404);
     }
     return this.get(rows[0].id);
+  }
+
+  private async updateImagePath(
+    itemId: string,
+    imagePath: string | null,
+  ): Promise<WardrobeItemRow> {
+    const rows = await this.client.updateRows<WardrobeItemRow>(
+      "wardrobe_items",
+      new URLSearchParams({ id: `eq.${idValue(itemId, "itemId")}`, limit: "1" }),
+      { image_path: imagePath },
+    );
+    if (!rows[0]) {
+      throw new AppError(
+        "not_found",
+        "Wardrobe item not found.",
+        404,
+      );
+    }
+    return rows[0];
+  }
+
+  private async saveResolvedImage(
+    current: WardrobeItemRow,
+    image: PreparedImage,
+    replace: boolean,
+  ): Promise<WardrobeItemActionDto> {
+    const existingPath = replace ? current.image_path : null;
+    let uploadedPath: string | null = null;
+    try {
+      uploadedPath = await this.images.uploadForItem(
+        current.id,
+        image,
+        existingPath,
+      );
+      if (uploadedPath !== current.image_path) {
+        await this.updateImagePath(current.id, uploadedPath);
+      }
+      return this.actionDto(await this.get(current.id), true, "attached");
+    } catch (error) {
+      // Replacing an existing path uses Storage upsert, so deleting it here
+      // would remove the previous image after a successful overwrite. Only a
+      // newly-created object needs compensation.
+      if (uploadedPath && uploadedPath !== current.image_path) {
+        await this.images.removePath(uploadedPath).catch(() => {});
+      }
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        "data_access_error",
+        "Не удалось прикрепить фотографию.",
+        502,
+      );
+    }
+  }
+
+  async attachImage(
+    itemId: unknown,
+    imageInput: WardrobeImageInput,
+  ): Promise<WardrobeItemActionDto> {
+    const current = await this.getRow(itemId);
+    if (current.image_path) {
+      throw new AppError(
+        "conflict",
+        "This item already has a photo. Use replace_wardrobe_item_image.",
+        409,
+      );
+    }
+    const resolution = await this.images.resolve(imageInput);
+    if (!resolution.file) {
+      return this.actionDto(await this.get(current.id), false, "pending");
+    }
+    return this.saveResolvedImage(current, resolution.file, false);
+  }
+
+  async replaceImage(
+    itemId: unknown,
+    imageInput: WardrobeImageInput,
+  ): Promise<WardrobeItemActionDto> {
+    const current = await this.getRow(itemId);
+    const resolution = await this.images.resolve(imageInput);
+    if (!resolution.file) {
+      return this.actionDto(await this.get(current.id), false, "pending");
+    }
+    return this.saveResolvedImage(current, resolution.file, true);
+  }
+
+  async removeImage(itemId: unknown): Promise<WardrobeItemActionDto> {
+    const current = await this.getRow(itemId);
+    if (!current.image_path) {
+      return this.actionDto(await this.get(current.id), false, "none");
+    }
+
+    const imagePath = current.image_path;
+    await this.updateImagePath(current.id, null);
+    try {
+      await this.images.removePath(imagePath);
+    } catch (_) {
+      // Keep the database and Storage consistent if object deletion fails.
+      await this.client.updateRows<WardrobeItemRow>(
+        "wardrobe_items",
+        new URLSearchParams({ id: `eq.${idValue(current.id, "itemId")}`, limit: "1" }),
+        { image_path: imagePath },
+      ).catch(() => {});
+      throw new AppError(
+        "data_access_error",
+        "Не удалось удалить фотографию.",
+        502,
+      );
+    }
+    return this.actionDto(await this.get(current.id), false, "none");
   }
 
   async archive(itemId: unknown): Promise<WardrobeItemDto> {

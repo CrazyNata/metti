@@ -16,6 +16,14 @@ export interface UserDataClient {
     query: URLSearchParams,
     payload: unknown,
   ): Promise<T>;
+  uploadObject(
+    bucket: string,
+    path: string,
+    bytes: Uint8Array,
+    contentType: string,
+    upsert?: boolean,
+  ): Promise<void>;
+  removeObjects(bucket: string, paths: string[]): Promise<void>;
   createSignedUrls(
     bucket: string,
     paths: string[],
@@ -138,6 +146,42 @@ export class SupabaseRestClient implements UserDataClient {
       },
     );
     return Array.isArray(body) ? body[0] as T : body as T;
+  }
+
+  async uploadObject(
+    bucket: string,
+    path: string,
+    bytes: Uint8Array,
+    contentType: string,
+    upsert = false,
+  ): Promise<void> {
+    const uploadBody = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(uploadBody).set(bytes);
+    await this.request<unknown>(
+      `/storage/v1/object/${encodeURIComponent(bucket)}/${path.split("/")
+        .map(encodeURIComponent).join("/")}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": contentType,
+          "cache-control": "3600",
+          "x-upsert": String(upsert),
+        },
+        body: new Blob([uploadBody], { type: contentType }),
+      },
+    );
+  }
+
+  async removeObjects(bucket: string, paths: string[]): Promise<void> {
+    const uniquePaths = [...new Set(paths.filter(Boolean))];
+    if (!uniquePaths.length) return;
+    await this.request<unknown>(
+      `/storage/v1/object/remove/${encodeURIComponent(bucket)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ prefixes: uniquePaths }),
+      },
+    );
   }
 
   async createSignedUrls(

@@ -20,6 +20,14 @@ function requestBody(init?: RequestInit): Record<string, unknown> {
   }
 }
 
+async function requestBytes(init?: RequestInit): Promise<Uint8Array> {
+  const body = init?.body;
+  if (body instanceof Blob) return new Uint8Array(await body.arrayBuffer());
+  if (body instanceof Uint8Array) return new Uint8Array(body);
+  if (typeof body === "string") return new TextEncoder().encode(body);
+  return new Uint8Array();
+}
+
 export function createSupabaseFetch(
   db: MemoryDataClient,
   user: AuthenticatedUser,
@@ -71,6 +79,39 @@ export function createSupabaseFetch(
       return jsonResponse({
         signedURL: `/object/sign/wardrobe/${path}?token=test`,
       });
+    }
+
+    const uploadMarker = "/storage/v1/object/wardrobe/";
+    if (method === "POST" && requestUrl.pathname.includes(uploadMarker)) {
+      if (authorization !== `Bearer ${validToken}`) {
+        return jsonResponse({ error: "invalid_token" }, 401);
+      }
+      const suffix = requestUrl.pathname.slice(
+        requestUrl.pathname.indexOf(uploadMarker) + uploadMarker.length,
+      );
+      const path = suffix.split("/").map(decodeURIComponent).join("/");
+      await db.uploadObject(
+        "wardrobe",
+        path,
+        await requestBytes(init),
+        new Headers(init?.headers).get("content-type") ??
+          "application/octet-stream",
+        new Headers(init?.headers).get("x-upsert") === "true",
+      );
+      return jsonResponse({ Key: path });
+    }
+
+    const removeMarker = "/storage/v1/object/remove/wardrobe";
+    if (method === "POST" && requestUrl.pathname.includes(removeMarker)) {
+      if (authorization !== `Bearer ${validToken}`) {
+        return jsonResponse({ error: "invalid_token" }, 401);
+      }
+      const body = requestBody(init);
+      const paths = Array.isArray(body.prefixes)
+        ? body.prefixes.map(String)
+        : [];
+      await db.removeObjects("wardrobe", paths);
+      return jsonResponse({ message: "Successfully deleted" });
     }
 
     const restMarker = "/rest/v1/";

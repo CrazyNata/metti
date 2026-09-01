@@ -5,16 +5,15 @@
   "scripts": {
     "dev": "wrangler dev",
     "start": "wrangler dev",
-    "check": "wrangler check",
-    "types": "wrangler types",
+    "check": "tsc --noEmit && wrangler types worker-configuration.d.ts --strict-vars=false --include-runtime=false --check",
+    "types": "wrangler types worker-configuration.d.ts --strict-vars=false --include-runtime=false",
     "typecheck": "tsc --noEmit",
     "test": "deno test --allow-net tests",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "latest",
-    "typescript": "latest",
-    "wrangler": "latest"
+    "typescript": "7.0.2",
+    "wrangler": "4.127.1"
   }
 }

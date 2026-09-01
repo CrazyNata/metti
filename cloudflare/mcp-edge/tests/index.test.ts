@@ -1,12 +1,13 @@
-import { type Env, handleCloudflareRequest } from "../src/index.ts";
+import { handleCloudflareRequest } from "../src/index.ts";
 
-const env: Env = {
+const env = {
   METTI_MCP_UPSTREAM_URL:
     "https://fkicjvawvaddjdmcpiei.supabase.co/functions/v1/metti-mcp",
   SUPABASE_AUTH_SERVER_URL:
     "https://fkicjvawvaddjdmcpiei.supabase.co/auth/v1",
   MCP_ALLOWED_ORIGINS: "https://chatgpt.com",
   MCP_ALLOWED_HOSTS: "mcp.example.com",
+  MCP_MAX_BODY_BYTES: "8388608",
 };
 
 Deno.test("Cloudflare edge rejects unauthenticated MCP requests", async () => {

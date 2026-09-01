@@ -8,9 +8,11 @@
     "METTI_MCP_UPSTREAM_URL": "https://fkicjvawvaddjdmcpiei.supabase.co/functions/v1/metti-mcp",
     "SUPABASE_AUTH_SERVER_URL": "https://fkicjvawvaddjdmcpiei.supabase.co/auth/v1",
     "MCP_ALLOWED_ORIGINS": "",
-    "MCP_ALLOWED_HOSTS": "metti-mcp-edge.road-guide-natasha7261.workers.dev"
+    "MCP_ALLOWED_HOSTS": "metti-mcp-edge.road-guide-natasha7261.workers.dev",
+    "MCP_MAX_BODY_BYTES": "8388608"
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "head_sampling_rate": 1
   }
 }

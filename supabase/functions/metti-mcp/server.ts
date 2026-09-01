@@ -7,6 +7,11 @@ import * as z from "https://esm.sh/zod@4.2.0?target=deno";
 
 import { authenticateRequest, getSupabaseConfig } from "../_shared/auth.ts";
 import { AppError, publicErrorPayload, toAppError } from "../_shared/errors.ts";
+import {
+  DEFAULT_IMAGE_FETCH_TIMEOUT_MS,
+  DEFAULT_IMAGE_MAX_BYTES,
+  type ImageServiceOptions,
+} from "../_shared/image-service.ts";
 import { createApplicationServices } from "../_shared/services.ts";
 import { SupabaseRestClient } from "../_shared/supabase-client.ts";
 import type { ApplicationServices } from "../_shared/services.ts";
@@ -31,6 +36,7 @@ const corsHeaders =
 
 const categoryInputSchema = z.enum([
   "outer",
+  "outerwear",
   "top",
   "bottom",
   "shoes",
@@ -45,6 +51,40 @@ const idSchema = z.string().trim().min(1).max(128).regex(
   /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
 );
 const emptySchema = z.object({}).strict();
+const imageMimeSchema = z.enum([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const imageInputSchema = z.union([
+  z.object({
+    type: z.literal("image"),
+    data: z.string().trim().min(1).max(7_000_000),
+    mimeType: imageMimeSchema,
+  }).strict(),
+  z.object({
+    type: z.literal("resource_link"),
+    uri: z.string().trim().min(1).max(2048),
+    name: z.string().trim().max(160).optional(),
+    description: z.string().trim().max(500).optional(),
+    mimeType: imageMimeSchema.optional(),
+  }).strict(),
+  z.object({
+    type: z.literal("resource"),
+    resource: z.object({
+      uri: z.string().trim().min(1).max(2048),
+      mimeType: imageMimeSchema.optional(),
+      blob: z.string().trim().min(1).max(7_000_000).optional(),
+      text: z.string().max(4096).optional(),
+    }).strict().refine(
+      (resource) =>
+        !(resource.blob !== undefined && resource.text !== undefined),
+      { message: "A resource must contain blob or text, not both." },
+    ),
+  }).strict(),
+]);
 
 const profilePreferencesSchema = z.object({
   styleTags: stringListSchema(12).optional(),
@@ -72,6 +112,9 @@ const listWardrobeSchema = z.object({
   brands: stringListSchema(12, 80).optional(),
   season: z.string().trim().min(1).max(80).optional(),
   seasons: stringListSchema(12, 80).optional(),
+  style: z.string().trim().min(1).max(80).optional(),
+  styles: stringListSchema(12, 60).optional(),
+  length: z.string().trim().min(1).max(80).optional(),
   occasion: z.string().trim().min(1).max(80).optional(),
   occasions: stringListSchema(12, 60).optional(),
   favorite: z.boolean().optional(),
@@ -85,9 +128,15 @@ const searchWardrobeSchema = z.object({
   query: z.string().trim().max(100).optional(),
   category: categoryInputSchema.optional(),
   subcategory: z.string().trim().min(1).max(80).optional(),
+  color: z.string().trim().min(1).max(80).optional(),
   colors: stringListSchema(12, 50).optional(),
+  brand: z.string().trim().min(1).max(120).optional(),
   brands: stringListSchema(12, 80).optional(),
+  season: z.string().trim().min(1).max(80).optional(),
   seasons: stringListSchema(12, 80).optional(),
+  style: z.string().trim().min(1).max(80).optional(),
+  styles: stringListSchema(12, 60).optional(),
+  length: z.string().trim().min(1).max(80).optional(),
   occasion: z.string().trim().min(1).max(80).optional(),
   occasions: stringListSchema(12, 60).optional(),
   favorite: z.boolean().optional(),
@@ -106,18 +155,21 @@ const wardrobeItemFields = {
   colors: stringListSchema(12, 50).optional(),
   size: z.string().trim().max(40).nullable().optional(),
   season: z.string().trim().max(80).nullable().optional(),
+  seasons: stringListSchema(8, 40).optional(),
   material: z.string().trim().max(80).nullable().optional(),
   pattern: z.string().trim().max(80).nullable().optional(),
   fit: z.string().trim().max(80).nullable().optional(),
+  length: z.string().trim().max(80).nullable().optional(),
+  styles: stringListSchema(12, 60).optional(),
   occasion: z.string().trim().max(80).nullable().optional(),
   occasions: stringListSchema(12, 60).optional(),
   tags: stringListSchema(20, 50).optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   favorite: z.boolean().optional(),
-  imagePath: z.string().trim().max(500).nullable().optional(),
+  image: imageInputSchema.optional(),
 };
 
-const addWardrobeItemSchema = z.object(wardrobeItemFields).strict();
+const createWardrobeItemSchema = z.object(wardrobeItemFields).strict();
 const updateWardrobeItemSchema = z.object({
   itemId: idSchema,
   name: wardrobeItemFields.name.optional(),
@@ -128,15 +180,22 @@ const updateWardrobeItemSchema = z.object({
   colors: wardrobeItemFields.colors,
   size: wardrobeItemFields.size,
   season: wardrobeItemFields.season,
+  seasons: wardrobeItemFields.seasons,
   material: wardrobeItemFields.material,
   pattern: wardrobeItemFields.pattern,
   fit: wardrobeItemFields.fit,
+  length: wardrobeItemFields.length,
+  styles: wardrobeItemFields.styles,
   occasion: wardrobeItemFields.occasion,
   occasions: wardrobeItemFields.occasions,
   tags: wardrobeItemFields.tags,
   notes: wardrobeItemFields.notes,
   favorite: wardrobeItemFields.favorite,
-  imagePath: wardrobeItemFields.imagePath,
+}).strict();
+
+const attachImageSchema = z.object({
+  itemId: idSchema,
+  image: imageInputSchema,
 }).strict();
 
 const listOutfitsSchema = z.object({
@@ -186,16 +245,19 @@ const servicesFor = (
   config: SupabaseConfig,
   context: AuthContext,
   fetchImpl: FetchLike,
+  imageOptions?: ImageServiceOptions,
 ): ApplicationServices =>
   createApplicationServices(
     new SupabaseRestClient(config, context.accessToken, fetchImpl),
     context.user,
+    { image: imageOptions ?? imageOptionsFromEnv() },
   );
 
 const categoryAliases: Record<
   string,
-  { category: "bottom" | "accessory"; subcategory: string }
+  { category: "outer" | "bottom" | "accessory"; subcategory?: string }
 > = {
+  outerwear: { category: "outer", subcategory: "outerwear" },
   jeans: { category: "bottom", subcategory: "jeans" },
   bag: { category: "accessory", subcategory: "bag" },
 };
@@ -341,11 +403,11 @@ export function registerTools(
     annotations: readAnnotations,
   }, (args) => runTool(() => services.wardrobe.get(args.itemId)));
 
-  server.registerTool("add_wardrobe_item", {
+  server.registerTool("create_wardrobe_item", {
     description:
-      "Add a new item to the authenticated user’s wardrobe. This changes user data. Do not send user_id; the server derives ownership from the access token. imagePath is optional and must already be in the user’s private wardrobe Storage folder. The category aliases jeans and bag are stored as bottom/accessory with a matching subcategory.",
-    inputSchema: addWardrobeItemSchema,
-    annotations: writeAnnotations,
+      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If an image resource is available, first infer only reliable characteristics from it and pass the structured fields plus image; do not invent an unknown brand, material or size. The optional image accepts standard MCP image, resource_link or resource shapes. Do not send user_id: ownership comes from the bearer token. If the host cannot provide the original image, the item is still created and reports imageStatus=pending.",
+    inputSchema: createWardrobeItemSchema,
+    annotations: { ...writeAnnotations, idempotentHint: false },
   }, (args) =>
     runTool(() =>
       services.wardrobe.add(
@@ -374,6 +436,37 @@ export function registerTools(
     inputSchema: z.object({ itemId: idSchema }).strict(),
     annotations: { ...writeAnnotations, destructiveHint: true },
   }, (args) => runTool(() => services.wardrobe.archive(args.itemId)));
+
+  server.registerTool(
+    "attach_image_to_wardrobe_item",
+    {
+      description:
+        "Attach an available user-provided image resource to an existing wardrobe item owned by the authenticated user. Use this only when the MCP client provides an image, resource_link or embedded resource. The image is validated and stored in the existing private wardrobe Storage bucket; use replace_wardrobe_item_image when the item already has a photo.",
+      inputSchema: attachImageSchema,
+      annotations: { ...writeAnnotations, idempotentHint: false },
+    },
+    (args) =>
+      runTool(() => services.wardrobe.attachImage(args.itemId, args.image)),
+  );
+
+  server.registerTool(
+    "replace_wardrobe_item_image",
+    {
+      description:
+        "Replace the photo of an existing wardrobe item owned by the authenticated user with an available MCP image or resource. The existing private Storage path is updated safely and the item remains usable if the host cannot provide the original image.",
+      inputSchema: attachImageSchema,
+      annotations: { ...writeAnnotations, idempotentHint: false },
+    },
+    (args) =>
+      runTool(() => services.wardrobe.replaceImage(args.itemId, args.image)),
+  );
+
+  server.registerTool("remove_wardrobe_item_image", {
+    description:
+      "Remove the photo from a wardrobe item owned by the authenticated user. This deletes the linked object from the existing private Storage bucket and keeps the wardrobe item itself.",
+    inputSchema: z.object({ itemId: idSchema }).strict(),
+    annotations: { ...writeAnnotations, destructiveHint: true },
+  }, (args) => runTool(() => services.wardrobe.removeImage(args.itemId)));
 
   server.registerTool("list_outfits", {
     description:
@@ -454,6 +547,7 @@ export function registerTools(
 export function createMcpHttpHandler(
   config: SupabaseConfig,
   fetchImpl: FetchLike = fetch,
+  imageOptions?: ImageServiceOptions,
 ): McpHttpHandler {
   return createMcpHandler(({ authInfo }) => {
     const user = authInfo?.extra?.mettiUser as AuthenticatedUser | undefined;
@@ -474,9 +568,9 @@ export function createMcpHttpHandler(
     };
     return registerTools(
       new McpServer({ name: "metti-wardrobe", version: MCP_VERSION }),
-      servicesFor(config, context, fetchImpl),
+      servicesFor(config, context, fetchImpl, imageOptions),
     );
-  }, { responseMode: "json" });
+  });
 }
 
 class FixedWindowRateLimiter {
@@ -515,6 +609,42 @@ function envNumber(
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
+function envBoolean(
+  name: string,
+  fallback: boolean,
+  env: typeof Deno.env = Deno.env,
+): boolean {
+  const value = String(env.get(name) ?? "").trim().toLowerCase();
+  if (value === "true" || value === "1" || value === "yes") return true;
+  if (value === "false" || value === "0" || value === "no") return false;
+  return fallback;
+}
+
+function configuredImageHosts(env: typeof Deno.env = Deno.env): string[] {
+  return String(env.get("MCP_ALLOWED_IMAGE_HOSTS") ?? "").split(",").map((
+    value,
+  ) => value.trim()).filter(Boolean);
+}
+
+function imageOptionsFromEnv(
+  env: typeof Deno.env = Deno.env,
+): ImageServiceOptions {
+  return {
+    allowedHosts: configuredImageHosts(env),
+    maxBytes: envNumber(
+      "MCP_IMAGE_MAX_BYTES",
+      DEFAULT_IMAGE_MAX_BYTES,
+      env,
+    ),
+    fetchTimeoutMs: envNumber(
+      "MCP_IMAGE_FETCH_TIMEOUT_MS",
+      DEFAULT_IMAGE_FETCH_TIMEOUT_MS,
+      env,
+    ),
+    allowHttp: envBoolean("MCP_ALLOW_HTTP_IMAGE_RESOURCES", false, env),
+  };
+}
+
 function getDefaultRateLimiter(): FixedWindowRateLimiter {
   if (!defaultRateLimiter) {
     defaultRateLimiter = new FixedWindowRateLimiter(
@@ -528,9 +658,12 @@ function getDefaultHandler(
   config: SupabaseConfig,
   fetchImpl: FetchLike = fetch,
 ): McpHttpHandler {
-  const key = `${config.url}|${config.publishableKey}`;
+  const imageOptions = imageOptionsFromEnv();
+  const key = `${config.url}|${config.publishableKey}|${
+    JSON.stringify(imageOptions)
+  }`;
   if (!defaultHandler || defaultHandlerConfig !== key) {
-    defaultHandler = createMcpHttpHandler(config, fetchImpl);
+    defaultHandler = createMcpHttpHandler(config, fetchImpl, imageOptions);
     defaultHandlerConfig = key;
   }
   return defaultHandler;
@@ -615,6 +748,44 @@ function withCors(response: Response, request: Request): Response {
   });
 }
 
+async function limitRequestBody(
+  request: Request,
+  maxBytes: number,
+): Promise<Request | null> {
+  if (!request.body || request.method === "GET") return request;
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > maxBytes) return null;
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      const chunk = new Uint8Array(next.value);
+      total += chunk.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const headers = new Headers(request.headers);
+  headers.set("content-length", String(total));
+  return new Request(request, { body, headers });
+}
+
 function health(request: Request): Response {
   let configured = true;
   try {
@@ -662,9 +833,9 @@ export async function handleMcpRequest(
       Allow: "GET, POST, DELETE, OPTIONS",
     });
   }
-  const maxBodyBytes = envNumber("MCP_MAX_BODY_BYTES", 128 * 1024);
-  const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > maxBodyBytes) {
+  const maxBodyBytes = envNumber("MCP_MAX_BODY_BYTES", 8 * 1024 * 1024);
+  const boundedRequest = await limitRequestBody(request, maxBodyBytes);
+  if (!boundedRequest) {
     return jsonResponse({ error: "Request body is too large." }, 413, request);
   }
 
@@ -709,7 +880,10 @@ export async function handleMcpRequest(
   try {
     const handler = dependencies.handler ??
       getDefaultHandler(config, dependencies.fetchImpl ?? fetch);
-    return withCors(await handler.fetch(request, { authInfo }), request);
+    return withCors(
+      await handler.fetch(boundedRequest, { authInfo }),
+      request,
+    );
   } catch (error) {
     console.error("metti-mcp request failed", error);
     return jsonResponse(

@@ -13,6 +13,41 @@ export const WARDROBE_CATEGORIES = [
 ] as const;
 export type WardrobeCategory = (typeof WARDROBE_CATEGORIES)[number];
 export type WardrobeStatus = "active" | "archived";
+export type WardrobeImageStatus = "attached" | "pending" | "none";
+
+/**
+ * Image content shapes defined by MCP's content/resource vocabulary. The
+ * server accepts these shapes as tool arguments when a host can forward the
+ * original attachment. It never persists the encoded data itself.
+ */
+export interface McpImageContent {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
+export interface McpResourceLink {
+  type: "resource_link";
+  uri: string;
+  name?: string;
+  description?: string;
+  mimeType?: string;
+}
+
+export interface McpEmbeddedResource {
+  type: "resource";
+  resource: {
+    uri: string;
+    mimeType?: string;
+    blob?: string;
+    text?: string;
+  };
+}
+
+export type WardrobeImageInput =
+  | McpImageContent
+  | McpResourceLink
+  | McpEmbeddedResource;
 
 export interface AuthenticatedUser {
   id: string;
@@ -86,9 +121,12 @@ export interface WardrobeItemDto {
   colors: string[];
   size: string | null;
   season: string | null;
+  seasons: string[];
   material: string | null;
   pattern: string | null;
   fit: string | null;
+  length: string | null;
+  styles: string[];
   occasions: string[];
   tags: string[];
   notes: string | null;
@@ -96,6 +134,11 @@ export interface WardrobeItemDto {
   status: WardrobeStatus;
   imageUrl: string | null;
   createdAt: string;
+}
+
+export interface WardrobeItemActionDto extends WardrobeItemDto {
+  imageAttached: boolean;
+  imageStatus: WardrobeImageStatus;
 }
 
 export interface ProfileDto {
@@ -172,6 +215,9 @@ export interface WardrobeListOptions {
   brands?: string[];
   season?: string;
   seasons?: string[];
+  style?: string;
+  styles?: string[];
+  length?: string;
   occasion?: string;
   occasions?: string[];
   favorite?: boolean;
@@ -191,15 +237,19 @@ export interface WardrobeItemInput {
   colors?: string[];
   size?: string | null;
   season?: string | null;
+  seasons?: string[];
   material?: string | null;
   pattern?: string | null;
   fit?: string | null;
+  length?: string | null;
+  styles?: string[];
   occasion?: string | null;
   occasions?: string[];
   tags?: string[];
   notes?: string | null;
   favorite?: boolean;
   imagePath?: string | null;
+  image?: WardrobeImageInput;
 }
 
 export type WardrobeItemUpdate = Partial<WardrobeItemInput>;

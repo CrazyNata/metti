@@ -1,299 +1,431 @@
 # Metti MCP Server
 
-Metti now exposes a remote MCP server from the same Supabase project and the same repository. The MCP function is an additional interface to the existing user data; it is not a second wardrobe database and it does not call an LLM.
+Metti MCP is an additional data-and-actions interface for the existing Online
+Stylist application. It lives in this repository and uses the existing Supabase
+Auth, PostgREST tables, RLS policies and private `wardrobe` Storage bucket. It
+does not create a second database, a second wardrobe, a second image store or a
+second business-logic layer, and it never calls an LLM.
 
-## Architecture
+## Repository architecture
 
-The current repository is a regular repository rather than a package-managed monorepo: the client is a static WebView/mobile app, and the server-side pieces are Supabase SQL and Deno Edge Functions. It is backed by Supabase PostgREST, Supabase Auth, private Storage and the existing `metti-stylist` Edge Function. The MCP entrypoint is:
+This repository is a static WebView/mobile application backed directly by
+Supabase, plus Supabase Edge Functions. The relevant paths are:
+
+- `supabase/functions/metti-mcp/index.ts` — MCP runtime entrypoint.
+- `supabase/functions/metti-mcp/server.ts` — authenticated Streamable HTTP
+  handler and tool registration.
+- `supabase/functions/_shared/` — auth, validation, serializers, data client,
+  `WardrobeService`, `ImageService`, `ProfileService` and `OutfitService`.
+- `supabase/functions/metti-stylist/` — the existing stylist function using
+  the same shared services for its data context.
+- `cloudflare/mcp-edge/` — optional thin Cloudflare Worker proxy. It stores no
+  user data and does not register MCP tools.
+- `mobile/supabase-client.js` and
+  `android/app/src/main/assets/supabase-client.js` — the existing app upload
+  and signed-URL flow, kept intact.
+
+The request paths are:
 
 ```text
-supabase/functions/metti-mcp/index.ts
+Existing app -> Supabase Auth/PostgREST/Storage -> existing tables and bucket
+
+ChatGPT/MCP client -> optional Cloudflare proxy -> metti-mcp
+                    -> shared services -> same Auth/PostgREST/Storage
 ```
 
-The shared application layer is in `supabase/functions/_shared/`:
-
-- `auth.ts` validates the existing Supabase bearer token with `/auth/v1/user`;
-- `supabase-client.ts` calls PostgREST and private Storage using that same user token;
-- `wardrobe-service.ts`, `profile-service.ts` and `outfit-service.ts` contain the reusable domain operations;
-- `services.ts` creates the per-user service bundle;
-- `serializers.ts`, `validation.ts`, `types.ts` and `errors.ts` keep validation and response shapes consistent.
-
-The MCP tools call these services directly. The existing `metti-stylist` function now uses the same auth/data/service layer for its wardrobe and profile context. The web/mobile client continues to use the same Supabase tables, RLS policies and Storage bucket.
-
-```text
-Web/Mobile -> Supabase PostgREST/Auth/Storage
-                         ▲
-                         │ shared services + RLS
-                         │
-ChatGPT/MCP client -> metti-mcp (Streamable HTTP)
-```
+The mobile app currently uses the Supabase REST/Storage contract directly;
+server-side features use the shared TypeScript services. Both paths remain
+tenant-isolated by the same database schema, Storage policies and user folder
+convention.
 
 ## Endpoints
 
-When deployed as a Supabase Edge Function, the native URL is:
+Direct Supabase Edge Function:
 
 ```text
 https://<project-ref>.supabase.co/functions/v1/metti-mcp
 https://<project-ref>.supabase.co/functions/v1/metti-mcp/health
 ```
 
-Put a reverse proxy in front if the public contract should be `/mcp` and `/health`:
+The MCP endpoint accepts standard Streamable HTTP requests at the function URL.
+The health endpoint is unauthenticated and returns `200` only when the
+Supabase configuration is present.
+
+Optional Cloudflare edge endpoint:
 
 ```text
-https://api.example.com/mcp
-https://api.example.com/health
+https://<worker-host>/mcp
+https://<worker-host>/health
+https://<worker-host>/.well-known/oauth-protected-resource
 ```
 
-The currently deployed Cloudflare edge endpoint is:
-
-```text
-https://metti-mcp-edge.road-guide-natasha7261.workers.dev/mcp
-https://metti-mcp-edge.road-guide-natasha7261.workers.dev/health
-```
-
-The existing static app is also deployed from `mobile/` as the Cloudflare Pages project
-`metti-web`:
-
-```text
-https://metti-web.pages.dev/
-https://metti-web.pages.dev/oauth-consent.html
-```
-
-The transport is the official MCP Streamable HTTP transport. The MCP server factory is stateless (a fresh tool server is created for each authenticated request), and the SDK uses the response mode requested by the client; clients should advertise both `application/json` and `text/event-stream`. Every HTTP request is authenticated before MCP dispatch.
+The Worker forwards the bearer token and MCP protocol headers to the Supabase
+origin. It is only a routing and edge-policy layer; the origin remains the
+source of truth for authentication, tools, validation and RLS.
 
 ## Authentication and isolation
 
-Send the existing Supabase access token:
+Every MCP request except CORS preflight and `/health` must contain:
 
 ```http
-Authorization: Bearer <supabase-access-token>
+Authorization: Bearer <Supabase access token>
 ```
 
-The server resolves the user from Supabase Auth. MCP tool arguments intentionally do not accept `user_id`. All reads and writes use the authenticated user token against PostgREST, so the existing RLS policies remain the final tenant-isolation boundary. An anonymous request returns `401`; an item or outfit from another user behaves as not found.
+`authenticateRequest` validates the token with Supabase Auth and derives the
+user id from the returned session. No tool accepts `userId` or `user_id` as an
+ownership source. The same access token is used for PostgREST and Storage, so
+existing RLS policies remain the final authorization boundary.
 
-MCP does not implement a second user store or OAuth issuer. The repository now includes an optional OAuth 2.1 consent UI at `mobile/oauth-consent.html`; it uses the same Supabase Auth session and the same publishable client, and calls Supabase's OAuth authorization-server methods for consent. A client can therefore either attach an existing Supabase bearer token directly or use Supabase Auth OAuth 2.1 after the project feature is enabled. Do not put a service-role key in a client or tool argument.
-
-For the static WebView-style app, configure the Supabase OAuth Server Authorization Path as `/oauth-consent.html` and use `https://metti-web.pages.dev` as the Site URL. The page reads the `authorization_id` query parameter, reuses the current Metti login/session, displays the client name, redirect URI and requested scopes, then redirects to Supabase's returned `redirect_url` after the user approves or denies. If the web host supports clean rewrites, the same page can be exposed as `/oauth/consent` instead.
+Unauthenticated and invalid-token requests return `401`. An object belonging to
+another user is intentionally reported as not found, including for item,
+outfit and image operations. The Supabase gateway setting `verify_jwt=false`
+is used only because the function performs explicit bearer validation and needs
+the same token for RLS; it is not a bypass.
 
 ## Tools
 
-Read tools:
+The server advertises 20 tools. The V1 data contract is:
+
+### Profile
 
 - `get_profile`
 - `get_style_preferences`
+- `update_style_preferences`
+
+### Wardrobe
+
 - `list_wardrobe`
 - `search_wardrobe`
 - `get_wardrobe_item`
-- `list_outfits`
-- `get_outfit`
-- `get_wear_history`
-
-Write tools:
-
-- `update_style_preferences`
-- `add_wardrobe_item`
+- `create_wardrobe_item`
 - `update_wardrobe_item`
 - `archive_wardrobe_item`
+
+### Images
+
+- `attach_image_to_wardrobe_item`
+- `replace_wardrobe_item_image`
+- `remove_wardrobe_item_image`
+
+### Outfits
+
+- `list_outfits`
+- `get_outfit`
 - `save_outfit`
 - `update_outfit`
 - `archive_outfit`
-- `favorite_outfit`
-- `mark_as_worn`
 
-Wardrobe and outfit lists default to 40 records and cap `limit` at 100. Filters and pagination are part of the tool schemas. `get_wardrobe_item` and `get_outfit` return short-lived signed Storage URLs when private images exist; image bytes/base64 are never returned.
+The repository also keeps the existing outfit convenience tools
+`favorite_outfit`, `get_wear_history` and `mark_as_worn` available through
+MCP.
 
-The database keeps its existing category enum (`outer`, `top`, `bottom`, `shoes`, `accessory`). For MCP ergonomics, `jeans` and `bag` are accepted as category aliases and are stored/filtered as `bottom + subcategory=jeans` and `accessory + subcategory=bag`; no schema expansion is needed.
+All list/search tools use pagination: default `limit=40`, maximum `limit=100`.
+Successful tools return MCP `structuredContent` plus compact JSON text. Domain
+errors return a safe public `{ error: { code, message } }` payload; schema
+failures are standard MCP input-validation errors without stack traces.
 
-There is currently no wishlist table in the existing schema, so wishlist tools are intentionally not advertised. The existing model also stores optional fields such as subcategory, occasions, tags and favorite flags inside the current `metadata` JSONB rather than introducing a parallel MCP model.
+### create_wardrobe_item
 
-`archive_wardrobe_item` and `archive_outfit` are soft deletes. The small additive migration `supabase/migrations/202608310002_metti_mcp_archive_columns.sql` adds nullable `archived_at` columns and indexes to the existing tables. No separate MCP database is created, and the already-applied `202608310001` migration is left unchanged.
-
-### Tool schemas
-
-All schemas are strict objects. IDs are non-empty safe identifiers; list tools use `page` (1-based, default `1`) and `limit` (default `40`, maximum `100`). Omitted optional fields mean “leave unchanged” for update tools.
-
-- `get_profile`, `get_style_preferences`: `{}`.
-- `update_style_preferences`: any of `styleTags`, `preferredColors`, `avoidedColors`, `preferredBrands`, `dislikedBrands`, `preferredFits`, `clothingSizes`, `shoeSize`, `height`, `gender`, `styleNotes`.
-- `list_wardrobe`: `category` (`outer|top|bottom|shoes|accessory|jeans|bag`), `subcategory`, singular or plural `color(s)`, `brand(s)`, `season(s)`, `occasion(s)`, `favorite`, `status` (`active|archived|all`), `tags`, `page`, `limit`.
-- `search_wardrobe`: `query`, `category`, `subcategory`, `colors`, `brands`, `seasons`, `occasion`/`occasions`, `favorite`, `status`, `tags`, `page`, `limit`.
-- `get_wardrobe_item`, `archive_wardrobe_item`: `{ itemId }`.
-- `add_wardrobe_item`: required `name`, `category`; optional `subcategory`, `brand`, `color`/`colors`, `size`, `season`, `material`, `pattern`, `fit`, `occasion`/`occasions`, `tags`, `notes`, `favorite`, `imagePath`. `jeans` and `bag` are accepted aliases as described above.
-- `update_wardrobe_item`: `{ itemId }` plus any subset of the fields accepted by `add_wardrobe_item`.
-- `list_outfits`: `favorite` (the legacy-compatible alias `favorites` is also accepted), `occasion`, `season`, `date` (`YYYY-MM-DD`), `tags`, `status`, `page`, `limit`.
-- `get_outfit`, `archive_outfit`: `{ outfitId }`.
-- `save_outfit`: required `itemIds`; optional `name`, `occasion`, `season`, `notes`, `tags`, `favorite`, `prompt`, `temperatureC`, `weatherCode`.
-- `update_outfit`: `{ outfitId }` plus any subset of `name`, `itemIds`, `occasion`, `season`, `notes`, `tags`, `favorite`, `prompt`.
-- `favorite_outfit`: `{ outfitId, favorite }`.
-- `get_wear_history`: optional `{ page, limit }`.
-- `mark_as_worn`: `{ outfitId }` or `{ itemIds }`, with optional ISO `wornAt`.
-
-Every successful tool returns MCP `structuredContent` plus a compact JSON text representation. Domain failures use `{ error: { code, message } }`; schema failures are reported as standard MCP tool input-validation errors without stack traces.
-
-### Example tool calls
-
-After `initialize`, the following JSON-RPC bodies can be sent to the same endpoint with the authenticated bearer token:
+`name` and `category` are required. The remaining metadata is optional so the
+client can omit characteristics that cannot be inferred reliably:
 
 ```json
-{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+{
+  "name": "Beige trench coat",
+  "category": "outerwear",
+  "subcategory": "trench",
+  "colors": ["beige"],
+  "pattern": "solid",
+  "fit": "regular",
+  "length": "long",
+  "seasons": ["spring", "autumn"],
+  "styles": ["classic", "minimal"],
+  "tags": ["trench", "beige"]
+}
 ```
 
-```json
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_wardrobe","arguments":{"category":"jeans","colors":["black"],"limit":20}}}
-```
+The public category schema includes the existing database categories
+`outer`, `top`, `bottom`, `shoes`, `accessory` plus ergonomic aliases
+`outerwear`, `jeans` and `bag`. The backend maps aliases to existing
+values; no new enum or MCP-only filter field is introduced.
 
-```json
-{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"save_outfit","arguments":{"name":"Dinner layers","itemIds":["<owned-item-id-1>","<owned-item-id-2>"],"occasion":"dinner","tags":["evening"]}}}
-```
+`update_wardrobe_item` accepts a partial editable set of the same metadata.
+`archive_wardrobe_item` is a soft archive. All automatically supplied values
+remain ordinary editable wardrobe fields in the existing app.
 
-The MCP server does not choose the outfit or generate fashion advice. ChatGPT or a future Stylist Skill performs that reasoning, then uses `save_outfit` only after the user asks to save the result.
+## Image flow
 
-## Optional Cloudflare edge deployment
+### Existing app upload
 
-The repository also contains a Cloudflare Worker edge layer at:
+The app flow is unchanged:
 
 ```text
-cloudflare/mcp-edge/
+App Add Item -> select/take photo -> upload to private wardrobe bucket
+             -> create/update wardrobe row -> manual metadata editing
 ```
 
-It is intentionally a thin proxy, not a second MCP implementation. The Worker exposes the public `/mcp` and `/health` paths, applies edge host/origin checks, preserves the authenticated bearer token and MCP headers, and forwards requests to the existing Supabase MCP function:
+The existing client still uploads JPEG/PNG/WebP/HEIC/HEIF files to the private
+`wardrobe` bucket, signs URLs for display, replaces images and removes images.
+MCP does not replace this flow and no AI is required for it.
+
+### ChatGPT recognition and MCP persistence
+
+ChatGPT is responsible for seeing the user’s photograph, recognizing the item,
+choosing reliable characteristics and deciding when to call MCP. MCP only
+validates and persists the supplied structured fields; it does not perform
+image recognition, fashion reasoning or call OpenAI/Gemini/another LLM.
+
+When the MCP host can provide the original image, `create_wardrobe_item` or an
+image tool accepts the standard MCP resource vocabulary:
+
+```json
+{ "type": "image", "data": "<base64>", "mimeType": "image/jpeg" }
+```
+
+```json
+{
+  "type": "resource_link",
+  "uri": "https://trusted.example/item.jpg",
+  "mimeType": "image/jpeg"
+}
+```
+
+```json
+{
+  "type": "resource",
+  "resource": {
+    "uri": "mcp://attachment/item-1",
+    "blob": "<base64>",
+    "mimeType": "image/jpeg"
+  }
+}
+```
+
+The server decodes/streams the supported representation, validates it and
+uploads it through `ImageService` to the same private `wardrobe` bucket. It
+then stores the user-scoped `image_path` on the wardrobe row. It never stores
+base64 in the database and never returns image bytes; read responses contain a
+short-lived signed `imageUrl` where available.
+
+The accepted inline image formats are JPEG, PNG, WebP, HEIC and HEIF, with a
+default maximum of 5 MiB. A remote `resource_link` is fetched only when its
+HTTPS hostname is explicitly in `MCP_ALLOWED_IMAGE_HOSTS`.
+
+### Fallback when the original attachment is unavailable
+
+An MCP host is not assumed to expose raw attachment bytes. If a resource is a
+reference that cannot be safely fetched, or a remote fetch times out/fails, the
+metadata item is still created and the action response contains:
+
+```json
+{
+  "imageAttached": false,
+  "imageStatus": "pending"
+}
+```
+
+Without an image argument the response uses `imageStatus: "none"`. The user can
+then add the photo through the existing app upload flow. A successful upload
+returns `imageAttached: true` and `imageStatus: "attached"`.
+
+If an image upload succeeds but linking it to a new row fails, the service
+attempts compensating Storage deletion and leaves a valid item without an
+image. Replacing an existing path uses Storage upsert so a link remains valid;
+removal clears the link and deletes the object, rolling back the link if the
+delete fails.
+
+The image tools use the same ownership checks as wardrobe tools:
+
+- `attach_image_to_wardrobe_item` requires an item without a current image.
+- `replace_wardrobe_item_image` replaces the current image.
+- `remove_wardrobe_item_image` deletes only the authenticated user’s linked
+  image and keeps the item.
+
+The MCP SDK’s image/resource content vocabulary is documented in the
+[official TypeScript SDK server documentation](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/server.md)
+and the [official tools specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/draft/server/tools.mdx).
+
+## Storage and security
+
+The existing private bucket is `wardrobe`. MCP paths are generated below the
+authenticated user folder, for example:
 
 ```text
-ChatGPT/MCP client
-        |
-        v
-Cloudflare Worker: /mcp
-        |
-        v
-Supabase Edge Function: /functions/v1/metti-mcp
-        |
-        v
-shared services -> Supabase Auth/PostgREST/Storage
+<authenticated-user-id>/<item-id>-<random-id>.jpg
 ```
 
-The Worker stores no user data, does not log or replace access tokens, has no database binding and registers no tools. This keeps one source of truth for authentication, tools, validation and business logic. The current deployment is `https://metti-mcp-edge.road-guide-natasha7261.workers.dev/mcp`. The static consent UI is deployed separately from the same repository as Cloudflare Pages `metti-web`.
+The service validates user-folder paths and item-id segments. It does not make
+private images public; display URLs are short-lived signed Storage URLs.
 
-Local Cloudflare development requires Node.js/npm and Wrangler:
+Image/resource protections include:
 
-```powershell
-Set-Location cloudflare/mcp-edge
-Copy-Item .dev.vars.example .dev.vars
-npm install
-npm run dev
+- supported MIME allowlist and a 5 MiB byte limit;
+- base64 length limit before decoding;
+- basic file-signature/MIME consistency checks;
+- 10-second fetch timeout covering response-body streaming;
+- bounded remote download, including chunked responses;
+- HTTPS by default, with `MCP_ALLOW_HTTP_IMAGE_RESOURCES=false` by default;
+- exact or explicit wildcard host allowlist for remote resources;
+- rejection of credentials in URLs, `file://`, localhost, loopback, private,
+  link-local, multicast and reserved IP ranges;
+- redirects disabled for remote image downloads;
+- 8 MiB default MCP request-body cap, configurable with
+  `MCP_MAX_BODY_BYTES`;
+- rate limiting and optional origin/host allowlists.
+
+The host allowlist is deliberately separate from `MCP_ALLOWED_HOSTS`: the
+former controls server-side image downloads and the latter controls inbound
+MCP host headers. Keep both narrow in production.
+
+## Normalization and filters
+
+The MCP input is mapped to the current wardrobe model. Existing database
+columns remain the source of truth; flexible attributes continue to use the
+existing `metadata` JSONB column. The normalization layer canonicalizes common
+variants, for example:
+
+```text
+чёрный / jet black -> black
+dark blue          -> blue
+navy               -> navy
+осень / fall       -> autumn
+trench coat        -> trench
+shoulder bag       -> shoulder_bag
+multi-word styles  -> lower-case hyphenated tokens
 ```
 
-The Worker is then available at `http://localhost:8787/mcp`. Run its checks with:
+`color`/`colors`, `season`/`seasons`, `subcategory`, `length`,
+`styles`, `occasions` and `tags` are written to the same row
+fields/metadata used by the existing wardrobe filters. There are no
+`aiCategory`, `aiColor` or `aiStyle` columns. The app can edit every
+stored value later.
 
-```powershell
-npm run check
-npm run typecheck
-npm run test
-npm run build
+## Environment
+
+Copy `.env.example` to a local, untracked env file and fill in only the
+project’s publishable Supabase values:
+
+```dotenv
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<publishable-or-anon-key>
+MCP_ALLOWED_ORIGINS=
+MCP_ALLOWED_HOSTS=
+MCP_RATE_LIMIT_PER_MINUTE=120
+MCP_MAX_BODY_BYTES=8388608
+MCP_ALLOWED_IMAGE_HOSTS=
+MCP_IMAGE_MAX_BYTES=5242880
+MCP_IMAGE_FETCH_TIMEOUT_MS=10000
+MCP_ALLOW_HTTP_IMAGE_RESOURCES=false
 ```
 
-`build` is a Wrangler dry-run. Before deployment, set the exact production values for `METTI_MCP_UPSTREAM_URL`, `MCP_ALLOWED_ORIGINS` and `MCP_ALLOWED_HOSTS` in `wrangler.jsonc` or the Cloudflare environment, then run:
-
-```powershell
-npx wrangler@latest login
-npx wrangler@latest types
-npx wrangler@latest check
-npx wrangler@latest deploy
-```
-
-Cloudflare does not replace Supabase Auth or RLS. The upstream migration and Supabase function must be deployed first. If a client requires OAuth, enable Supabase Auth OAuth 2.1, configure the authorization path to the deployed `oauth-consent.html` page, and use the Supabase discovery endpoint. The Worker itself remains a thin proxy and forwards the Supabase-issued bearer contract; it does not store OAuth secrets or refresh tokens.
-
-References: [Cloudflare remote MCP deployment](https://developers.cloudflare.com/agents/model-context-protocol/guides/remote-mcp-server/), [Workers fetch handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/), [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/).
+Do not put a `service_role` key in a client, MCP tool argument or committed
+file. `MCP_ALLOWED_IMAGE_HOSTS` may remain empty when only inline/resource-blob
+images should be accepted; unconfigured remote links then produce the safe
+`pending` fallback.
 
 ## Local development
 
-Prerequisites: Supabase CLI and Deno. From the repository root, start the local Supabase stack if needed and apply the schema:
+The MCP module is a separate runtime inside this repository, not a second
+repository:
 
 ```powershell
 supabase start
-supabase db reset
-```
-
-Set the local function environment in `.env.local` (this file is ignored by Git):
-
-```dotenv
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=<local-anon-key>
-MCP_ALLOWED_HOSTS=localhost,127.0.0.1
-MCP_RATE_LIMIT_PER_MINUTE=120
-```
-
-Run the MCP function independently of the WebView:
-
-```powershell
 supabase functions serve metti-mcp --no-verify-jwt --env-file .env.local
 ```
 
-The function is then available at `http://127.0.0.1:54321/functions/v1/metti-mcp`. A health check does not require a token:
+The local endpoints are:
 
-```powershell
-Invoke-WebRequest http://127.0.0.1:54321/functions/v1/metti-mcp/health
+```text
+http://127.0.0.1:54321/functions/v1/metti-mcp
+http://127.0.0.1:54321/functions/v1/metti-mcp/health
 ```
 
-The same command is available as a Deno task from the MCP module directory:
+The function’s Deno tasks are available from
+`supabase/functions/metti-mcp`:
 
 ```powershell
-Set-Location supabase/functions/metti-mcp
 deno task dev
-# or: deno task start
-```
-
-For a quick authenticated protocol smoke test, use a real access token from the existing app session:
-
-```powershell
-$headers = @{
-  Authorization = "Bearer $env:METTI_ACCESS_TOKEN"
-  Accept = "application/json, text/event-stream"
-  "Content-Type" = "application/json"
-}
-$body = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"metti-smoke-test","version":"1.0.0"}}}'
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:54321/functions/v1/metti-mcp -Headers $headers -Body $body
-```
-
-To inspect the advertised tools, send the `tools/list` body shown above. With the standard `Accept` header the response may be framed as one `text/event-stream` message; the `data:` line contains the JSON-RPC result. An MCP Inspector can also be pointed at the same URL with the bearer token when using an inspector version that supports Streamable HTTP.
-
-## Tests and checks
-
-From `supabase/functions/metti-mcp`:
-
-```powershell
+deno task start
 deno task check
 deno task test
-deno task build
 ```
 
-`build` is the Deno bundle/type validation used by this Edge Function; the Supabase CLI performs the deploy bundle step. The tests cover anonymous and invalid-token rejection, authenticated dispatch, RLS-style not-found behavior for another user’s item/outfit, filter/pagination, wardrobe and outfit writes, archive behavior, wear history, strict schemas, structured reads/writes and `tools/list` registration. There were no existing automated test commands in the repository to run; the existing frontend assets were preserved.
+The direct MCP URL can be used by an MCP Inspector or another Streamable HTTP
+client. Send both `application/json` and `text/event-stream` in `Accept`
+for client compatibility.
 
-## Production deployment
-
-The function can be deployed independently while remaining in this repository:
+The optional Cloudflare proxy is developed independently but remains in this
+repository:
 
 ```powershell
-supabase link --project-ref <project-ref>
+Set-Location cloudflare/mcp-edge
+pnpm install
+pnpm run types
+pnpm run check
+pnpm run typecheck
+pnpm run build
+```
+
+`pnpm run build` is a Wrangler dry-run. Local proxy values belong in the
+untracked `.dev.vars`; production values/secrets belong in the Cloudflare
+environment. The proxy uses generated `worker-configuration.d.ts` types.
+
+## Tests and deployment
+
+The Supabase MCP tests cover:
+
+- anonymous, authenticated and invalid-token requests;
+- strict tool discovery and required schemas;
+- structured tool responses and safe errors;
+- user isolation for items, outfits and image operations;
+- wardrobe list/search/pagination, update/archive and normalization;
+- inline and resource image attachment;
+- invalid/oversized/unsupported images;
+- failed image link/upload compensation and orphan prevention;
+- allowlisted remote resources and pending fallback;
+- outfit create/get/update/archive behavior.
+
+Apply the existing database migrations before deploying an environment:
+
+```powershell
 supabase db push
-supabase secrets set MCP_ALLOWED_ORIGINS=https://chatgpt.com MCP_ALLOWED_HOSTS=api.example.com MCP_RATE_LIMIT_PER_MINUTE=120
 supabase functions deploy metti-mcp --no-verify-jwt
 ```
 
-`verify_jwt` is disabled only at the Supabase gateway because `metti-mcp` performs the same bearer-token validation explicitly and then uses the token for RLS. The web app and `metti-stylist` function are not changed to use this setting.
+No separate MCP migration or database is required. The archive migration is
+additive and applies to the existing `wardrobe_items` and `saved_outfits`
+tables; image metadata uses the existing `image_path` and `metadata` fields.
 
-Before giving the endpoint to a client, place it behind HTTPS, configure the exact allowed origin/host values, apply the migration, and decide how the MCP client will obtain/attach Supabase access tokens. No OpenAI/Gemini call is made by this MCP module.
+For the optional edge proxy, set the upstream URL, auth-server URL, exact
+allowed host/origins and request cap in `cloudflare/mcp-edge/wrangler.jsonc` or
+the Cloudflare environment, then run:
 
-### OAuth 2.1 completion checklist
-
-The code-side consent screen is present, but the Supabase project feature is an explicit project-level setting and is not enabled by the repository migration. Complete this once in the Supabase Dashboard:
-
-1. Open Authentication -> OAuth Server and enable OAuth 2.1 server capabilities.
-2. Set the Authorization Path to `/oauth-consent.html` (or `/oauth/consent` if the deployed static host rewrites that path to the page).
-3. Set the Site URL to `https://metti-web.pages.dev` in Authentication -> URL Configuration.
-4. Register the MCP client, or enable dynamic client registration only if the client is trusted and its exact redirect URI policy is acceptable.
-5. Verify the discovery URL:
-
-```text
-https://fkicjvawvaddjdmcpiei.supabase.co/.well-known/oauth-authorization-server/auth/v1
+```powershell
+Set-Location cloudflare/mcp-edge
+pnpm run deploy
 ```
 
-The project currently returns `404` from this discovery URL until the OAuth Server capability is enabled. Supabase OAuth authorization-code flow uses PKCE and issues Supabase tokens that continue to work with the existing RLS policies; see the [Supabase OAuth 2.1 guide](https://supabase.com/docs/guides/auth/oauth-server/getting-started) and [MCP authentication guide](https://supabase.com/docs/guides/auth/oauth-server/mcp-authentication).
+The Worker follows Cloudflare’s stateless Streamable HTTP pattern; see the
+[Cloudflare remote MCP guide](https://developers.cloudflare.com/agents/model-context-protocol/guides/remote-mcp-server/).
+
+## Connecting a ChatGPT/MCP client
+
+Provide the direct Supabase function URL or the optional Worker `/mcp` URL to
+a client that supports remote Streamable HTTP and can attach the authenticated
+Supabase bearer token (or a configured Supabase OAuth flow). The client should
+call `get_profile`/`get_style_preferences` when context is needed, use
+`search_wardrobe` before proposing items the user may already own, and call
+`save_outfit` only after the user asks to save an outfit.
+
+For an image request, ChatGPT performs recognition and calls
+`create_wardrobe_item` with only reliable fields. If the client can forward an
+official MCP image/resource representation, MCP stores it in the existing
+bucket. Otherwise the item is still created and the user finishes the photo
+upload in the normal app. This supports both required flows:
+
+```text
+photo -> existing app -> existing private Storage -> editable wardrobe item
+
+photo -> ChatGPT recognition -> MCP metadata/image persistence
+      -> same Storage + same database -> visible in existing app
+```

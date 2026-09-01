@@ -105,6 +105,15 @@ export class MemoryDataClient implements UserDataClient {
   private profiles: ProfileRow[] = [];
   private sequence = 1;
 
+  readonly uploadedImages = new Map<
+    string,
+    { bytes: Uint8Array; contentType: string; upsert: boolean }
+  >();
+  readonly removedImagePaths: string[] = [];
+  failImageUpload = false;
+  failImageRemove = false;
+  failImageLinkUpdate = false;
+
   constructor(readonly ownerId: string) {}
 
   seedWardrobe(...rows: WardrobeItemRow[]): void {
@@ -197,6 +206,14 @@ export class MemoryDataClient implements UserDataClient {
     payload: unknown,
   ): Promise<T[]> {
     const input = objectValue(payload);
+    if (
+      table === "wardrobe_items" &&
+      Object.prototype.hasOwnProperty.call(input, "image_path") &&
+      this.failImageLinkUpdate
+    ) {
+      this.failImageLinkUpdate = false;
+      throw new Error("image link update failed");
+    }
     const rows = this.rowsFor(table).filter((row) => this.isOwned(row)).filter((
       row,
     ) => queryMatches(row, query));
@@ -237,6 +254,29 @@ export class MemoryDataClient implements UserDataClient {
     };
     this.profiles.push(row);
     return row as T;
+  }
+
+  async uploadObject(
+    bucket: string,
+    path: string,
+    bytes: Uint8Array,
+    contentType: string,
+    upsert = false,
+  ): Promise<void> {
+    if (this.failImageUpload) throw new Error("image upload failed");
+    this.uploadedImages.set(`${bucket}/${path}`, {
+      bytes: new Uint8Array(bytes),
+      contentType,
+      upsert,
+    });
+  }
+
+  async removeObjects(bucket: string, paths: string[]): Promise<void> {
+    if (this.failImageRemove) throw new Error("image remove failed");
+    for (const path of paths) {
+      this.removedImagePaths.push(path);
+      this.uploadedImages.delete(`${bucket}/${path}`);
+    }
   }
 
   async createSignedUrls(

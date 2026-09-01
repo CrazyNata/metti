@@ -1,9 +1,4 @@
-export interface Env {
-  METTI_MCP_UPSTREAM_URL: string;
-  SUPABASE_AUTH_SERVER_URL?: string;
-  MCP_ALLOWED_ORIGINS?: string;
-  MCP_ALLOWED_HOSTS?: string;
-}
+/// <reference path="../worker-configuration.d.ts" />
 
 type FetchLike = typeof fetch;
 type Route = "mcp" | "health" | "protected-resource-metadata";
@@ -152,6 +147,12 @@ function hasBearerToken(request: Request): boolean {
   return /^Bearer\s+\S+\s*$/i.test(request.headers.get("authorization") ?? "");
 }
 
+function bodyTooLarge(request: Request, env: Env): boolean {
+  const limit = Number(env.MCP_MAX_BODY_BYTES ?? 8 * 1024 * 1024);
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  return Number.isFinite(limit) && limit > 0 && contentLength > limit;
+}
+
 function proxyHeaders(request: Request): Headers {
   const headers = new Headers();
   for (const name of forwardedHeaders) {
@@ -278,6 +279,14 @@ export async function handleCloudflareRequest(
       request,
       env,
       { "WWW-Authenticate": oauthChallenge(request) },
+    );
+  }
+  if (bodyTooLarge(request, env)) {
+    return jsonResponse(
+      { error: { code: "request_too_large", message: "Request body is too large." } },
+      413,
+      request,
+      env,
     );
   }
   return proxy(request, env, route, fetchImpl);
