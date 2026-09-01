@@ -17,6 +17,8 @@
     profile: null,
     language: readLanguage(),
     wardrobe: [],
+    wardrobeFilter: 'all',
+    wardrobeSubcategory: 'all',
     outfits: [],
     activeItem: null,
     currentOutfit: null,
@@ -26,16 +28,108 @@
   };
   let toastTimer;
 
+  const wardrobeSubcategoryOptions = Object.freeze({
+    top: Object.freeze([
+      { value: 'tshirt', label: 'Футболки' },
+      { value: 'sweater', label: 'Кофты' },
+      { value: 'hoodie', label: 'Толстовки' },
+      { value: 'blazer', label: 'Пиджаки' },
+      { value: 'shirt', label: 'Рубашки' },
+      { value: 'dress', label: 'Платья' },
+      { value: 'outerwear', label: 'Верхняя одежда' }
+    ]),
+    bottom: Object.freeze([
+      { value: 'skirt', label: 'Юбки' },
+      { value: 'shorts', label: 'Шорты' },
+      { value: 'pants', label: 'Штаны' },
+      { value: 'jeans', label: 'Джинсы' }
+    ]),
+    shoes: Object.freeze([
+      { value: 'sneakers', label: 'Кроссовки' },
+      { value: 'pumps', label: 'Туфли' },
+      { value: 'boots', label: 'Сапоги' },
+      { value: 'ankle-boots', label: 'Ботинки' }
+    ]),
+    accessory: Object.freeze([
+      { value: 'bag', label: 'Сумки' },
+      { value: 'glasses', label: 'Очки' },
+      { value: 'headwear', label: 'Головные уборы' },
+      { value: 'jewelry', label: 'Бижутерия' }
+    ])
+  });
+  const subcategoryAliases = Object.freeze({
+    'верхняя одежда': 'outerwear',
+    футболки: 'tshirt',
+    кофты: 'sweater',
+    толстовки: 'hoodie',
+    пиджаки: 'blazer',
+    рубашки: 'shirt',
+    платья: 'dress',
+    юбки: 'skirt',
+    шорты: 'shorts',
+    штаны: 'pants',
+    джинсы: 'jeans',
+    кроссовки: 'sneakers',
+    туфли: 'pumps',
+    сапоги: 'boots',
+    ботинки: 'ankle-boots',
+    сумки: 'bag',
+    сумка: 'bag',
+    очки: 'glasses',
+    'головные уборы': 'headwear',
+    бижутерия: 'jewelry'
+  });
+  const canonicalSubcategory = (value) => {
+    const raw = String(value || '').trim();
+    return subcategoryAliases[raw.toLowerCase()] || raw;
+  };
+  const categoryForItem = (item) => {
+    const category = String(item?.category || '').trim().toLowerCase();
+    if (category === 'outer') return 'top';
+    return ['top', 'bottom', 'shoes', 'accessory'].includes(category) ? category : 'accessory';
+  };
+  const itemSubcategory = (item) => {
+    const saved = canonicalSubcategory(item?.subcategory || item?.metadata?.subcategory);
+    if (saved) return saved;
+    if (item?.category === 'outer') return 'outerwear';
+    const value = String(item?.name || '').toLowerCase();
+    const category = categoryForItem(item);
+    if (category === 'top') {
+      if (value.includes('жакет') || value.includes('пидж')) return 'blazer';
+      if (value.includes('рубаш')) return 'shirt';
+      if (value.includes('толстов') || value.includes('худи')) return 'hoodie';
+      if (value.includes('кофт') || value.includes('свитер') || value.includes('кардиган')) return 'sweater';
+      if (value.includes('плать')) return 'dress';
+      if (value.includes('пальто') || value.includes('куртк') || value.includes('плащ')) return 'outerwear';
+      return 'tshirt';
+    }
+    if (category === 'bottom') {
+      if (value.includes('юб')) return 'skirt';
+      if (value.includes('шорт')) return 'shorts';
+      if (value.includes('джин')) return 'jeans';
+      return 'pants';
+    }
+    if (category === 'shoes') {
+      if (value.includes('кед') || value.includes('крос')) return 'sneakers';
+      if (value.includes('туф')) return 'pumps';
+      if (value.includes('сапог')) return 'boots';
+      return 'ankle-boots';
+    }
+    if (value.includes('сум')) return 'bag';
+    if (value.includes('очк')) return 'glasses';
+    if (value.includes('серьг') || value.includes('кольц') || value.includes('брас') || value.includes('цеп') || value.includes('украш')) return 'jewelry';
+    return 'headwear';
+  };
   const demoItems = [
-    { id: 'demo-jacket', name: 'Бежевый жакет оверсайз', category: 'outer', color: 'Бежевый', season: 'Осень / Весна', photoClass: 'photo-jacket' },
-    { id: 'demo-shirt', name: 'Белый топ', category: 'top', color: 'Молочный', season: 'Круглый год', photoClass: 'photo-shirt' },
-    { id: 'demo-jeans', name: 'Прямые джинсы', category: 'bottom', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-jeans' },
-    { id: 'demo-loafers', name: 'Коричневые лоферы', category: 'shoes', color: 'Коричневый', season: 'Осень / Весна', photoClass: 'photo-loafers' },
-    { id: 'demo-bag', name: 'Сумка-тоут', category: 'accessory', color: 'Тауп', season: 'Круглый год', photoClass: 'photo-bag' },
-    { id: 'demo-earrings', name: 'Золотые серьги', category: 'accessory', color: 'Золотой', season: 'Круглый год', photoClass: 'photo-earrings' },
-    { id: 'demo-skirt', name: 'Чёрная миди-юбка', category: 'bottom', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-skirt' },
-    { id: 'demo-sneakers', name: 'Белые кеды', category: 'shoes', color: 'Белый', season: 'Весна / Лето', photoClass: 'photo-sneakers' },
-    { id: 'demo-scarf', name: 'Шёлковый платок', category: 'accessory', color: 'Пыльная слива', season: 'Круглый год', photoClass: 'photo-scarf' }
+    { id: 'demo-jacket', name: 'Бежевый жакет оверсайз', category: 'top', subcategory: 'blazer', color: 'Бежевый', season: 'Осень / Весна', photoClass: 'photo-jacket' },
+    { id: 'demo-shirt', name: 'Белый топ', category: 'top', subcategory: 'tshirt', color: 'Молочный', season: 'Круглый год', photoClass: 'photo-shirt' },
+    { id: 'demo-jeans', name: 'Прямые джинсы', category: 'bottom', subcategory: 'jeans', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-jeans' },
+    { id: 'demo-loafers', name: 'Коричневые лоферы', category: 'shoes', subcategory: 'pumps', color: 'Коричневый', season: 'Осень / Весна', photoClass: 'photo-loafers' },
+    { id: 'demo-bag', name: 'Сумка-тоут', category: 'accessory', subcategory: 'bag', color: 'Тауп', season: 'Круглый год', photoClass: 'photo-bag' },
+    { id: 'demo-earrings', name: 'Золотые серьги', category: 'accessory', subcategory: 'jewelry', color: 'Золотой', season: 'Круглый год', photoClass: 'photo-earrings' },
+    { id: 'demo-skirt', name: 'Чёрная миди-юбка', category: 'bottom', subcategory: 'skirt', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-skirt' },
+    { id: 'demo-sneakers', name: 'Белые кеды', category: 'shoes', subcategory: 'sneakers', color: 'Белый', season: 'Весна / Лето', photoClass: 'photo-sneakers' },
+    { id: 'demo-scarf', name: 'Шёлковый платок', category: 'accessory', subcategory: 'headwear', color: 'Пыльная слива', season: 'Круглый год', photoClass: 'photo-scarf' }
   ];
   const itemClass = (item) => {
     if (item?.photoClass) return item.photoClass;
@@ -52,7 +146,42 @@
   const defaultLooksMarkup = document.querySelector('.looks-grid')?.innerHTML || '';
   const translate = (value) => window.MettiI18n?.t?.(value, state.language) ?? value;
   const applyLanguage = () => window.MettiI18n?.apply?.(state.language);
-  const categoryLabel = (category) => ({ outer: 'Верхняя одежда', top: 'Верх', bottom: 'Низ', shoes: 'Обувь', accessory: 'Аксессуары' }[category] || category);
+  const categoryLabel = (category) => ({ all: 'Все', outer: 'Верхняя одежда', top: 'Верх', bottom: 'Низ', shoes: 'Обувь', accessory: 'Аксессуары' }[category] || category);
+  const subcategoryLabel = (value) => {
+    const canonical = canonicalSubcategory(value);
+    return Object.values(wardrobeSubcategoryOptions).flat().find((option) => option.value === canonical)?.label || value;
+  };
+  const filterSubcategoryOptions = (category) => category === 'all' ? [{ value: 'all', label: 'Все виды' }] : [{ value: 'all', label: 'Все виды' }, ...(wardrobeSubcategoryOptions[category] || [])];
+  const renderWardrobeSubcategoryFilter = () => {
+    const select = byId('wardrobe-subcategory-filter');
+    if (!select) return;
+    const category = state.wardrobeFilter || 'all';
+    const options = filterSubcategoryOptions(category);
+    select.innerHTML = '';
+    options.forEach((option) => {
+      const node = document.createElement('option');
+      node.value = option.value;
+      node.textContent = translate(option.label);
+      select.append(node);
+    });
+    const selected = options.some((option) => option.value === state.wardrobeSubcategory) ? state.wardrobeSubcategory : 'all';
+    state.wardrobeSubcategory = selected;
+    select.value = selected;
+    const label = byId('wardrobe-subcategory-category');
+    if (label) label.textContent = translate(categoryLabel(category));
+  };
+  const applyWardrobeFilters = () => {
+    const query = document.querySelector('.search-box input')?.value.trim().toLowerCase() || '';
+    const category = state.wardrobeFilter || 'all';
+    const subcategory = state.wardrobeSubcategory || 'all';
+    document.querySelectorAll('.wardrobe-item').forEach((item) => {
+      const itemCategory = item.dataset.category === 'outer' ? 'top' : item.dataset.category;
+      const categoryMatches = category === 'all' || itemCategory === category;
+      const subcategoryMatches = subcategory === 'all' || canonicalSubcategory(item.dataset.subcategory) === subcategory;
+      const queryMatches = !query || item.textContent.toLowerCase().includes(query);
+      item.hidden = !(categoryMatches && subcategoryMatches && queryMatches);
+    });
+  };
   const setText = (selector, value) => { const node = document.querySelector(selector); if (node) node.textContent = translate(value ?? ''); };
   const showToast = (message, type = '') => {
     if (!toast) return;
@@ -76,7 +205,7 @@
     state.language = language === 'en' ? 'en' : 'ru';
     if (window.MettiI18n?.setLanguage) window.MettiI18n.setLanguage(state.language);
     else { try { window.localStorage.setItem(languageStorageKey, state.language); } catch (_) { /* Storage can be unavailable in private file contexts. */ } }
-    renderProfile(); renderLooks(); updateDate(); updateWeather();
+    renderProfile(); renderLooks(); renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); updateDate(); updateWeather();
     syncLanguageControls();
     if (notify) showToast(state.language === 'en' ? 'English selected' : 'Русский выбран', 'success');
   };
@@ -191,14 +320,15 @@
     const items = state.wardrobe;
     const empty = byId('wardrobe-empty');
     grid.innerHTML = '';
-    if (!items.length) { empty?.classList.add('show'); renderProfile(); return; }
+    if (!items.length) { empty?.classList.add('show'); renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderProfile(); return; }
     empty?.classList.remove('show');
     items.forEach((item) => {
       const button = document.createElement('button');
       button.className = 'wardrobe-item';
       button.type = 'button';
       button.dataset.itemId = item.id;
-      button.dataset.category = item.category || 'accessory';
+      button.dataset.category = categoryForItem(item);
+      button.dataset.subcategory = itemSubcategory(item);
       const art = document.createElement('div');
       art.className = `item-art ${itemClass(item)}`;
       const label = document.createElement('span');
@@ -206,7 +336,7 @@
       art.append(label); button.append(art); grid.append(button);
       if (item.image_path) addImageBackground(art, item.image_path);
     });
-    renderProfile();
+    renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderProfile();
   };
   const renderDetail = async (item) => {
     if (!item) return;
@@ -222,7 +352,7 @@
     const chips = document.querySelector('.detail-chips');
     if (chips) {
       chips.innerHTML = '';
-      [categoryLabel(item.category), item.color, item.size, item.season].filter(Boolean).slice(0, 4).forEach((value) => { const node = document.createElement('span'); node.textContent = translate(value); chips.append(node); });
+      [categoryLabel(categoryForItem(item)), subcategoryLabel(itemSubcategory(item)), item.color, item.size, item.season].filter(Boolean).slice(0, 5).forEach((value) => { const node = document.createElement('span'); node.textContent = translate(value); chips.append(node); });
     }
     const addButton = document.querySelector('[data-action="add-item"]');
     if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
@@ -380,13 +510,33 @@
   };
   const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; renderProfile(); renderWardrobe(); renderLooks(); };
 
+  const renderWardrobeFormSubcategories = (category, selected = '') => {
+    const select = byId('wardrobe-form')?.elements.subcategory;
+    if (!select) return;
+    const options = wardrobeSubcategoryOptions[category] || [];
+    select.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = translate('Выберите вид');
+    select.append(placeholder);
+    options.forEach((option) => {
+      const node = document.createElement('option');
+      node.value = option.value;
+      node.textContent = translate(option.label);
+      select.append(node);
+    });
+    select.value = canonicalSubcategory(selected);
+  };
+
   const openWardrobeSheet = (item = null) => {
     const backdrop = byId('wardrobe-sheet'); const form = byId('wardrobe-form'); if (!backdrop || !form) return;
     const persistedItem = item && !String(item.id).startsWith('demo-');
     form.dataset.itemId = persistedItem ? item.id : '';
     byId('wardrobe-form-title').textContent = translate(persistedItem ? 'Изменить вещь' : 'Новая вещь');
     ['name','color','size','season','brand','notes'].forEach((name) => { if (form.elements[name]) form.elements[name].value = item?.[name] || ''; });
-    if (form.elements.category) form.elements.category.value = item?.category || 'outer';
+    const category = item ? categoryForItem(item) : 'top';
+    if (form.elements.category) form.elements.category.value = category;
+    renderWardrobeFormSubcategories(category, item ? itemSubcategory(item) : '');
     if (form.elements.image) form.elements.image.value = '';
     setFormStatus('wardrobe-form-status'); backdrop.hidden = false; document.body.classList.add('modal-open');
     setTimeout(() => form.elements.name?.focus(), 0);
@@ -394,8 +544,9 @@
   const closeWardrobeSheet = () => { const node = byId('wardrobe-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
   const saveWardrobeForm = async (event) => {
     event.preventDefault(); const form = event.currentTarget;
-    const name = form.elements.name.value.trim(); const category = form.elements.category.value;
+    const name = form.elements.name.value.trim(); const category = form.elements.category.value; const subcategory = form.elements.subcategory?.value || '';
     if (!name) return setFormStatus('wardrobe-form-status', 'Введите название вещи.', 'error');
+    if (!subcategory) return setFormStatus('wardrobe-form-status', 'Выберите вид вещи.', 'error');
     if (!state.user || !supabase?.data) return setFormStatus('wardrobe-form-status', 'Войдите, чтобы сохранять вещи.', 'error');
     // Demo cards are only templates; when opened from a demo card, create a
     // new persisted item instead of trying to update the demo id.
@@ -408,7 +559,9 @@
       const processedFile = file ? await prepareWardrobeImage(file) : null;
       if (processedFile && processedFile.size > 5 * 1024 * 1024) throw new Error('После обработки файл получился больше 5 МБ. Выберите фото поменьше.');
       if (processedFile) { setFormStatus('wardrobe-form-status', 'Загружаю фотографию…'); newPath = await supabase.data.uploadWardrobeImage(processedFile, state.user.id, existing?.id || uuid()); }
-      const payload = { user_id: state.user.id, name, category, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null, image_path: newPath, metadata: existing?.metadata || {} };
+      const metadata = existing?.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
+      metadata.subcategory = subcategory;
+      const payload = { user_id: state.user.id, name, category, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null, image_path: newPath, metadata };
       const saved = existing ? await supabase.data.updateWardrobeItem(existing.id, payload) : await supabase.data.saveWardrobeItem(payload);
       if (!saved) throw new Error('Вещь не вернулась из Supabase.');
       if (existing?.image_path && newPath && existing.image_path !== newPath) await supabase.data.removeWardrobeImage(existing.image_path).catch(() => {});
@@ -533,7 +686,7 @@
     go('chat'); addMessage(promptForStylist, 'user'); setThinking(true); const requestId = ++state.requestNumber; showToast('Metti собирает образ…');
     try {
       let result;
-      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, wardrobe: state.wardrobe.map(({ id, name, category, color, size, season, brand, notes }) => ({ id, name, category, color, size, season, brand, notes })), profile: state.profile });
+      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, wardrobe: state.wardrobe.map((item) => ({ id: item.id, name: item.name, category: categoryForItem(item), subcategory: itemSubcategory(item), color: item.color, size: item.size, season: item.season, brand: item.brand, notes: item.notes })), profile: state.profile });
       else result = fallbackOutfit(promptForStylist);
       if (requestId !== state.requestNumber) return;
       state.currentOutfit = { ...result, prompt: promptForStylist }; setThinking(false); addMessage(result.message || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
@@ -549,7 +702,7 @@
     const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } go(screenButton.dataset.screen); return; }
     const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item); go('item'); } return; }
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
-    const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); const filter = tab.dataset.filter; document.querySelectorAll('.wardrobe-item').forEach((item) => { item.hidden = filter !== 'all' && item.dataset.category !== filter; }); return; }
+    const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); state.wardrobeFilter = tab.dataset.filter || 'all'; state.wardrobeSubcategory = 'all'; renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); return; }
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'wear') { event.target.textContent = translate('Образ надет ✓'); saveCurrentOutfit(true); }
     if (action === 'other') ask('Другой вариант образа');
@@ -582,14 +735,16 @@
     if (action === 'send-chat') { const input = byId('chat-input'); const value = input.value.trim(); if (value) { input.value = ''; ask(value); } }
   });
   byId('wardrobe-form')?.addEventListener('submit', saveWardrobeForm);
+  byId('wardrobe-form')?.elements.category?.addEventListener('change', (event) => renderWardrobeFormSubcategories(event.target.value));
+  byId('wardrobe-subcategory-filter')?.addEventListener('change', (event) => { state.wardrobeSubcategory = event.target.value || 'all'; applyWardrobeFilters(); });
   byId('wardrobe-sheet')?.querySelectorAll('[data-action="close-wardrobe-sheet"]').forEach((button) => button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); closeWardrobeSheet(); }));
   byId('profile-form')?.addEventListener('submit', saveProfileForm);
   byId('style-form')?.addEventListener('submit', saveStyleForm);
-  document.querySelector('.search-box input')?.addEventListener('input', (event) => { const query = event.target.value.trim().toLowerCase(); document.querySelectorAll('.wardrobe-item').forEach((item) => { item.hidden = query.length > 0 && !item.textContent.toLowerCase().includes(query); }); });
+  document.querySelector('.search-box input')?.addEventListener('input', applyWardrobeFilters);
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { node.hidden = true; document.body.classList.remove('modal-open'); } }));
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
   window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; });
-  syncLanguageControls(); updateDate(); updateWeather();
+  renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateWeather();
   if (demoMode) seedDemo();
   else if (supabase?.auth) {
     supabase.auth.restoreSession().then(async (session) => { if (session) { state.user = session.user || supabase.currentUser?.(); if (!state.user) state.user = await supabase.auth.getUser().catch(() => null); await loadData(); } else if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); }).catch(() => { if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); });
