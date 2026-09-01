@@ -77,6 +77,9 @@ body.modal-open{overflow:hidden}
 #delete-account-sheet .form-actions button{flex:1}
 .screen[data-screen-id="profile"] .profile-language-row .profile-language-copy>span{font-size:14px!important}.screen[data-screen-id="profile"] .profile-language-row .profile-language-copy small{font-size:12px!important}.screen[data-screen-id="profile"] .profile-language-row .menu-icon svg{width:19px;height:19px}.language-data-sheet .language-option-name{font-size:14px}.language-data-sheet .language-option-code{width:34px;height:34px;font-size:11px}
 
+/* The profile tab uses the outlined active state from the reference. */
+.bottom-nav button[data-screen="profile"].active{min-width:64px;height:47px;margin-top:-3px;padding:4px 10px 3px;border:1px solid var(--rose);border-radius:0}
+
 /* Stylist screen: scale the whole composer area up by about 20%. */
 .screen[data-screen-id="stylist"]{padding:24px 29px 29px!important}
 .screen[data-screen-id="stylist"] .eyebrow{font-size:13px!important;letter-spacing:2.4px!important}
@@ -91,3 +94,27 @@ body.modal-open{overflow:hidden}
 .screen[data-screen-id="stylist"] .composer-actions button{width:48px!important;height:48px!important;font-size:23px!important}
 .screen[data-screen-id="stylist"] .chips{gap:9px!important;margin:22px 0!important}
 .screen[data-screen-id="stylist"] .chips button{min-height:44px!important;padding:11px 17px!important;border-radius:999px!important;font-size:15px!important;font-weight:600!important}
+
+/* Keep wardrobe tiles compact and keep labels readable over the photos. */
+.screen[data-screen-id="wardrobe"] .wardrobe-grid{gap:12px 9px!important;padding:16px 0 120px!important}
+.screen[data-screen-id="wardrobe"] .item-art{height:auto!important;aspect-ratio:1 / 1!important;margin-bottom:0!important;border-radius:16px!important}
+.screen[data-screen-id="wardrobe"] .item-art.has-image::after{background:linear-gradient(180deg,transparent 60%,rgba(255,250,244,.92) 100%)!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art.has-image span{right:10px;color:#6f5849!important;font:500 11px/1.15 var(--sans)!important;text-shadow:0 1px 2px rgba(255,255,255,.7)!important}
+
+/* Open the wardrobe subcategory filter as a Metti bottom sheet instead of a native Android list. */
+.subcategory-filter .subcategory-trigger{display:flex!important;width:100%;height:43px;align-items:center;justify-content:space-between;padding:0 12px;border:1.5px solid var(--rose);border-radius:13px;background:var(--surface);color:var(--ink);font:12px var(--sans);text-align:left;cursor:pointer;outline:0}
+.subcategory-filter .subcategory-trigger:focus-visible,.subcategory-filter .subcategory-trigger[aria-expanded="true"]{box-shadow:0 0 0 3px #8b4e7020}
+.subcategory-trigger-chevron{color:var(--rose);font-size:18px;line-height:1;transform:translateY(-1px)}
+.subcategory-filter select[hidden]{display:none!important}
+.subcategory-sheet-backdrop{padding:0!important;place-items:end center!important;background:#211e1a66!important}
+.subcategory-data-sheet{position:relative;width:min(100%,420px);max-height:min(82vh,620px);overflow:hidden;padding:13px 20px calc(58px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}
+.subcategory-sheet-handle{width:42px;height:4px;margin:0 auto 14px;border-radius:99px;background:#ddc9c3}
+.subcategory-data-sheet>.data-sheet-close{position:absolute;top:13px;right:17px;float:none;width:30px;height:30px;background:var(--soft);color:var(--rose);font-size:22px;line-height:1}
+.subcategory-data-sheet h2{margin:0 40px 6px 0;font:500 30px/.98 var(--serif)}
+.subcategory-sheet-note{margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.35}
+.subcategory-sheet-options{display:grid;gap:6px;max-height:calc(82vh - 150px);overflow:auto;padding:1px 1px 2px}
+.subcategory-sheet-option{display:flex;width:100%;min-height:47px;align-items:center;justify-content:space-between;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:#fffaf8;color:var(--ink);font:13px var(--sans);text-align:left;cursor:pointer;outline:0;-webkit-appearance:none;appearance:none}
+.subcategory-sheet-option:focus-visible{box-shadow:0 0 0 3px #8b4e7020}
+.subcategory-sheet-option.is-selected{border-color:var(--rose);background:var(--soft);color:var(--rose);font-weight:600}
+.subcategory-sheet-check{width:20px;color:var(--rose);font-size:18px;font-weight:700;line-height:1;text-align:right}
+@media(max-width:500px){.subcategory-data-sheet{max-height:82vh;padding-right:18px;padding-left:18px;border-radius:23px 23px 0 0}.subcategory-sheet-options{max-height:calc(82vh - 145px)}.subcategory-sheet-option{min-height:49px;font-size:14px}}

@@ -177,7 +177,7 @@
       if (!item) return null;
       used.add(String(item.id)); return item;
     };
-    const hero = take((item) => ['outerwear', 'blazer'].includes(itemSubcategory(item))) || take((item) => itemSubcategory(item) === 'dress') || take((item) => categoryForItem(item) === 'top') || take(() => true);
+    const hero = take((item) => ['outerwear', 'blazer'].includes(itemSubcategory(item))) || take((item) => itemSubcategory(item) === 'dress') || take((item) => categoryForItem(item) === 'top') || take((item) => categoryForItem(item) === 'bottom') || take((item) => categoryForItem(item) === 'shoes') || take((item) => categoryForItem(item) === 'accessory');
     const top = itemSubcategory(hero) === 'dress' ? null : take((item) => categoryForItem(item) === 'top' && !['outerwear', 'blazer', 'dress'].includes(itemSubcategory(item)));
     const bottom = take((item) => categoryForItem(item) === 'bottom');
     const shoes = take((item) => categoryForItem(item) === 'shoes');
@@ -196,7 +196,46 @@
     return Object.values(wardrobeSubcategoryOptions).flat().find((option) => option.value === canonical)?.label || value;
   };
   const filterSubcategoryOptions = (category) => category === 'all' ? [{ value: 'all', label: 'Все виды' }] : [{ value: 'all', label: 'Все виды' }, ...(wardrobeSubcategoryOptions[category] || [])];
+  const ensureWardrobeSubcategoryPicker = () => {
+    const select = byId('wardrobe-subcategory-filter');
+    const source = select?.closest('.subcategory-filter');
+    if (!select || !source) return;
+    if (!byId('wardrobe-subcategory-trigger')) {
+      const caption = Array.from(source.children).find((child) => child.tagName === 'SPAN');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'subcategory-filter';
+      if (caption) wrapper.append(caption.cloneNode(true));
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.id = 'wardrobe-subcategory-trigger';
+      trigger.className = 'subcategory-trigger';
+      trigger.dataset.action = 'open-wardrobe-subcategory';
+      trigger.setAttribute('aria-haspopup', 'dialog');
+      trigger.setAttribute('aria-expanded', 'false');
+      const value = document.createElement('span');
+      value.id = 'wardrobe-subcategory-value';
+      const chevron = document.createElement('span');
+      chevron.className = 'subcategory-trigger-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+      chevron.textContent = '⌄';
+      trigger.append(value, chevron);
+      select.hidden = true;
+      select.tabIndex = -1;
+      select.setAttribute('aria-hidden', 'true');
+      wrapper.append(trigger, select);
+      source.replaceWith(wrapper);
+    }
+    if (!byId('wardrobe-subcategory-sheet')) {
+      const backdrop = document.createElement('div');
+      backdrop.id = 'wardrobe-subcategory-sheet';
+      backdrop.className = 'sheet-backdrop subcategory-sheet-backdrop';
+      backdrop.hidden = true;
+      backdrop.innerHTML = '<div class="data-sheet subcategory-data-sheet" role="dialog" aria-modal="true" aria-labelledby="wardrobe-subcategory-sheet-title"><div class="subcategory-sheet-handle" aria-hidden="true"></div><button class="data-sheet-close" type="button" data-action="close-wardrobe-subcategory" aria-label="Закрыть">×</button><h2 id="wardrobe-subcategory-sheet-title">Выберите вид</h2><p class="subcategory-sheet-note"><span id="wardrobe-subcategory-sheet-caption">Подкатегория</span> · <span id="wardrobe-subcategory-sheet-category">Все</span></p><div id="wardrobe-subcategory-options" class="subcategory-sheet-options" role="listbox" aria-label="Подкатегория"></div></div>';
+      document.body.append(backdrop);
+    }
+  };
   const renderWardrobeSubcategoryFilter = () => {
+    ensureWardrobeSubcategoryPicker();
     const select = byId('wardrobe-subcategory-filter');
     if (!select) return;
     const category = state.wardrobeFilter || 'all';
@@ -213,6 +252,59 @@
     select.value = selected;
     const label = byId('wardrobe-subcategory-category');
     if (label) label.textContent = translate(categoryLabel(category));
+    const triggerValue = byId('wardrobe-subcategory-value');
+    if (triggerValue) triggerValue.textContent = translate(options.find((option) => option.value === selected)?.label || 'Все виды');
+    const sheetCaption = byId('wardrobe-subcategory-sheet-caption');
+    if (sheetCaption) sheetCaption.textContent = translate('Подкатегория');
+    const sheetCategory = byId('wardrobe-subcategory-sheet-category');
+    if (sheetCategory) sheetCategory.textContent = translate(categoryLabel(category));
+    const optionList = byId('wardrobe-subcategory-options');
+    if (optionList) {
+      optionList.innerHTML = '';
+      options.forEach((option) => {
+        const optionButton = document.createElement('button');
+        const isSelected = option.value === selected;
+        optionButton.type = 'button';
+        optionButton.className = `subcategory-sheet-option${isSelected ? ' is-selected' : ''}`;
+        optionButton.dataset.subcategoryOption = option.value;
+        optionButton.setAttribute('role', 'option');
+        optionButton.setAttribute('aria-selected', String(isSelected));
+        const optionLabel = document.createElement('span');
+        optionLabel.textContent = translate(option.label);
+        const check = document.createElement('span');
+        check.className = 'subcategory-sheet-check';
+        check.setAttribute('aria-hidden', 'true');
+        check.textContent = isSelected ? '✓' : '';
+        optionButton.append(optionLabel, check);
+        optionList.append(optionButton);
+      });
+    }
+  };
+  const openWardrobeSubcategorySheet = () => {
+    ensureWardrobeSubcategoryPicker();
+    renderWardrobeSubcategoryFilter();
+    const node = byId('wardrobe-subcategory-sheet');
+    if (!node) return;
+    node.hidden = false;
+    document.body.classList.add('modal-open');
+    byId('wardrobe-subcategory-trigger')?.setAttribute('aria-expanded', 'true');
+    setTimeout(() => node.querySelector('.subcategory-sheet-option[aria-selected="true"]')?.focus(), 0);
+  };
+  const closeWardrobeSubcategorySheet = ({ restoreFocus = true } = {}) => {
+    const node = byId('wardrobe-subcategory-sheet');
+    if (node) node.hidden = true;
+    document.body.classList.remove('modal-open');
+    const trigger = byId('wardrobe-subcategory-trigger');
+    trigger?.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) trigger?.focus();
+  };
+  const chooseWardrobeSubcategory = (value) => {
+    state.wardrobeSubcategory = value || 'all';
+    const select = byId('wardrobe-subcategory-filter');
+    if (select) select.value = state.wardrobeSubcategory;
+    applyWardrobeFilters();
+    renderWardrobeSubcategoryFilter();
+    closeWardrobeSubcategorySheet();
   };
   const applyWardrobeFilters = () => {
     const query = document.querySelector('.search-box input')?.value.trim().toLowerCase() || '';
@@ -326,6 +418,24 @@
   };
 
   const profileName = () => state.profile?.display_name || state.user?.user_metadata?.full_name || state.user?.email?.split('@')[0] || 'Наталия';
+  const timeOfDayGreeting = () => {
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Prague', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+    if (hour >= 5 && hour < 12) return 'Доброе утро,';
+    if (hour >= 12 && hour < 18) return 'Добрый день,';
+    if (hour >= 18) return 'Добрый вечер,';
+    return 'Доброй ночи,';
+  };
+  const updateGreeting = (name = profileName()) => {
+    const greeting = document.querySelector('.screen[data-screen-id="home"] h1');
+    if (!greeting) return;
+    greeting.innerHTML = '';
+    const greetingText = document.createElement('span');
+    greetingText.textContent = translate(timeOfDayGreeting());
+    const lineBreak = document.createElement('br');
+    const greetingName = document.createElement('span');
+    greetingName.textContent = name;
+    greeting.append(greetingText, lineBreak, greetingName);
+  };
   const styleTags = () => Array.isArray(state.profile?.style_tags) && state.profile.style_tags.length ? state.profile.style_tags : ['Спокойный', 'Элегантный'];
   const renderProfile = () => {
     const name = profileName();
@@ -334,8 +444,7 @@
     const displayStyleLabel = tags.slice(0, 2).map((tag) => translate(tag)).join(' · ');
     setText('.screen[data-screen-id="profile"] .profile-heading h1', name);
     setText('.screen[data-screen-id="profile"] .profile-card-copy strong', name);
-    const greeting = document.querySelector('.screen[data-screen-id="home"] h1');
-    if (greeting) { greeting.innerHTML = ''; const greetingText = document.createElement('span'); greetingText.textContent = translate('Доброе утро,'); const lineBreak = document.createElement('br'); const greetingName = document.createElement('span'); greetingName.textContent = name; greeting.append(greetingText, lineBreak, greetingName); }
+    updateGreeting(name);
     setText('.screen[data-screen-id="profile"] .profile-card-copy small', displayStyleLabel);
     setText('.screen[data-screen-id="profile"] .profile-style-card strong', displayStyleLabel);
     setText('.screen[data-screen-id="profile"] .profile-style-card small', state.language === 'en' ? `Works for ${city}, work, and occasions.` : `Подходит для ${city}, работы и встреч.`);
@@ -363,9 +472,11 @@
   };
   const renderVisualNode = async (node, item, layoutClass, emptyLabel) => {
     if (!node) return;
+    node.hidden = !item;
     const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
     const canUseDemoArt = item && String(item.id).startsWith('demo-');
-    const visualClasses = item && (item.image_path || canUseDemoArt) ? itemClass(item).split(/\s+/) : ['collage-empty'];
+    const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
+    const visualClasses = item && (item.image_path || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
     node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
     ['background-image', 'background-position', 'background-size', 'background-repeat'].forEach((property) => node.style.removeProperty(property));
     node.classList.remove('has-image');
@@ -388,6 +499,10 @@
       ['bag', '[data-collage-slot="bag"]', 'pink', 'Аксессуар'],
       ['accent', '[data-collage-slot="accent"]', '', 'Аксессуар']
     ];
+    const sideCount = [slots.top, slots.bottom].filter(Boolean).length;
+    const bottomCount = [slots.shoes, slots.bag, slots.accent].filter(Boolean).length;
+    collage.classList.remove('side-count-0', 'side-count-1', 'side-count-2', 'bottom-count-0', 'bottom-count-1', 'bottom-count-2', 'bottom-count-3');
+    collage.classList.add(`side-count-${sideCount}`, `bottom-count-${bottomCount}`);
     await Promise.all(definitions.map(([key, selector, layoutClass, emptyLabel]) => renderVisualNode(collage.querySelector(selector), slots[key], layoutClass, emptyLabel)));
     collage.setAttribute('aria-label', translate('Коллаж образа из вашего гардероба'));
   };
@@ -774,6 +889,7 @@
   };
 
   document.addEventListener('click', (event) => {
+    const subcategoryOption = event.target.closest('[data-subcategory-option]'); if (subcategoryOption) { chooseWardrobeSubcategory(subcategoryOption.dataset.subcategoryOption); return; }
     const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
     const languageOption = event.target.closest('[data-language-option]'); if (languageOption) { setLanguage(languageOption.dataset.languageOption); closeLanguageSheet(); return; }
     const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
@@ -782,6 +898,8 @@
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
     const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); state.wardrobeFilter = tab.dataset.filter || 'all'; state.wardrobeSubcategory = 'all'; renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); return; }
     const action = event.target.closest('[data-action]')?.dataset.action;
+    if (action === 'open-wardrobe-subcategory') { openWardrobeSubcategorySheet(); return; }
+    if (action === 'close-wardrobe-subcategory') { closeWardrobeSubcategorySheet(); return; }
     if (action === 'wear') { event.target.textContent = translate('Образ надет ✓'); saveCurrentOutfit(true); }
     if (action === 'other') ask('Другой вариант образа');
     if (action === 'save') saveCurrentOutfit(false);
@@ -819,13 +937,16 @@
   byId('profile-form')?.addEventListener('submit', saveProfileForm);
   byId('style-form')?.addEventListener('submit', saveStyleForm);
   document.querySelector('.search-box input')?.addEventListener('input', applyWardrobeFilters);
-  document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { node.hidden = true; document.body.classList.remove('modal-open'); } }));
+  ensureWardrobeSubcategoryPicker();
+  document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
+  document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); if (event.key === 'Escape' && node && !node.hidden) closeWardrobeSubcategorySheet(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
   window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; });
-  renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateWeather();
+  renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateGreeting(); updateWeather();
   if (demoMode) seedDemo();
   else if (supabase?.auth) {
     supabase.auth.restoreSession().then(async (session) => { if (session) { state.user = session.user || supabase.currentUser?.(); if (!state.user) state.user = await supabase.auth.getUser().catch(() => null); await loadData(); } else if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); }).catch(() => { if (!window.MettiAuth?.isOAuthPending?.()) window.MettiAuth?.show('login'); });
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateDate(); updateWeather(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateDate(); updateGreeting(); updateWeather(); } });
+  window.setInterval(() => { if (!document.hidden) { updateDate(); updateGreeting(); } }, 60000);
 })();

@@ -15,7 +15,7 @@
 .screen[data-screen-id="home"] .weather-card strong{font-size:16px;font-weight:700}
 .screen[data-screen-id="home"] .weather-card small{font-size:13px}
 .screen[data-screen-id="home"] .section-label{margin-top:14px;margin-bottom:7px;font-size:10px}
-.screen[data-screen-id="home"] .outfit-collage{height:270px;margin-top:7px;grid-template-rows:minmax(90px,1fr) minmax(90px,1fr) 56px}
+.screen[data-screen-id="home"] .outfit-collage{height:310px;margin-top:7px;grid-template-rows:minmax(90px,1fr) minmax(90px,1fr) 56px}
 .screen[data-screen-id="home"] .placeholder span{left:11px;bottom:10px;font-size:10.5px}
 .screen[data-screen-id="home"] .primary{height:50px;margin-top:11px;font-size:17px;font-weight:700}
 .screen[data-screen-id="home"] .button-row{margin-top:8px;gap:10px}
