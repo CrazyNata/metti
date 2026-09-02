@@ -27,8 +27,20 @@
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
   };
-  const EDITORIAL_IMAGE_BACKGROUND = 'metti-editorial-v1';
+  const EDITORIAL_IMAGE_BACKGROUND = 'metti-editorial-v2';
+  const EDITORIAL_BACKGROUND_COLOR = '#f0e9df';
   const pendingImageNormalizations = new Set();
+  const nativeImageRequests = new Map();
+  window.MettiImageProcessing = window.MettiImageProcessing || {};
+  window.MettiImageProcessing.resolve = (requestId, processedUrl, errorMessage) => {
+    const request = nativeImageRequests.get(requestId);
+    if (!request) return;
+    clearTimeout(request.timeout);
+    nativeImageRequests.delete(requestId);
+    if (errorMessage) request.reject(new Error(errorMessage));
+    else request.resolve(processedUrl);
+  };
+  const isEditorialImageReady = (item) => Boolean(item?.image_path && (item?.metadata?.image_source !== 'mcp' || item?.metadata?.image_background === EDITORIAL_IMAGE_BACKGROUND));
   let lastDataSyncAt = 0;
   let toastTimer;
   let activeMettiSelect = null;
@@ -696,7 +708,8 @@
     const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
     const canUseDemoArt = item && String(item.id).startsWith('demo-');
     const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
-    const visualClasses = item && (item.image_path || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
+    const imageReady = isEditorialImageReady(item);
+    const visualClasses = item && (imageReady || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
     node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
     ['background-image', 'background-position', 'background-size', 'background-repeat', 'background-color'].forEach((property) => node.style.removeProperty(property));
     node.classList.remove('has-image');
@@ -705,7 +718,7 @@
     label.textContent = translate(item?.name || emptyLabel || 'Вещь');
     node.append(label);
     node.setAttribute('aria-label', label.textContent);
-    if (item?.image_path) await addImageBackground(node, item.image_path);
+    if (imageReady) await addImageBackground(node, item.image_path);
   };
   const renderHomeCollage = async (outfit = state.currentOutfit) => {
     const collage = document.querySelector('.screen[data-screen-id="home"] .outfit-collage');
@@ -746,7 +759,7 @@
       const label = document.createElement('span');
       label.textContent = translate(item.name || 'Вещь');
       art.append(label); button.append(art); grid.append(button);
-      if (item.image_path) addImageBackground(art, item.image_path);
+      if (isEditorialImageReady(item)) addImageBackground(art, item.image_path);
     });
     renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderProfile();
   };
@@ -758,7 +771,7 @@
       art.className = `item-detail-art placeholder ${itemClass(item)}`;
       art.innerHTML = '';
       const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); art.append(label);
-      if (item.image_path) addImageBackground(art, item.image_path);
+      if (isEditorialImageReady(item)) addImageBackground(art, item.image_path);
     }
     setText('.screen[data-screen-id="item"] .detail-title', item.name || 'Вещь');
     const chips = document.querySelector('.detail-chips');
@@ -770,8 +783,48 @@
     if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
     await imageUrl(item.image_path);
   };
+  const processNativeWardrobeImage = async (file) => {
+    const bridge = window.MettiAndroid;
+    if (!bridge || typeof bridge.removeImageBackground !== 'function') return null;
+    let processedUrl = '';
+    const requestId = `metti-image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Не удалось прочитать фотографию.'));
+        reader.readAsDataURL(file);
+      });
+      processedUrl = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          nativeImageRequests.delete(requestId);
+          reject(new Error('Обработка фотографии заняла слишком много времени.'));
+        }, 120000);
+        nativeImageRequests.set(requestId, { resolve, reject, timeout });
+        try {
+          bridge.removeImageBackground(dataUrl, requestId);
+        } catch (error) {
+          clearTimeout(timeout);
+          nativeImageRequests.delete(requestId);
+          reject(error);
+        }
+      });
+      const response = await fetch(processedUrl);
+      if (!response.ok) throw new Error('Не удалось получить обработанную фотографию.');
+      const blob = await response.blob();
+      if (!blob.size || !String(blob.type || '').startsWith('image/')) throw new Error('Обработанная фотография повреждена.');
+      return new File([blob], `${String(file.name || 'wardrobe').replace(/\.[^.]+$/, '')}-metti-editorial.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    } catch (_) {
+      return null;
+    } finally {
+      if (processedUrl && typeof bridge.releaseProcessedImage === 'function') bridge.releaseProcessedImage(processedUrl);
+      nativeImageRequests.delete(requestId);
+    }
+  };
   const prepareWardrobeImage = async (file) => {
     if (!file || !String(file.type || '').startsWith('image/') || /heic|heif/i.test(file.type || '')) return file;
+    const nativeProcessed = await processNativeWardrobeImage(file);
+    if (nativeProcessed) return nativeProcessed;
     const objectUrl = URL.createObjectURL(file);
     let canvas;
     let output;
@@ -843,11 +896,7 @@
       output.width = width; output.height = height;
       const outputContext = output.getContext('2d');
       if (!outputContext) return file;
-      const editorialBackground = outputContext.createLinearGradient(0, 0, width, height);
-      editorialBackground.addColorStop(0, '#f7f2ea');
-      editorialBackground.addColorStop(0.56, '#f0e9df');
-      editorialBackground.addColorStop(1, '#e7ded1');
-      outputContext.fillStyle = editorialBackground;
+      outputContext.fillStyle = EDITORIAL_BACKGROUND_COLOR;
       outputContext.fillRect(0, 0, width, height);
       outputContext.drawImage(canvas, 0, 0);
       const blob = await new Promise((resolve) => output.toBlob(resolve, 'image/jpeg', 0.9));
@@ -907,6 +956,7 @@
   const normalizePendingMcpImages = async () => {
     if (!state.user || !supabase?.data) return;
     const pending = state.wardrobe.filter(isPendingMcpImage).slice(0, 12);
+    if (pending.length) showToast(`Оформляю ${pending.length} фото…`);
     let changed = false;
     for (const item of pending) {
       if (await normalizePendingMcpImage(item)) changed = true;

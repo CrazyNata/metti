@@ -14,10 +14,10 @@ android {
 
     defaultConfig {
         applicationId 'com.metti.app'
-        minSdk 23
+        minSdk 24
         targetSdk 36
-        versionCode 9
-        versionName '1.0.6'
+        versionCode 10
+        versionName '1.0.7'
     }
 
     signingConfigs {
@@ -43,4 +43,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+}
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
 }

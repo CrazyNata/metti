@@ -247,14 +247,15 @@ short-lived signed `imageUrl` where available.
 
 When an image was added through MCP, the shared wardrobe service marks it with
 an internal `image_source=mcp` and `image_background=pending` metadata value.
-On the next authenticated app sync, the existing browser image flow downloads
-that image, removes a connected plain-color border when possible, composites it
-onto the warm cream editorial background used by the mockup, uploads the
-formatted JPEG to the same private bucket and removes the old object only
-after the new database link succeeds. This is deterministic client-side image
-processing; MCP still does not call an LLM or an image-generation API. If the
-browser cannot process the format or the Storage request fails, the original
-MCP image remains available and can be retried on the next sync.
+On the next authenticated app sync, the Android app uses Google ML Kit subject
+segmentation on the device to isolate the foreground object, composites it onto
+the same solid warm cream editorial background used by the mockup, uploads the
+formatted JPEG to the private bucket and removes the old object only after the
+new database link succeeds. The browser fallback removes a connected
+plain-color border when possible and uses the same solid background. MCP still
+does not call an LLM or an image-generation API. If processing or Storage
+replacement fails, the old image remains available, is not shown as a finished
+editorial image, and can be retried on the next sync.
 
 The accepted inline image formats are JPEG, PNG, WebP, HEIC and HEIF, with a
 default maximum of 5 MiB. A remote `resource_link` is fetched only when its

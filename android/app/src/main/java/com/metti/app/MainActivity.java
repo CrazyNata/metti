@@ -4,25 +4,46 @@ import android.app.Activity;
 import android.content.ContentValues;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.net.Uri;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.media.ExifInterface;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.speech.RecognizerIntent;
+import android.util.Base64;
 import android.view.View;
 import android.view.WindowInsets;
 import android.webkit.WebChromeClient;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.ValueCallback;
 
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation;
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter;
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int METTI_BG = Color.rgb(251, 239, 238);
@@ -33,6 +54,10 @@ public final class MainActivity extends Activity {
     private Uri pendingCameraUri;
     private int nativeTopInset;
     private int nativeBottomInset;
+    private final ExecutorService imageExecutor = Executors.newSingleThreadExecutor();
+    private SubjectSegmenter subjectSegmenter;
+    private static final int MAX_IMAGE_EDGE = 1400;
+    private static final int EDITORIAL_BACKGROUND = Color.rgb(240, 233, 223);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,6 +114,18 @@ public final class MainActivity extends Activity {
                     return true;
                 }
                 return false;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                WebResourceResponse response = openProcessedImage(request.getUrl());
+                return response != null ? response : super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                WebResourceResponse response = openProcessedImage(Uri.parse(url));
+                return response != null ? response : super.shouldInterceptRequest(view, url);
             }
 
             @Override
@@ -240,6 +277,204 @@ public final class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void removeImageBackground(String dataUrl, String callbackId) {
+            imageExecutor.execute(() -> {
+                Bitmap source = null;
+                try {
+                    source = decodeImage(dataUrl);
+                    if (source == null) throw new IOException("Не удалось декодировать фотографию.");
+                    Bitmap sourceBitmap = source;
+                    runOnUiThread(() -> runSubjectSegmentation(sourceBitmap, callbackId));
+                } catch (Exception error) {
+                    if (source != null) source.recycle();
+                    dispatchImageProcessingResult(callbackId, "", error.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void releaseProcessedImage(String processedUrl) {
+            imageExecutor.execute(() -> {
+                File file = processedImageFile(processedUrl);
+                if (file != null) file.delete();
+            });
+        }
+    }
+
+    private SubjectSegmenter getSubjectSegmenter() {
+        if (subjectSegmenter == null) {
+            SubjectSegmenterOptions options = new SubjectSegmenterOptions.Builder()
+                    .enableForegroundBitmap()
+                    .build();
+            subjectSegmenter = SubjectSegmentation.getClient(options);
+        }
+        return subjectSegmenter;
+    }
+
+    private void runSubjectSegmentation(Bitmap source, String callbackId) {
+        final SubjectSegmenter segmenter;
+        try {
+            segmenter = getSubjectSegmenter();
+        } catch (Exception error) {
+            source.recycle();
+            dispatchImageProcessingResult(callbackId, "", error.getMessage());
+            return;
+        }
+        final InputImage input = InputImage.fromBitmap(source, 0);
+        segmenter.getInitTask()
+                .addOnSuccessListener(ignored -> segmenter.process(input)
+                        .addOnSuccessListener(result -> {
+                            try {
+                                Bitmap foreground = result.getForegroundBitmap();
+                                if (foreground == null) throw new IOException("Модель не вернула маску предмета.");
+                                File outputFile = writeEditorialImage(foreground);
+                                dispatchImageProcessingResult(callbackId, processedImageUrl(outputFile), "");
+                                if (foreground != source) foreground.recycle();
+                            } catch (Exception error) {
+                                dispatchImageProcessingResult(callbackId, "", error.getMessage());
+                            } finally {
+                                source.recycle();
+                            }
+                        })
+                        .addOnFailureListener(error -> {
+                            source.recycle();
+                            dispatchImageProcessingResult(callbackId, "", error.getMessage());
+                        }))
+                .addOnFailureListener(error -> {
+                    source.recycle();
+                    dispatchImageProcessingResult(callbackId, "", error.getMessage());
+                });
+    }
+
+    private Bitmap decodeImage(String dataUrl) throws IOException {
+        if (dataUrl == null) return null;
+        int comma = dataUrl.indexOf(',');
+        if (comma < 0) return null;
+        byte[] bytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT);
+        File inputFile = new File(getCacheDir(), "metti-input-" + UUID.randomUUID() + ".image");
+        try (FileOutputStream stream = new FileOutputStream(inputFile)) {
+            stream.write(bytes);
+        }
+        int orientation = ExifInterface.ORIENTATION_NORMAL;
+        try {
+            orientation = new ExifInterface(inputFile.getAbsolutePath()).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+        } catch (IOException ignored) {
+            // Some PNG/WebP files do not carry EXIF data.
+        }
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(inputFile.getAbsolutePath(), bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            inputFile.delete();
+            return null;
+        }
+        int sampleSize = 1;
+        int longestSide = Math.max(bounds.outWidth, bounds.outHeight);
+        while ((longestSide / sampleSize) > MAX_IMAGE_EDGE) sampleSize *= 2;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sampleSize;
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        Bitmap bitmap = BitmapFactory.decodeFile(inputFile.getAbsolutePath(), options);
+        inputFile.delete();
+        if (bitmap == null) return null;
+        android.graphics.Matrix matrix = new android.graphics.Matrix();
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+                matrix.setScale(-1f, 1f);
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_180:
+                matrix.setRotate(180f);
+                break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL:
+                matrix.setScale(1f, -1f);
+                break;
+            case ExifInterface.ORIENTATION_TRANSPOSE:
+                matrix.setRotate(90f);
+                matrix.postScale(-1f, 1f);
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_90:
+                matrix.setRotate(90f);
+                break;
+            case ExifInterface.ORIENTATION_TRANSVERSE:
+                matrix.setRotate(-90f);
+                matrix.postScale(-1f, 1f);
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_270:
+                matrix.setRotate(-90f);
+                break;
+            default:
+                break;
+        }
+        if (!matrix.isIdentity()) {
+            Bitmap oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            if (oriented != bitmap) bitmap.recycle();
+            bitmap = oriented;
+        }
+        int longestDecodedSide = Math.max(bitmap.getWidth(), bitmap.getHeight());
+        if (longestDecodedSide <= MAX_IMAGE_EDGE) return bitmap;
+        float scale = (float) MAX_IMAGE_EDGE / longestDecodedSide;
+        Bitmap scaled = Bitmap.createScaledBitmap(bitmap,
+                Math.max(1, Math.round(bitmap.getWidth() * scale)),
+                Math.max(1, Math.round(bitmap.getHeight() * scale)), true);
+        if (scaled != bitmap) bitmap.recycle();
+        return scaled;
+    }
+
+    private File writeEditorialImage(Bitmap foreground) throws IOException {
+        Bitmap output = Bitmap.createBitmap(foreground.getWidth(), foreground.getHeight(), Bitmap.Config.ARGB_8888);
+        try {
+            Canvas canvas = new Canvas(output);
+            canvas.drawColor(EDITORIAL_BACKGROUND);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+            canvas.drawBitmap(foreground, 0f, 0f, paint);
+            File file = new File(getCacheDir(), "metti-processed-" + UUID.randomUUID() + ".jpg");
+            try (FileOutputStream stream = new FileOutputStream(file)) {
+                if (!output.compress(Bitmap.CompressFormat.JPEG, 90, stream)) {
+                    throw new IOException("Не удалось сохранить обработанную фотографию.");
+                }
+            }
+            return file;
+        } finally {
+            output.recycle();
+        }
+    }
+
+    private static String processedImageUrl(File file) {
+        return "metti-image://processed/" + file.getName();
+    }
+
+    private File processedImageFile(String url) {
+        if (url == null) return null;
+        Uri uri = Uri.parse(url);
+        if (!"metti-image".equalsIgnoreCase(uri.getScheme()) || !"processed".equalsIgnoreCase(uri.getHost())) return null;
+        String name = uri.getLastPathSegment();
+        if (name == null || !name.matches("metti-processed-[A-Za-z0-9-]+\\.jpg")) return null;
+        return new File(getCacheDir(), name);
+    }
+
+    private WebResourceResponse openProcessedImage(Uri uri) {
+        File file = processedImageFile(uri == null ? null : uri.toString());
+        if (file == null || !file.isFile()) return null;
+        try {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Cache-Control", "no-store");
+            return new WebResourceResponse("image/jpeg", null, 200, "OK", headers, new FileInputStream(file));
+        } catch (IOException error) {
+            return null;
+        }
+    }
+
+    private void dispatchImageProcessingResult(String callbackId, String processedUrl, String errorMessage) {
+        if (webView == null) return;
+        String script = "window.MettiImageProcessing && window.MettiImageProcessing.resolve("
+                + JSONObject.quote(callbackId == null ? "" : callbackId) + ","
+                + JSONObject.quote(processedUrl == null ? "" : processedUrl) + ","
+                + JSONObject.quote(errorMessage == null ? "" : errorMessage) + ");";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 
     private void applyNativeInsetsToWeb() {
@@ -250,6 +485,13 @@ public final class MainActivity extends Activity {
                         + "r.style.setProperty('--metti-native-bottom-inset','" + nativeBottomInset + "px');})();",
                 null
         );
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (subjectSegmenter != null) subjectSegmenter.close();
+        imageExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     @Override
