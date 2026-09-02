@@ -53,6 +53,7 @@ import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int METTI_BG = Color.rgb(251, 239, 238);
+    private static final int METTI_LOADING_BG = Color.rgb(23, 21, 15);
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
     private static final int VOICE_REQUEST_CODE = 1002;
     private WebView webView;
@@ -70,14 +71,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(METTI_BG);
-        getWindow().setNavigationBarColor(METTI_BG);
-        getWindow().getDecorView().setBackgroundColor(METTI_BG);
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        applyLoadingSystemBars(true);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(METTI_BG);
+        webView.setBackgroundColor(METTI_LOADING_BG);
         webView.addJavascriptInterface(new MettiAndroidBridge(), "MettiAndroid");
         // Android 15+ enforces edge-to-edge for apps targeting recent API
         // levels. Keep the WebView content clear of the system bars while
@@ -269,7 +266,26 @@ public final class MainActivity extends Activity {
         );
     }
 
+    private void applyLoadingSystemBars(boolean loading) {
+        int color = loading ? METTI_LOADING_BG : METTI_BG;
+        getWindow().setStatusBarColor(color);
+        getWindow().setNavigationBarColor(color);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarDividerColor(color);
+        }
+        getWindow().getDecorView().setBackgroundColor(color);
+        getWindow().getDecorView().setSystemUiVisibility(loading
+                ? 0
+                : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        if (webView != null) webView.setBackgroundColor(color);
+    }
+
     private final class MettiAndroidBridge {
+        @JavascriptInterface
+        public void setLoadingSystemBars(boolean loading) {
+            runOnUiThread(() -> applyLoadingSystemBars(loading));
+        }
+
         @JavascriptInterface
         public void startVoiceInput(String language) {
             runOnUiThread(() -> {
