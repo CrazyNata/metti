@@ -418,6 +418,18 @@ export function registerTools(
       )
     ));
 
+  server.registerTool("add_wardrobe_item", {
+    description:
+      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields, image handling and deterministic Metti editorial-background treatment. Do not send user_id; ownership comes from the bearer token.",
+    inputSchema: createWardrobeItemSchema,
+    annotations: { ...writeAnnotations, idempotentHint: false },
+  }, (args) =>
+    runTool(() =>
+      services.wardrobe.add(
+        normalizeWardrobeCategoryInput(args as Record<string, unknown>),
+      )
+    ));
+
   server.registerTool("update_wardrobe_item", {
     description:
       "Edit one wardrobe item owned by the authenticated user. This changes user data. Do not send user_id; ownership is checked server-side and at the database RLS layer.",

@@ -126,7 +126,7 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assertEquals(listed.response.status, 200);
   const tools = listed.payload.result.tools as Array<Record<string, any>>;
   const names = tools.map((tool) => tool.name);
-  assertEquals(names.length, 20);
+  assertEquals(names.length, 21);
   for (const tool of tools) {
     assert(
       typeof tool.description === "string" && tool.description.length > 20,
@@ -136,16 +136,19 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assert(names.includes("get_profile"));
   assert(names.includes("search_wardrobe"));
   assert(names.includes("create_wardrobe_item"));
+  assert(names.includes("add_wardrobe_item"));
   assert(names.includes("attach_image_to_wardrobe_item"));
   assert(names.includes("replace_wardrobe_item_image"));
   assert(names.includes("remove_wardrobe_item_image"));
   assert(names.includes("save_outfit"));
-  assert(!names.includes("add_wardrobe_item"));
   assert(!names.includes("ask_ai_stylist"));
 
   const createTool = tools.find((tool) => tool.name === "create_wardrobe_item");
   assert(createTool?.inputSchema.required.includes("name"));
   assert(createTool?.inputSchema.required.includes("category"));
+  const addTool = tools.find((tool) => tool.name === "add_wardrobe_item");
+  assert(addTool?.inputSchema.required.includes("name"));
+  assert(addTool?.inputSchema.required.includes("category"));
 });
 
 Deno.test("authenticated read and write tool calls use shared data and return structured results", async () => {
@@ -221,6 +224,21 @@ Deno.test("authenticated read and write tool calls use shared data and return st
   assertEquals(db.wardrobe(createdId)?.color, "black");
   assert(db.wardrobe(createdId)?.image_path?.startsWith(`${userA.id}/`));
   assertEquals(db.uploadedImages.size, 1);
+
+  const addedViaCompatibilityAlias = await mcpRequest(db, {
+    jsonrpc: "2.0",
+    id: 46,
+    method: "tools/call",
+    params: {
+      name: "add_wardrobe_item",
+      arguments: { name: "Cream skirt", category: "bottom" },
+    },
+  });
+  assertEquals(addedViaCompatibilityAlias.response.status, 200);
+  assertEquals(
+    addedViaCompatibilityAlias.payload.result.structuredContent.name,
+    "Cream skirt",
+  );
 
   const foreign = await mcpRequest(db, {
     jsonrpc: "2.0",

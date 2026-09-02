@@ -84,7 +84,7 @@ the same token for RLS; it is not a bypass.
 
 ## Tools
 
-The server advertises 20 tools. The V1 data contract is:
+The server advertises 21 tools. The V1 data contract is:
 
 ### Profile
 
@@ -98,6 +98,7 @@ The server advertises 20 tools. The V1 data contract is:
 - `search_wardrobe`
 - `get_wardrobe_item`
 - `create_wardrobe_item`
+- `add_wardrobe_item` (compatibility alias for `create_wardrobe_item`)
 - `update_wardrobe_item`
 - `archive_wardrobe_item`
 
@@ -128,6 +129,9 @@ failures are standard MCP input-validation errors without stack traces.
 
 `name` and `category` are required. The remaining metadata is optional so the
 client can omit characteristics that cannot be inferred reliably:
+
+For compatibility with older Metti instructions, `add_wardrobe_item` accepts
+the same schema and performs the same authenticated create action.
 
 ```json
 {
