@@ -27,10 +27,13 @@
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
   };
-  const EDITORIAL_IMAGE_BACKGROUND = 'metti-editorial-v2';
+  const EDITORIAL_IMAGE_BACKGROUND = 'metti-editorial-v3';
   const EDITORIAL_BACKGROUND_COLOR = '#f0e9df';
   const pendingImageNormalizations = new Set();
   const nativeImageRequests = new Map();
+  const imageUrlCache = new Map();
+  const imageUrlRequests = new Map();
+  const IMAGE_URL_CACHE_TTL_MS = 50 * 60 * 1000;
   window.MettiImageProcessing = window.MettiImageProcessing || {};
   window.MettiImageProcessing.resolve = (requestId, processedUrl, errorMessage) => {
     const request = nativeImageRequests.get(requestId);
@@ -40,7 +43,7 @@
     if (errorMessage) request.reject(new Error(errorMessage));
     else request.resolve(processedUrl);
   };
-  const isEditorialImageReady = (item) => Boolean(item?.image_path && (item?.metadata?.image_source !== 'mcp' || item?.metadata?.image_background === EDITORIAL_IMAGE_BACKGROUND));
+  const isEditorialImageReady = (item) => Boolean(item?.image_path);
   let lastDataSyncAt = 0;
   let toastTimer;
   let activeMettiSelect = null;
@@ -686,13 +689,62 @@
     setText('#wardrobe-count', `${count} ${count === 1 ? 'вещь' : count >= 2 && count <= 4 ? 'вещи' : 'вещей'}`);
     document.querySelectorAll('.profile-menu-row strong').forEach((node, index) => { if (index === 0) node.textContent = String(count); if (index === 1) node.textContent = String(state.outfits.length); });
   };
-  const imageUrl = async (path) => {
+  const requestSignedImageUrl = async (path) => {
     if (!path || !supabase?.data?.createWardrobeImageUrl) return '';
     try { return await supabase.data.createWardrobeImageUrl(path); } catch (_) { return ''; }
   };
+  const rememberImageUrl = (path, url) => {
+    if (path && url) imageUrlCache.set(path, { url, expiresAt: Date.now() + IMAGE_URL_CACHE_TTL_MS });
+    return url;
+  };
+  const imageUrl = async (path) => {
+    const key = String(path || '').trim();
+    if (!key) return '';
+    const cached = imageUrlCache.get(key);
+    if (cached && cached.expiresAt > Date.now() + 60 * 1000) return cached.url;
+    const pending = imageUrlRequests.get(key);
+    if (pending) return pending;
+    let request;
+    request = Promise.resolve().then(() => requestSignedImageUrl(key)).then((url) => rememberImageUrl(key, url)).catch(() => '').finally(() => {
+      if (imageUrlRequests.get(key) === request) imageUrlRequests.delete(key);
+    });
+    imageUrlRequests.set(key, request);
+    return request;
+  };
+  const primeImageUrls = (paths) => {
+    const uniquePaths = [...new Set((Array.isArray(paths) ? paths : []).map((path) => String(path || '').trim()).filter(Boolean))];
+    const pendingPaths = uniquePaths.filter((path) => {
+      const cached = imageUrlCache.get(path);
+      return !(cached && cached.expiresAt > Date.now() + 60 * 1000) && !imageUrlRequests.has(path);
+    });
+    if (!pendingPaths.length) return;
+    if (typeof supabase?.data?.createWardrobeImageUrls !== 'function') {
+      pendingPaths.forEach((path) => { void imageUrl(path); });
+      return;
+    }
+    const batchPromise = Promise.resolve().then(() => supabase.data.createWardrobeImageUrls(pendingPaths)).catch(() => ({}));
+    pendingPaths.forEach((path) => {
+      let request;
+      request = batchPromise.then((urls) => urls?.[path] || requestSignedImageUrl(path)).then((url) => rememberImageUrl(path, url)).catch(() => '').finally(() => {
+        if (imageUrlRequests.get(path) === request) imageUrlRequests.delete(path);
+      });
+      imageUrlRequests.set(path, request);
+    });
+  };
   const addImageBackground = async (node, path) => {
-    const url = await imageUrl(path);
-    if (!url || !node?.isConnected) return;
+    const key = String(path || '').trim();
+    if (!node || !key) return false;
+    node.dataset.imagePath = key;
+    node.classList.add('image-loading');
+    node.classList.remove('image-failed');
+    const url = await imageUrl(key);
+    if (!url || !node?.isConnected || node.dataset.imagePath !== key) {
+      if (node?.isConnected && node.dataset.imagePath === key) {
+        node.classList.remove('image-loading');
+        node.classList.add('image-failed');
+      }
+      return false;
+    }
     // The editorial placeholder classes use !important background rules. Set the
     // signed private image with the same priority so uploaded photos win.
     node.style.setProperty('background-image', `url("${url.replace(/"/g, '\\"')}")`, 'important');
@@ -700,7 +752,9 @@
     node.style.setProperty('background-size', 'cover', 'important');
     node.style.setProperty('background-repeat', 'no-repeat', 'important');
     node.style.setProperty('background-color', '#f0e9df', 'important');
+    node.classList.remove('image-loading', 'image-failed');
     node.classList.add('has-image');
+    return true;
   };
   const renderVisualNode = async (node, item, layoutClass, emptyLabel, keepEmpty = false) => {
     if (!node) return;
@@ -708,7 +762,7 @@
     const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
     const canUseDemoArt = item && String(item.id).startsWith('demo-');
     const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
-    const imageReady = isEditorialImageReady(item);
+    const imageReady = Boolean(item?.image_path);
     const visualClasses = item && (imageReady || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
     node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
     ['background-image', 'background-position', 'background-size', 'background-repeat', 'background-color'].forEach((property) => node.style.removeProperty(property));
@@ -718,7 +772,7 @@
     label.textContent = translate(item?.name || emptyLabel || 'Вещь');
     node.append(label);
     node.setAttribute('aria-label', label.textContent);
-    if (imageReady) await addImageBackground(node, item.image_path);
+    if (imageReady) void addImageBackground(node, item.image_path);
   };
   const renderHomeCollage = async (outfit = state.currentOutfit) => {
     const collage = document.querySelector('.screen[data-screen-id="home"] .outfit-collage');
@@ -748,6 +802,7 @@
     if (!grid) return;
     const items = state.wardrobe;
     const empty = byId('wardrobe-empty');
+    primeImageUrls(items.map((item) => item.image_path));
     grid.innerHTML = '';
     if (!items.length) { empty?.classList.add('show'); renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderProfile(); return; }
     empty?.classList.remove('show');
@@ -763,7 +818,7 @@
       const label = document.createElement('span');
       label.textContent = translate(item.name || 'Вещь');
       art.append(label); button.append(art); grid.append(button);
-      if (isEditorialImageReady(item)) addImageBackground(art, item.image_path);
+      if (isEditorialImageReady(item)) void addImageBackground(art, item.image_path);
     });
     renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderProfile();
   };
@@ -775,7 +830,7 @@
       art.className = `item-detail-art placeholder ${itemClass(item)}`;
       art.innerHTML = '';
       const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); art.append(label);
-      if (isEditorialImageReady(item)) addImageBackground(art, item.image_path);
+      if (isEditorialImageReady(item)) void addImageBackground(art, item.image_path);
     }
     setText('.screen[data-screen-id="item"] .detail-title', item.name || 'Вещь');
     const chips = document.querySelector('.detail-chips');
@@ -785,7 +840,6 @@
     }
     const addButton = document.querySelector('[data-action="add-item"]');
     if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
-    await imageUrl(item.image_path);
   };
   const processNativeWardrobeImage = async (file) => {
     const bridge = window.MettiAndroid;
@@ -835,6 +889,7 @@
     try {
       const image = await new Promise((resolve, reject) => {
         const node = new Image();
+        node.crossOrigin = 'anonymous';
         node.onload = () => resolve(node);
         node.onerror = reject;
         node.src = objectUrl;
@@ -915,6 +970,28 @@
     }
   };
   const isPendingMcpImage = (item) => Boolean(item?.id && item?.image_path && item?.metadata?.image_source === 'mcp' && item?.metadata?.image_background !== EDITORIAL_IMAGE_BACKGROUND);
+  const findOriginalMcpImagePath = async (item) => {
+    const userId = state.user?.id;
+    if (!userId || !item?.id || typeof supabase?.data?.listWardrobeImageVersions !== 'function') return '';
+    try {
+      const rows = await supabase.data.listWardrobeImageVersions(userId, item.id);
+      const uuidSuffix = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const prefix = `${item.id}-`;
+      const candidates = (Array.isArray(rows) ? rows : []).map((row) => {
+        const rawName = String(row?.name || '').trim();
+        if (!rawName) return null;
+        const path = rawName.includes('/') ? rawName : `${userId}/${rawName}`;
+        const name = path.split('/').pop() || '';
+        const extension = name.match(/\.[^.]+$/)?.[0] || '';
+        const suffix = name.startsWith(prefix) ? name.slice(prefix.length, -extension.length || undefined) : '';
+        return uuidSuffix.test(suffix) ? { path, createdAt: String(row?.created_at || '') } : null;
+      }).filter(Boolean);
+      candidates.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      return candidates[0]?.path || '';
+    } catch (_) {
+      return '';
+    }
+  };
   const normalizePendingMcpImage = async (item) => {
     if (!isPendingMcpImage(item) || pendingImageNormalizations.has(item.id)) return false;
     pendingImageNormalizations.add(item.id);
@@ -922,7 +999,8 @@
     const originalPath = item.image_path;
     let replacementPath = '';
     try {
-      const sourceUrl = await imageUrl(originalPath);
+      const sourcePath = await findOriginalMcpImagePath(item) || originalPath;
+      const sourceUrl = await imageUrl(sourcePath);
       if (!sourceUrl) return false;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
@@ -946,7 +1024,7 @@
       metadata.image_background = EDITORIAL_IMAGE_BACKGROUND;
       const saved = await supabase.data.updateWardrobeItem(item.id, { image_path: replacementPath, metadata });
       if (!saved) throw new Error('Не удалось обновить фотографию вещи.');
-      if (originalPath && originalPath !== replacementPath) await supabase.data.removeWardrobeImage(originalPath).catch(() => {});
+      await Promise.all([...new Set([originalPath, sourcePath].filter((path) => path && path !== replacementPath))].map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
       const index = state.wardrobe.findIndex((value) => value.id === item.id);
       if (index >= 0) state.wardrobe[index] = saved;
       return true;

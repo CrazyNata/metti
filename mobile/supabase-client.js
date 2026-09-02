@@ -275,6 +275,14 @@
       return path;
     },
     removeWardrobeImage: (path) => path ? request('/storage/v1/object/remove/wardrobe', { method: 'POST', body: JSON.stringify({ prefixes: [path] }) }) : null,
+    listWardrobeImageVersions: async (userId, itemId) => {
+      if (!userId || !itemId) return [];
+      const result = await request('/storage/v1/object/list/wardrobe', {
+        method: 'POST',
+        body: JSON.stringify({ prefix: `${userId}/${itemId}`, limit: 100, offset: 0, sortBy: { column: 'created_at', order: 'asc' } })
+      });
+      return Array.isArray(result) ? result : [];
+    },
     createWardrobeImageUrl: async (path, expiresIn = 3600) => {
       if (!path) return '';
       const result = await request(`/storage/v1/object/sign/wardrobe${storagePath(path)}`, { method: 'POST', body: JSON.stringify({ expiresIn }) });
@@ -283,6 +291,31 @@
       if (signed.startsWith('http')) return signed;
       const relative = signed.startsWith('/storage/v1/') ? signed : `/storage/v1${signed.startsWith('/') ? signed : `/${signed}`}`;
       return `${config.url}${relative}`;
+    },
+    createWardrobeImageUrls: async (paths, expiresIn = 3600) => {
+      const uniquePaths = [...new Set((Array.isArray(paths) ? paths : []).map((path) => String(path || '').trim()).filter(Boolean))];
+      const result = {};
+      if (!uniquePaths.length) return result;
+      try {
+        const rows = await request('/storage/v1/object/sign/wardrobe', { method: 'POST', body: JSON.stringify({ expiresIn, paths: uniquePaths }) });
+        (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+          const signed = row?.signedURL || row?.signedUrl || '';
+          if (!signed) return;
+          const path = row?.path || uniquePaths[index];
+          if (signed.startsWith('http')) result[path] = signed;
+          else {
+            const relative = signed.startsWith('/storage/v1/') ? signed : `/storage/v1${signed.startsWith('/') ? signed : `/${signed}`}`;
+            result[path] = `${config.url}${relative}`;
+          }
+        });
+      } catch (_) {
+        // The individual endpoint below is the compatibility fallback for old Storage deployments.
+      }
+      if (Object.keys(result).length === uniquePaths.length) return result;
+      await Promise.all(uniquePaths.filter((path) => !result[path]).map(async (path) => {
+        try { result[path] = await data.createWardrobeImageUrl(path, expiresIn); } catch (_) { /* keep this image unavailable */ }
+      }));
+      return result;
     },
     listSavedOutfits: () => request('/rest/v1/saved_outfits?select=*&archived_at=is.null&order=created_at.desc'),
     saveOutfit: async (outfit) => {
