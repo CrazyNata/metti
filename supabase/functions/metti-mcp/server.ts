@@ -10,6 +10,7 @@ import { AppError, publicErrorPayload, toAppError } from "../_shared/errors.ts";
 import {
   DEFAULT_IMAGE_FETCH_TIMEOUT_MS,
   DEFAULT_IMAGE_MAX_BYTES,
+  DEFAULT_OPENAI_FILE_HOSTS,
   type ImageServiceOptions,
 } from "../_shared/image-service.ts";
 import { createApplicationServices } from "../_shared/services.ts";
@@ -85,6 +86,12 @@ const imageInputSchema = z.union([
     ),
   }).strict(),
 ]);
+const openAiFileSchema = z.object({
+  download_url: z.string().trim().url().max(2048),
+  file_id: z.string().trim().min(1).max(256),
+  mime_type: imageMimeSchema.optional(),
+  file_name: z.string().trim().max(255).optional(),
+}).strict();
 
 const profilePreferencesSchema = z.object({
   styleTags: stringListSchema(12).optional(),
@@ -169,7 +176,13 @@ const wardrobeItemFields = {
   image: imageInputSchema.optional(),
 };
 
-const createWardrobeItemSchema = z.object(wardrobeItemFields).strict();
+const createWardrobeItemSchema = z.object({
+  ...wardrobeItemFields,
+  // ChatGPT fills this documented top-level file parameter when the user
+  // attaches an image. It stays optional for generic MCP clients and the
+  // existing metadata-only fallback.
+  file: openAiFileSchema.optional(),
+}).strict();
 const updateWardrobeItemSchema = z.object({
   itemId: idSchema,
   name: wardrobeItemFields.name.optional(),
@@ -276,6 +289,24 @@ function normalizeWardrobeCategoryInput(
     ...input,
     category: category.category,
     subcategory: input.subcategory ?? category.subcategory,
+  } as unknown as WardrobeItemInput;
+}
+
+function normalizeWardrobeCreateInput(
+  input: Record<string, unknown>,
+): WardrobeItemInput {
+  const normalized = normalizeWardrobeCategoryInput(input) as unknown as
+    Record<string, unknown>;
+  if (normalized.file === undefined) {
+    return normalized as unknown as WardrobeItemInput;
+  }
+  if (normalized.image !== undefined) {
+    throw new AppError("invalid_input", "Use file or image, not both.");
+  }
+  const { file, ...withoutFile } = normalized;
+  return {
+    ...withoutFile,
+    imageFile: file,
   } as unknown as WardrobeItemInput;
 }
 
@@ -408,25 +439,27 @@ export function registerTools(
 
   server.registerTool("create_wardrobe_item", {
     description:
-      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If an image resource is available, first infer only reliable characteristics from it and pass the structured fields plus image; do not invent an unknown brand, material or size. The optional image accepts standard MCP image, resource_link or resource shapes. An attached photo is automatically queued for the existing app's deterministic Metti editorial-background treatment; no separate image service or LLM is used. Do not send user_id: ownership comes from the bearer token. If the host cannot provide the original image, the item is still created and reports imageStatus=pending.",
+      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If the user supplied an image, first infer only reliable characteristics from it and pass the structured fields plus the top-level file parameter whenever ChatGPT provides one; do not invent an unknown brand, material or size. ChatGPT supplies file.download_url, file.file_id and optional file MIME/name for an attached photo. The optional image accepts standard MCP image, resource_link or resource shapes for other MCP hosts. An attached photo is saved in the existing private Storage bucket and queued for the existing app's deterministic Metti editorial-background treatment; no separate image service or LLM is used. Do not send user_id: ownership comes from the bearer token. If the host cannot provide the original image, the item is still created and reports imageStatus=pending or none.",
     inputSchema: createWardrobeItemSchema,
+    _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
   }, (args) =>
     runTool(() =>
       services.wardrobe.add(
-        normalizeWardrobeCategoryInput(args as Record<string, unknown>),
+        normalizeWardrobeCreateInput(args as Record<string, unknown>),
       )
     ));
 
   server.registerTool("add_wardrobe_item", {
     description:
-      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields, image handling and deterministic Metti editorial-background treatment. Do not send user_id; ownership comes from the bearer token.",
+      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields, top-level ChatGPT file parameter, image handling and deterministic Metti editorial-background treatment. When an attached photo is available, pass file so the server can save the original image in the existing private Storage bucket. Do not send user_id; ownership comes from the bearer token.",
     inputSchema: createWardrobeItemSchema,
+    _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
   }, (args) =>
     runTool(() =>
       services.wardrobe.add(
-        normalizeWardrobeCategoryInput(args as Record<string, unknown>),
+        normalizeWardrobeCreateInput(args as Record<string, unknown>),
       )
     ));
 
@@ -641,11 +674,18 @@ function configuredImageHosts(env: typeof Deno.env = Deno.env): string[] {
   ) => value.trim()).filter(Boolean);
 }
 
+function configuredOpenAiFileHosts(env: typeof Deno.env = Deno.env): string[] {
+  const configured = String(env.get("MCP_OPENAI_FILE_HOSTS") ?? "").split(",")
+    .map((value) => value.trim()).filter(Boolean);
+  return configured.length ? configured : [...DEFAULT_OPENAI_FILE_HOSTS];
+}
+
 function imageOptionsFromEnv(
   env: typeof Deno.env = Deno.env,
 ): ImageServiceOptions {
   return {
     allowedHosts: configuredImageHosts(env),
+    openAiFileHosts: configuredOpenAiFileHosts(env),
     maxBytes: envNumber(
       "MCP_IMAGE_MAX_BYTES",
       DEFAULT_IMAGE_MAX_BYTES,

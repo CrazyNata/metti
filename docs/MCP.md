@@ -179,6 +179,27 @@ choosing reliable characteristics and deciding when to call MCP. MCP only
 validates and persists the supplied structured fields; it does not perform
 image recognition, fashion reasoning or call OpenAI/Gemini/another LLM.
 
+For ChatGPT specifically, both wardrobe-create tools advertise the official
+top-level file parameter with `_meta["openai/fileParams"] = ["file"]`. When an
+attached image is available, ChatGPT supplies a file object like this:
+
+```json
+{
+  "file": {
+    "download_url": "https://files.openai.com/temporary/image.jpg",
+    "file_id": "file_123",
+    "mime_type": "image/jpeg",
+    "file_name": "image.jpg"
+  }
+}
+```
+
+The server validates the temporary HTTPS URL, downloads it from the configured
+OpenAI file hosts and sends the bytes through the same `ImageService` and
+private Storage path as every other image. This is the documented ChatGPT file
+input shape; the optional standard MCP resource shapes below remain available
+for other hosts. See the [OpenAI file parameter reference](https://developers.openai.com/plugins/reference).
+
 When the MCP host can provide the original image, `create_wardrobe_item` or an
 image tool accepts the standard MCP resource vocabulary:
 
@@ -328,6 +349,7 @@ MCP_ALLOWED_HOSTS=
 MCP_RATE_LIMIT_PER_MINUTE=120
 MCP_MAX_BODY_BYTES=8388608
 MCP_ALLOWED_IMAGE_HOSTS=
+MCP_OPENAI_FILE_HOSTS=files.openai.com,*.files.openai.com,*.oaiusercontent.com,*.chatgpt.com
 MCP_IMAGE_MAX_BYTES=5242880
 MCP_IMAGE_FETCH_TIMEOUT_MS=10000
 MCP_ALLOW_HTTP_IMAGE_RESOURCES=false
@@ -336,7 +358,9 @@ MCP_ALLOW_HTTP_IMAGE_RESOURCES=false
 Do not put a `service_role` key in a client, MCP tool argument or committed
 file. `MCP_ALLOWED_IMAGE_HOSTS` may remain empty when only inline/resource-blob
 images should be accepted; unconfigured remote links then produce the safe
-`pending` fallback.
+`pending` fallback. `MCP_OPENAI_FILE_HOSTS` defaults to the OpenAI file hosts
+shown above and should remain restricted to hosts that issue the ChatGPT
+temporary download URLs.
 
 ## Local development
 
@@ -395,6 +419,7 @@ The Supabase MCP tests cover:
 - user isolation for items, outfits and image operations;
 - wardrobe list/search/pagination, update/archive and normalization;
 - inline and resource image attachment;
+- ChatGPT top-level file input and OpenAI temporary-file download;
 - invalid/oversized/unsupported images;
 - failed image link/upload compensation and orphan prevention;
 - allowlisted remote resources and pending fallback;
@@ -433,10 +458,13 @@ call `get_profile`/`get_style_preferences` when context is needed, use
 `save_outfit` only after the user asks to save an outfit.
 
 For an image request, ChatGPT performs recognition and calls
-`create_wardrobe_item` with only reliable fields. If the client can forward an
-official MCP image/resource representation, MCP stores it in the existing
-bucket. Otherwise the item is still created and the user finishes the photo
-upload in the normal app. This supports both required flows:
+`create_wardrobe_item` or its `add_wardrobe_item` compatibility alias with only
+reliable fields and the top-level `file` object when available. If the client
+can forward an official file or MCP image/resource representation, MCP stores
+it in the existing bucket. Otherwise the item is still created and the user
+finishes the photo upload in the normal app. After changing the tool schema,
+refresh the ChatGPT connection and start a new conversation so the updated
+file parameter is loaded. This supports both required flows:
 
 ```text
 photo -> existing app -> existing private Storage -> editable wardrobe item

@@ -4,6 +4,7 @@ import type {
   McpEmbeddedResource,
   McpImageContent,
   McpResourceLink,
+  OpenAiFileInput,
   WardrobeImageInput,
 } from "./types.ts";
 import type { UserDataClient } from "./supabase-client.ts";
@@ -13,6 +14,12 @@ type FetchLike = typeof fetch;
 export const WARDROBE_IMAGE_BUCKET = "wardrobe";
 export const DEFAULT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const DEFAULT_IMAGE_FETCH_TIMEOUT_MS = 10_000;
+export const DEFAULT_OPENAI_FILE_HOSTS = [
+  "files.openai.com",
+  "*.files.openai.com",
+  "*.oaiusercontent.com",
+  "*.chatgpt.com",
+] as const;
 
 export const SUPPORTED_IMAGE_MIME_TYPES = [
   "image/jpeg",
@@ -35,6 +42,7 @@ const EXTENSIONS: Record<SupportedImageMimeType, string> = {
 export interface ImageServiceOptions {
   fetchImpl?: FetchLike;
   allowedHosts?: string[];
+  openAiFileHosts?: string[];
   maxBytes?: number;
   fetchTimeoutMs?: number;
   allowHttp?: boolean;
@@ -53,6 +61,16 @@ export interface ImageResolution {
 
 function normalizedMime(value: string | undefined): string {
   return String(value ?? "").split(";", 1)[0].trim().toLowerCase();
+}
+
+function mimeFromFileName(value: string | undefined): string | undefined {
+  const name = String(value ?? "").trim().toLowerCase();
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".heic")) return "image/heic";
+  if (name.endsWith(".heif")) return "image/heif";
+  return undefined;
 }
 
 function supportedMime(
@@ -303,6 +321,7 @@ function validItemSegment(itemId: string): string {
 export class ImageService {
   private readonly fetchImpl: FetchLike;
   private readonly allowedHosts: string[];
+  private readonly openAiFileHosts: string[];
   private readonly maxBytes: number;
   private readonly fetchTimeoutMs: number;
   private readonly allowHttp: boolean;
@@ -316,6 +335,9 @@ export class ImageService {
     this.allowedHosts = (options.allowedHosts ?? []).map(normalizedHost).filter(
       Boolean,
     );
+    this.openAiFileHosts = (
+      options.openAiFileHosts ?? DEFAULT_OPENAI_FILE_HOSTS
+    ).map(normalizedHost).filter(Boolean);
     this.maxBytes = options.maxBytes && options.maxBytes > 0
       ? Math.min(options.maxBytes, DEFAULT_IMAGE_MAX_BYTES)
       : DEFAULT_IMAGE_MAX_BYTES;
@@ -361,9 +383,29 @@ export class ImageService {
     return this.resolveRemote(link.uri, link.mimeType);
   }
 
+  async resolveOpenAiFile(input: OpenAiFileInput): Promise<ImageResolution> {
+    const fileId = String(input.file_id ?? "").trim();
+    if (!fileId || fileId.length > 256) {
+      throw new AppError("invalid_input", "file.file_id is invalid.");
+    }
+
+    const downloadUrl = String(input.download_url ?? "").trim();
+    const url = this.validateRemoteUri(downloadUrl);
+    if (url.protocol !== "https:") {
+      throw new AppError("invalid_input", "file.download_url must use HTTPS.");
+    }
+
+    return this.resolveRemote(
+      url.toString(),
+      input.mime_type ?? mimeFromFileName(input.file_name),
+      this.openAiFileHosts,
+    );
+  }
+
   private async resolveRemote(
     uri: string,
     declaredMime?: string,
+    allowedHosts = this.allowedHosts,
   ): Promise<ImageResolution> {
     const url = this.validateRemoteUri(uri);
     if (url.protocol === "data:") {
@@ -374,7 +416,7 @@ export class ImageService {
     }
     // An unconfigured host is deliberately a non-fatal fallback. The item can
     // still be created and the user can add the photo through the app later.
-    if (!hostIsAllowed(url.hostname, this.allowedHosts)) {
+    if (!hostIsAllowed(url.hostname, allowedHosts)) {
       return { file: null, status: "pending" };
     }
 

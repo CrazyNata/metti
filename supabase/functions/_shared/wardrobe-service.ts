@@ -536,13 +536,23 @@ export class WardrobeService {
       40,
     );
     const imagePath = safeImagePath(input.imagePath, this.user.id);
-    if (input.image !== undefined && imagePath) {
+    if (
+      (input.image !== undefined || input.imageFile !== undefined) && imagePath
+    ) {
       throw new AppError(
         "invalid_input",
-        "Use image or imagePath, not both.",
+        "Use an image input or imagePath, not both.",
       );
     }
-    const imageResolution = input.image !== undefined
+    if (input.image !== undefined && input.imageFile !== undefined) {
+      throw new AppError(
+        "invalid_input",
+        "Use image or file, not both.",
+      );
+    }
+    const imageResolution = input.imageFile !== undefined
+      ? await this.images.resolveOpenAiFile(input.imageFile)
+      : input.image !== undefined
       ? await this.images.resolve(input.image)
       : null;
     const metadata = wardrobeMetadata({ ...input, name, category }, {}, "active");
@@ -578,7 +588,11 @@ export class WardrobeService {
       return this.actionDto(
         await withoutImage(),
         Boolean(imagePath),
-        imagePath ? "attached" : input.image !== undefined ? "pending" : "none",
+        imagePath
+          ? "attached"
+          : input.image !== undefined || input.imageFile !== undefined
+          ? "pending"
+          : "none",
       );
     }
 

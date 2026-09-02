@@ -272,7 +272,7 @@ Deno.test("remote image resources require an allowlisted HTTPS host", async () =
   const remoteFetch = async (input: RequestInfo | URL): Promise<Response> => {
     fetchCalls += 1;
     const url = new URL(input.toString());
-    if (url.hostname !== "images.example") {
+    if (!new Set(["images.example", "files.openai.com"]).has(url.hostname)) {
       return new Response("blocked", { status: 404 });
     }
     return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
@@ -305,6 +305,19 @@ Deno.test("remote image resources require an allowlisted HTTPS host", async () =
   });
   assertEquals(attached.imageStatus, "attached");
   assertEquals(fetchCalls, 1);
+
+  const attachedFromChatGptFile = await services.wardrobe.add({
+    name: "ChatGPT file blouse",
+    category: "top",
+    imageFile: {
+      download_url: "https://files.openai.com/file-image-1",
+      file_id: "file-test-image-1",
+      mime_type: "image/jpeg",
+      file_name: "blouse.jpg",
+    },
+  });
+  assertEquals(attachedFromChatGptFile.imageStatus, "attached");
+  assertEquals(fetchCalls, 2);
 });
 
 Deno.test("profile and outfit services share ownership, metadata and wear history", async () => {

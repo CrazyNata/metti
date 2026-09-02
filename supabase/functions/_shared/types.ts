@@ -49,6 +49,18 @@ export type WardrobeImageInput =
   | McpResourceLink
   | McpEmbeddedResource;
 
+/**
+ * File object passed by ChatGPT for a top-level MCP file parameter. The
+ * download URL is temporary and is fetched only by the server; the file id is
+ * retained in the contract so the host can identify the original attachment.
+ */
+export interface OpenAiFileInput {
+  download_url: string;
+  file_id: string;
+  mime_type?: string;
+  file_name?: string;
+}
+
 export interface AuthenticatedUser {
   id: string;
   email?: string;
@@ -250,6 +262,7 @@ export interface WardrobeItemInput {
   favorite?: boolean;
   imagePath?: string | null;
   image?: WardrobeImageInput;
+  imageFile?: OpenAiFileInput;
 }
 
 export type WardrobeItemUpdate = Partial<WardrobeItemInput>;

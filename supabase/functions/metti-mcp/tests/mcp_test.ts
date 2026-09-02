@@ -146,9 +146,13 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   const createTool = tools.find((tool) => tool.name === "create_wardrobe_item");
   assert(createTool?.inputSchema.required.includes("name"));
   assert(createTool?.inputSchema.required.includes("category"));
+  assertEquals(createTool?._meta?.["openai/fileParams"], ["file"]);
+  assert(createTool?.inputSchema.properties.file);
   const addTool = tools.find((tool) => tool.name === "add_wardrobe_item");
   assert(addTool?.inputSchema.required.includes("name"));
   assert(addTool?.inputSchema.required.includes("category"));
+  assertEquals(addTool?._meta?.["openai/fileParams"], ["file"]);
+  assert(addTool?.inputSchema.properties.file);
 });
 
 Deno.test("authenticated read and write tool calls use shared data and return structured results", async () => {
