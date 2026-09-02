@@ -109,8 +109,8 @@ body.modal-open{overflow:hidden}
 .subcategory-filter .subcategory-trigger:focus-visible,.subcategory-filter .subcategory-trigger[aria-expanded="true"]{box-shadow:0 0 0 3px #8b4e7020}
 .subcategory-trigger-chevron{color:var(--rose);font-size:18px;line-height:1;transform:translateY(-1px)}
 .subcategory-filter select[hidden]{display:none!important}
-.subcategory-sheet-backdrop{padding:0!important;place-items:end center!important;background:#211e1a66!important}
-.subcategory-data-sheet{position:relative;width:min(100%,420px);max-height:min(82vh,620px);overflow:hidden;padding:13px 20px calc(58px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}
+.subcategory-sheet-backdrop{z-index:30!important;padding:0!important;place-items:end center!important;background:#211e1a66!important}
+.subcategory-data-sheet{position:relative;width:min(100%,420px);max-height:min(82vh,620px);overflow:hidden;padding:13px 20px calc(16px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}
 .subcategory-sheet-handle{width:42px;height:4px;margin:0 auto 14px;border-radius:99px;background:#ddc9c3}
 .subcategory-data-sheet>.data-sheet-close{position:absolute;top:13px;right:17px;float:none;width:30px;height:30px;background:var(--soft);color:var(--rose);font-size:22px;line-height:1}
 .subcategory-data-sheet h2{margin:0 40px 6px 0;font:500 30px/.98 var(--serif)}
@@ -129,8 +129,8 @@ body.modal-open{overflow:hidden}
 .metti-select-chevron{flex:none;color:var(--rose);font-size:19px;line-height:1;transform:translateY(-1px)}
 .data-form select[data-metti-select-enhanced="true"]{display:none!important}
 #wardrobe-sheet .data-form .metti-select-trigger{min-height:51px;font-size:15px!important}
-.metti-select-backdrop{z-index:20!important;padding:0!important;place-items:end center!important;background:#211e1a66!important}
-.metti-select-data-sheet{position:relative;width:min(100%,420px);max-height:min(78vh,600px);overflow:hidden;padding:13px 20px calc(24px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}
+.metti-select-backdrop{z-index:30!important;padding:0!important;place-items:end center!important;background:#211e1a66!important}
+.metti-select-data-sheet{position:relative;width:min(100%,420px);max-height:min(78vh,600px);overflow:hidden;padding:13px 20px calc(16px + env(safe-area-inset-bottom,0px));border:1px solid var(--line);border-bottom:0;border-radius:24px 24px 0 0;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}
 .metti-select-sheet-handle{width:42px;height:4px;margin:0 auto 14px;border-radius:99px;background:#ddc9c3}
 .metti-select-data-sheet>.data-sheet-close{position:absolute;top:13px;right:17px;float:none;width:30px;height:30px;background:var(--soft);color:var(--rose);font-size:22px;line-height:1}
 .metti-select-data-sheet h2{margin:0 40px 6px 0;font:500 30px/.98 var(--serif)}
@@ -146,17 +146,17 @@ body.modal-open{overflow:hidden}
 
 /* Keep long pickers inside the visible sheet and let them scroll on Android. */
 .metti-select-backdrop{overflow:hidden}
-.metti-select-backdrop{bottom:var(--metti-native-bottom-inset,0px)}
-.subcategory-sheet-backdrop{bottom:var(--metti-native-bottom-inset,0px)}
-.sheet-backdrop{bottom:var(--metti-native-bottom-inset,0px);overflow:hidden}
+.metti-select-backdrop{bottom:0!important}
+.subcategory-sheet-backdrop{bottom:0!important}
+.sheet-backdrop{bottom:0!important;overflow:hidden}
 .data-sheet{box-sizing:border-box;max-height:min(calc(92vh - var(--metti-native-bottom-inset,0px)),760px);-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .data-sheet.data-form{display:flex;min-height:0;flex-direction:column}
 .data-form .form-actions{flex:none}
-.subcategory-data-sheet{display:flex;min-height:0;flex-direction:column;box-sizing:border-box;padding-bottom:calc(58px + max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px)))}
-.subcategory-sheet-options{min-height:0;flex:1 1 auto;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.subcategory-data-sheet{display:flex;min-height:0;flex-direction:column;box-sizing:border-box;padding-bottom:calc(16px + max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px)))}
+.subcategory-sheet-options{min-height:0;flex:0 1 auto;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .subcategory-sheet-option{touch-action:pan-y}
-.metti-select-data-sheet{display:flex;min-height:0;flex-direction:column;box-sizing:border-box;padding-bottom:calc(24px + max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px)));max-height:min(78vh,600px);max-height:min(78dvh,600px)}
-.metti-select-options{min-height:0;flex:1 1 auto;overflow-y:auto;max-height:calc(78vh - 135px);max-height:calc(78dvh - 135px);-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
+.metti-select-data-sheet{display:flex;min-height:0;flex-direction:column;box-sizing:border-box;padding-bottom:calc(16px + max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px)));max-height:min(78vh,600px);max-height:min(78dvh,600px)}
+.metti-select-options{min-height:0;flex:0 1 auto;overflow-y:auto;max-height:calc(78vh - 135px);max-height:calc(78dvh - 135px);-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
 .metti-select-option{touch-action:pan-y}
 @media(max-width:500px){.data-sheet{max-height:calc(94vh - var(--metti-native-bottom-inset,0px))}.metti-select-data-sheet{max-height:min(82vh,620px);max-height:min(82dvh,620px)}.metti-select-options{max-height:calc(82vh - 130px);max-height:calc(82dvh - 130px)}}
 
