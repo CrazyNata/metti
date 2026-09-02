@@ -9,8 +9,12 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.net.Uri;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.media.ExifInterface;
 import android.os.Build;
 import android.os.Bundle;
@@ -29,7 +33,6 @@ import android.webkit.WebViewClient;
 import android.webkit.ValueCallback;
 
 import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.segmentation.subject.Subject;
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation;
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentationResult;
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter;
@@ -38,12 +41,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.FloatBuffer;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -63,8 +64,8 @@ public final class MainActivity extends Activity {
     private SubjectSegmenter subjectSegmenter;
     private static final int MAX_IMAGE_EDGE = 1400;
     private static final int EDITORIAL_BACKGROUND = Color.rgb(240, 233, 223);
-    private static final float FOREGROUND_CONFIDENCE_CUTOFF = 0.52f;
-    private static final float FOREGROUND_CONFIDENCE_FEATHER = 0.12f;
+    private static final int EDITORIAL_BACKGROUND_TOP = Color.rgb(250, 246, 239);
+    private static final int EDITORIAL_BACKGROUND_BOTTOM = Color.rgb(225, 216, 204);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -287,6 +288,10 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void removeImageBackground(String dataUrl, String callbackId) {
+            if (!isNativeImageProcessingAvailable()) {
+                dispatchImageProcessingResult(callbackId, "", "");
+                return;
+            }
             imageExecutor.execute(() -> {
                 Bitmap source = null;
                 try {
@@ -302,6 +307,11 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean isNativeImageProcessingAvailable() {
+            return MainActivity.this.isNativeImageProcessingAvailable();
+        }
+
+        @JavascriptInterface
         public void releaseProcessedImage(String processedUrl) {
             imageExecutor.execute(() -> {
                 File file = processedImageFile(processedUrl);
@@ -310,17 +320,24 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private boolean isNativeImageProcessingAvailable() {
+        String device = ((Build.MANUFACTURER == null ? "" : Build.MANUFACTURER) + " "
+                + (Build.BRAND == null ? "" : Build.BRAND) + " "
+                + (Build.MODEL == null ? "" : Build.MODEL)).toLowerCase(Locale.US);
+        // The Play-services subject-segmentation beta currently crashes in its
+        // native Drishti worker on this Android 15 Motorola family. Never enter
+        // that native path there; the WebView fallback remains available.
+        return !(Build.VERSION.SDK_INT >= 35 && (device.contains("motorola") || device.contains("moto")));
+    }
+
     private SubjectSegmenter getSubjectSegmenter() {
         if (subjectSegmenter == null) {
-            SubjectSegmenterOptions.SubjectResultOptions subjectResultOptions =
-                    new SubjectSegmenterOptions.SubjectResultOptions.Builder()
-                            .enableSubjectBitmap()
-                            .enableConfidenceMask()
-                            .build();
             SubjectSegmenterOptions options = new SubjectSegmenterOptions.Builder()
                     .enableForegroundBitmap()
-                    .enableForegroundConfidenceMask()
-                    .enableMultipleSubjects(subjectResultOptions)
+                    // The multi-subject beta path is unstable on some Android 15
+                    // devices. Wardrobe photos contain one foreground object, so
+                    // use the simpler foreground result and a single worker.
+                    .setExecutor(imageExecutor)
                     .build();
             subjectSegmenter = SubjectSegmentation.getClient(options);
         }
@@ -364,106 +381,117 @@ public final class MainActivity extends Activity {
     }
 
     private Bitmap createEditorialImage(SubjectSegmentationResult result, Bitmap source) {
-        List<Subject> subjects = result.getSubjects();
-        Subject primary = choosePrimarySubject(subjects, source.getWidth(), source.getHeight());
-        if (primary != null && primary.getBitmap() != null) {
-            Bitmap subject = primary.getBitmap();
-            Bitmap masked = subject.copy(Bitmap.Config.ARGB_8888, true);
-            if (masked == null) return null;
-            try {
-                applyConfidenceMask(masked, primary.getConfidenceMask());
-                int offsetX = masked.getWidth() == source.getWidth() && masked.getHeight() == source.getHeight()
-                        ? 0 : primary.getStartX();
-                int offsetY = masked.getWidth() == source.getWidth() && masked.getHeight() == source.getHeight()
-                        ? 0 : primary.getStartY();
-                return compositeEditorialImage(
-                        masked,
-                        offsetX,
-                        offsetY,
-                        source.getWidth(),
-                        source.getHeight()
-                );
-            } finally {
-                masked.recycle();
-            }
-        }
-
         Bitmap foreground = result.getForegroundBitmap();
         if (foreground == null) return null;
         Bitmap masked = foreground.copy(Bitmap.Config.ARGB_8888, true);
         if (masked == null) return null;
         try {
-            applyConfidenceMask(masked, result.getForegroundConfidenceMask());
-            return compositeEditorialImage(masked, 0, 0, source.getWidth(), source.getHeight());
+            return compositeEditorialImage(masked, source.getWidth(), source.getHeight());
         } finally {
             masked.recycle();
         }
     }
 
-    private Subject choosePrimarySubject(List<Subject> subjects, int imageWidth, int imageHeight) {
-        if (subjects == null || subjects.isEmpty()) return null;
-        double halfWidth = imageWidth / 2.0;
-        double halfHeight = imageHeight / 2.0;
-        double maxDistance = Math.hypot(halfWidth, halfHeight);
-        Subject best = null;
-        double bestScore = -1.0;
-        for (Subject subject : subjects) {
-            if (subject == null || subject.getBitmap() == null) continue;
-            int width = subject.getWidth();
-            int height = subject.getHeight();
-            if (width <= 0 || height <= 0) continue;
-            double centerX = subject.getStartX() + width / 2.0;
-            double centerY = subject.getStartY() + height / 2.0;
-            double distance = Math.min(1.0, Math.hypot(centerX - halfWidth, centerY - halfHeight) / maxDistance);
-            double areaRatio = (double) width * height / Math.max(1L, (long) imageWidth * imageHeight);
-            double score = areaRatio * (1.25 - 0.55 * distance);
-            if (subject.getStartX() <= 0 || subject.getStartY() <= 0 ||
-                    subject.getStartX() + width >= imageWidth || subject.getStartY() + height >= imageHeight) {
-                score *= 0.82;
-            }
-            if (score > bestScore) {
-                best = subject;
-                bestScore = score;
-            }
-        }
-        return best;
-    }
-
-    private void applyConfidenceMask(Bitmap bitmap, FloatBuffer confidenceMask) {
-        if (bitmap == null || confidenceMask == null) return;
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        int pixelCount = width * height;
-        FloatBuffer mask = confidenceMask.duplicate();
-        mask.rewind();
-        if (mask.remaining() < pixelCount) return;
-        int[] pixels = new int[pixelCount];
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-        for (int index = 0; index < pixelCount; index++) {
-            float confidence = Math.max(0f, Math.min(1f, mask.get()));
-            float alphaScale = (confidence - FOREGROUND_CONFIDENCE_CUTOFF) / FOREGROUND_CONFIDENCE_FEATHER;
-            int alpha = Color.alpha(pixels[index]);
-            if (alphaScale <= 0f) alpha = 0;
-            else if (alphaScale < 1f) alpha = Math.round(alpha * alphaScale);
-            pixels[index] = Color.argb(alpha, Color.red(pixels[index]), Color.green(pixels[index]), Color.blue(pixels[index]));
-        }
-        bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
-    }
-
-    private Bitmap compositeEditorialImage(Bitmap foreground, int offsetX, int offsetY, int width, int height) {
+    private Bitmap compositeEditorialImage(Bitmap foreground, int width, int height) {
         Bitmap output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(output);
-        canvas.drawColor(EDITORIAL_BACKGROUND);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
-        Rect sourceRect = new Rect(0, 0, foreground.getWidth(), foreground.getHeight());
-        Rect destinationRect = new Rect(
-                offsetX,
-                offsetY,
-                offsetX + foreground.getWidth(),
-                offsetY + foreground.getHeight()
+
+        Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+        backgroundPaint.setShader(new LinearGradient(
+                0f,
+                0f,
+                0f,
+                height,
+                EDITORIAL_BACKGROUND_TOP,
+                EDITORIAL_BACKGROUND_BOTTOM,
+                Shader.TileMode.CLAMP
+        ));
+        canvas.drawRect(0f, 0f, width, height, backgroundPaint);
+
+        // A very soft central highlight gives the same quiet studio-paper feel
+        // as the catalogue mockup without introducing a visible hard shape.
+        backgroundPaint.setShader(new RadialGradient(
+                width * 0.5f,
+                height * 0.28f,
+                Math.max(width, height) * 0.82f,
+                0x42FFFFFF,
+                0x00FFFFFF,
+                Shader.TileMode.CLAMP
+        ));
+        canvas.drawRect(0f, 0f, width, height, backgroundPaint);
+
+        Rect visibleBounds = findVisibleBounds(foreground);
+        float maxItemWidth = width * 0.82f;
+        float maxItemHeight = height * 0.82f;
+        float scale = Math.min(
+                maxItemWidth / Math.max(1f, visibleBounds.width()),
+                maxItemHeight / Math.max(1f, visibleBounds.height())
         );
-        canvas.drawBitmap(foreground, sourceRect, destinationRect, paint);
+        if (!Float.isFinite(scale) || scale <= 0f) scale = 1f;
+        // Keep small accessories readable, but avoid blowing up a bad mask.
+        scale = Math.min(1.35f, Math.max(0.72f, scale));
+        float itemWidth = visibleBounds.width() * scale;
+        float itemHeight = visibleBounds.height() * scale;
+        float left = (width - itemWidth) * 0.5f;
+        float top = (height - itemHeight) * 0.48f;
+        RectF destination = new RectF(left, top, left + itemWidth, top + itemHeight);
+
+        // Ground the garment/accessory with a subtle soft shadow, like the
+        // reference card. It is deliberately below the item, not a dark halo.
+        float shadowX = destination.centerX();
+        float shadowY = Math.min(height - 5f, destination.bottom + Math.max(7f, height * 0.025f));
+        float shadowRadius = Math.max(24f, Math.min(width * 0.42f, itemWidth * 0.46f));
+        Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+        shadowPaint.setShader(new RadialGradient(
+                shadowX,
+                shadowY,
+                shadowRadius,
+                new int[]{0x3B66574B, 0x1D66574B, 0x0066554A},
+                new float[]{0f, 0.48f, 1f},
+                Shader.TileMode.CLAMP
+        ));
+        float shadowHeight = Math.max(5f, height * 0.022f);
+        canvas.drawOval(
+                new RectF(
+                        shadowX - shadowRadius,
+                        shadowY - shadowHeight,
+                        shadowX + shadowRadius,
+                        shadowY + shadowHeight
+                ),
+                shadowPaint
+        );
+
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        canvas.drawBitmap(foreground, visibleBounds, destination, paint);
         return output;
+    }
+
+    private Rect findVisibleBounds(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        int left = width;
+        int top = height;
+        int right = -1;
+        int bottom = -1;
+        for (int y = 0; y < height; y++) {
+            int row = y * width;
+            for (int x = 0; x < width; x++) {
+                if (Color.alpha(pixels[row + x]) <= 12) continue;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        }
+        if (right < left || bottom < top) return new Rect(0, 0, width, height);
+        return new Rect(
+                Math.max(0, left - 2),
+                Math.max(0, top - 2),
+                Math.min(width, right + 3),
+                Math.min(height, bottom + 3)
+        );
     }
 
     private Bitmap decodeImage(String dataUrl) throws IOException {
