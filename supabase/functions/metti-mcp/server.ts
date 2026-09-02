@@ -23,10 +23,11 @@ import type {
   OutfitListOptions,
   SupabaseConfig,
   WardrobeItemInput,
+  WardrobeItemUpdate,
   WardrobeListOptions,
 } from "../_shared/types.ts";
 
-export const MCP_VERSION = "1.0.0";
+export const MCP_VERSION = "1.0.1";
 
 type FetchLike = typeof fetch;
 type McpHttpHandler = ReturnType<typeof createMcpHandler>;
@@ -173,6 +174,7 @@ const wardrobeItemFields = {
   tags: stringListSchema(20, 50).optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   favorite: z.boolean().optional(),
+  imagePath: z.string().trim().max(500).nullable().optional(),
   image: imageInputSchema.optional(),
 };
 
@@ -204,6 +206,9 @@ const updateWardrobeItemSchema = z.object({
   tags: wardrobeItemFields.tags,
   notes: wardrobeItemFields.notes,
   favorite: wardrobeItemFields.favorite,
+  imagePath: wardrobeItemFields.imagePath,
+  image: wardrobeItemFields.image,
+  file: openAiFileSchema.optional(),
 }).strict();
 
 const attachImageSchema = z.object({
@@ -295,8 +300,10 @@ function normalizeWardrobeCategoryInput(
 function normalizeWardrobeCreateInput(
   input: Record<string, unknown>,
 ): WardrobeItemInput {
-  const normalized = normalizeWardrobeCategoryInput(input) as unknown as
-    Record<string, unknown>;
+  const normalized = normalizeWardrobeCategoryInput(input) as unknown as Record<
+    string,
+    unknown
+  >;
   if (normalized.file === undefined) {
     return normalized as unknown as WardrobeItemInput;
   }
@@ -308,6 +315,26 @@ function normalizeWardrobeCreateInput(
     ...withoutFile,
     imageFile: file,
   } as unknown as WardrobeItemInput;
+}
+
+function normalizeWardrobeUpdateInput(
+  input: Record<string, unknown>,
+): WardrobeItemUpdate {
+  const normalized = normalizeWardrobeCategoryInput(input) as unknown as Record<
+    string,
+    unknown
+  >;
+  if (normalized.file === undefined) {
+    return normalized as unknown as WardrobeItemUpdate;
+  }
+  if (normalized.image !== undefined) {
+    throw new AppError("invalid_input", "Use file or image, not both.");
+  }
+  const { file, ...withoutFile } = normalized;
+  return {
+    ...withoutFile,
+    imageFile: file,
+  } as unknown as WardrobeItemUpdate;
 }
 
 function normalizeWardrobeFilter(
@@ -439,7 +466,7 @@ export function registerTools(
 
   server.registerTool("create_wardrobe_item", {
     description:
-      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If the user supplied an image, first infer only reliable characteristics from it and pass the structured fields plus the top-level file parameter whenever ChatGPT provides one; do not invent an unknown brand, material or size. ChatGPT supplies file.download_url, file.file_id and optional file MIME/name for an attached photo. The optional image accepts standard MCP image, resource_link or resource shapes for other MCP hosts. An attached photo is saved in the existing private Storage bucket and queued for the existing app's deterministic Metti editorial-background treatment; no separate image service or LLM is used. Do not send user_id: ownership comes from the bearer token. If the host cannot provide the original image, the item is still created and reports imageStatus=pending or none.",
+      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If the user supplied an image, first infer only reliable characteristics from it and pass the structured fields plus the top-level file parameter whenever ChatGPT provides one; do not invent an unknown brand, material or size. ChatGPT supplies file.download_url, file.file_id and optional file MIME/name for an attached photo. The optional image accepts standard MCP image, resource_link or resource shapes for other MCP hosts. An attached photo is saved in the existing private Storage bucket and queued for the existing app's deterministic Metti editorial-background treatment; no separate image service or LLM is used. Do not send user_id: ownership comes from the bearer token. If a generic MCP resource cannot be fetched, the item reports imageStatus=pending; a concrete ChatGPT file download failure returns an error and rolls back creation.",
     inputSchema: createWardrobeItemSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
@@ -452,7 +479,7 @@ export function registerTools(
 
   server.registerTool("add_wardrobe_item", {
     description:
-      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields, top-level ChatGPT file parameter, image handling and deterministic Metti editorial-background treatment. When an attached photo is available, pass file so the server can save the original image in the existing private Storage bucket. Do not send user_id; ownership comes from the bearer token.",
+      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields, top-level ChatGPT file parameter, image handling and deterministic Metti editorial-background treatment. When an attached photo is available, pass file so the server can save the original image in the existing private Storage bucket. A concrete ChatGPT file download failure returns an error and does not leave a pending item. Do not send user_id; ownership comes from the bearer token.",
     inputSchema: createWardrobeItemSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
@@ -465,15 +492,16 @@ export function registerTools(
 
   server.registerTool("update_wardrobe_item", {
     description:
-      "Edit one wardrobe item owned by the authenticated user. This changes user data. Do not send user_id; ownership is checked server-side and at the database RLS layer.",
+      "Edit one wardrobe item owned by the authenticated user. This changes user data. Pass file when ChatGPT provides a new photo; the server downloads it, validates it and replaces the existing private Storage image without creating a duplicate item. imagePath is only for a file that is already in the user's private Storage folder. Do not send file and imagePath together or send user_id; ownership is checked from the bearer token and at the database RLS layer.",
     inputSchema: updateWardrobeItemSchema,
+    _meta: { "openai/fileParams": ["file"] },
     annotations: writeAnnotations,
   }, (args) => {
     const { itemId, ...changes } = args;
     return runTool(() =>
       services.wardrobe.update(
         itemId,
-        normalizeWardrobeCategoryInput(changes as Record<string, unknown>),
+        normalizeWardrobeUpdateInput(changes as Record<string, unknown>),
       )
     );
   });

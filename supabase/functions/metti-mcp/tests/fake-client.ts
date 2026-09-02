@@ -223,6 +223,15 @@ export class MemoryDataClient implements UserDataClient {
     return rows as T[];
   }
 
+  async deleteRows(table: string, query: URLSearchParams): Promise<void> {
+    const rows = this.rowsFor(table);
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      if (this.isOwned(rows[index]) && queryMatches(rows[index], query)) {
+        rows.splice(index, 1);
+      }
+    }
+  }
+
   async upsertRow<T>(
     table: string,
     _query: URLSearchParams,

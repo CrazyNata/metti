@@ -535,10 +535,11 @@ export class WardrobeService {
       8,
       40,
     );
+    const imageInputProvided = input.image !== undefined ||
+      input.imageFile !== undefined;
+    const imagePathProvided = hasOwn(input, "imagePath");
     const imagePath = safeImagePath(input.imagePath, this.user.id);
-    if (
-      (input.image !== undefined || input.imageFile !== undefined) && imagePath
-    ) {
+    if (imageInputProvided && imagePathProvided) {
       throw new AppError(
         "invalid_input",
         "Use an image input or imagePath, not both.",
@@ -555,7 +556,11 @@ export class WardrobeService {
       : input.image !== undefined
       ? await this.images.resolve(input.image)
       : null;
-    const metadata = wardrobeMetadata({ ...input, name, category }, {}, "active");
+    const metadata = wardrobeMetadata(
+      { ...input, name, category },
+      {},
+      "active",
+    );
     if (imageResolution?.file) {
       const imageMetadata = this.markMcpImageMetadata(metadata);
       if (imageMetadata) Object.assign(metadata, imageMetadata);
@@ -604,7 +609,10 @@ export class WardrobeService {
       );
       const updated = await this.client.updateRows<WardrobeItemRow>(
         "wardrobe_items",
-        new URLSearchParams({ id: `eq.${idValue(row.id, "itemId")}`, limit: "1" }),
+        new URLSearchParams({
+          id: `eq.${idValue(row.id, "itemId")}`,
+          limit: "1",
+        }),
         { image_path: uploadedPath },
       );
       if (!updated[0]) {
@@ -615,19 +623,65 @@ export class WardrobeService {
         );
       }
       return this.actionDto(await withoutImage(), true, "attached");
-    } catch (_) {
-      // The item remains valid without a photo. Remove a successfully uploaded
-      // object if the database link could not be written, so no orphan is left.
-      if (uploadedPath) await this.images.removePath(uploadedPath).catch(() => {});
-      return this.actionDto(await withoutImage(), false, "pending");
+    } catch (error) {
+      // A failed image operation must not leave a row that claims the upload is
+      // pending forever. Remove the uploaded object and roll back the new row.
+      if (uploadedPath) {
+        await this.images.removePath(uploadedPath).catch(() => {});
+      }
+      await this.client.deleteRows(
+        "wardrobe_items",
+        new URLSearchParams({
+          id: `eq.${idValue(row.id, "itemId")}`,
+          limit: "1",
+        }),
+      ).catch(() => {});
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        "data_access_error",
+        "Не удалось сохранить фотографию вещи. Создание отменено.",
+        502,
+      );
     }
   }
 
   async update(
     itemId: unknown,
     input: WardrobeItemUpdate,
-  ): Promise<WardrobeItemDto> {
+  ): Promise<WardrobeItemActionDto> {
     const current = await this.getRow(itemId);
+    const imageInputProvided = input.image !== undefined ||
+      input.imageFile !== undefined;
+    const imagePathProvided = hasOwn(input, "imagePath");
+    if (input.image !== undefined && input.imageFile !== undefined) {
+      throw new AppError(
+        "invalid_input",
+        "Use image or file, not both.",
+      );
+    }
+    if (imageInputProvided && imagePathProvided) {
+      throw new AppError(
+        "invalid_input",
+        "Use an image input or imagePath, not both.",
+      );
+    }
+
+    // A top-level ChatGPT file must be available before metadata is changed.
+    // Unlike a generic MCP resource, it cannot be left in a permanent pending
+    // state because the host supplied a concrete, downloadable file object.
+    const imageResolution = input.imageFile !== undefined
+      ? await this.images.resolveOpenAiFile(input.imageFile)
+      : input.image !== undefined
+      ? await this.images.resolve(input.image)
+      : null;
+    if (imageResolution && !imageResolution.file) {
+      throw new AppError(
+        "data_access_error",
+        "Не удалось получить фотографию для обновления вещи.",
+        502,
+      );
+    }
+
     const patch: Record<string, unknown> = {};
     if (hasOwn(input, "name")) {
       patch.name = requiredString(input.name, "name", 160);
@@ -684,23 +738,43 @@ export class WardrobeService {
     if (hasWardrobeExtensions(input)) {
       patch.metadata = wardrobeMetadata(input, current.metadata);
     }
-    if (!Object.keys(patch).length) {
+    if (!Object.keys(patch).length && !imageResolution?.file) {
       throw new AppError("invalid_input", "At least one field is required.");
     }
 
-    const query = new URLSearchParams({
-      id: `eq.${idValue(itemId, "itemId")}`,
-      limit: "1",
-    });
-    const rows = await this.client.updateRows<WardrobeItemRow>(
-      "wardrobe_items",
-      query,
-      patch,
-    );
-    if (!rows[0]) {
-      throw new AppError("not_found", "Wardrobe item not found.", 404);
+    let updatedRow = current;
+    if (Object.keys(patch).length) {
+      const query = new URLSearchParams({
+        id: `eq.${idValue(itemId, "itemId")}`,
+        limit: "1",
+      });
+      const rows = await this.client.updateRows<WardrobeItemRow>(
+        "wardrobe_items",
+        query,
+        patch,
+      );
+      if (!rows[0]) {
+        throw new AppError("not_found", "Wardrobe item not found.", 404);
+      }
+      updatedRow = rows[0];
     }
-    return this.get(rows[0].id);
+
+    if (imageResolution?.file) {
+      // Reload metadata after the ordinary patch so the image marker and all
+      // user-edited fields are preserved while the existing Storage path is
+      // upserted in place.
+      const refreshed = Object.keys(patch).length
+        ? await this.getRow(updatedRow.id)
+        : current;
+      return this.saveResolvedImage(refreshed, imageResolution.file, true);
+    }
+
+    const updated = await this.get(updatedRow.id);
+    return this.actionDto(
+      updated,
+      Boolean(updatedRow.image_path),
+      updatedRow.image_path ? "attached" : "none",
+    );
   }
 
   private async updateImagePath(
@@ -712,7 +786,10 @@ export class WardrobeService {
     if (metadata !== undefined) patch.metadata = metadata;
     const rows = await this.client.updateRows<WardrobeItemRow>(
       "wardrobe_items",
-      new URLSearchParams({ id: `eq.${idValue(itemId, "itemId")}`, limit: "1" }),
+      new URLSearchParams({
+        id: `eq.${idValue(itemId, "itemId")}`,
+        limit: "1",
+      }),
       patch,
     );
     if (!rows[0]) {
@@ -798,12 +875,9 @@ export class WardrobeService {
 
     const imagePath = current.image_path;
     const currentMetadata = asJsonObject(current.metadata);
-    const hasMcpImageMetadata =
-      currentMetadata.image_source === "mcp" ||
+    const hasMcpImageMetadata = currentMetadata.image_source === "mcp" ||
       currentMetadata.image_background !== undefined;
-    const metadata = hasMcpImageMetadata
-      ? { ...currentMetadata }
-      : undefined;
+    const metadata = hasMcpImageMetadata ? { ...currentMetadata } : undefined;
     if (metadata) {
       delete metadata.image_source;
       delete metadata.image_background;
@@ -815,7 +889,10 @@ export class WardrobeService {
       // Keep the database and Storage consistent if object deletion fails.
       await this.client.updateRows<WardrobeItemRow>(
         "wardrobe_items",
-        new URLSearchParams({ id: `eq.${idValue(current.id, "itemId")}`, limit: "1" }),
+        new URLSearchParams({
+          id: `eq.${idValue(current.id, "itemId")}`,
+          limit: "1",
+        }),
         { image_path: imagePath },
       ).catch(() => {});
       throw new AppError(

@@ -140,6 +140,10 @@ export function createSupabaseFetch(
           await db.updateRows<unknown>(table, query, requestBody(init)),
         );
       }
+      if (method === "DELETE") {
+        await db.deleteRows(table, query);
+        return new Response(null, { status: 204 });
+      }
     }
 
     return jsonResponse({ error: "not_found" }, 404);

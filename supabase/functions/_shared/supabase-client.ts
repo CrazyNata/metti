@@ -11,6 +11,7 @@ export interface UserDataClient {
     query: URLSearchParams,
     payload: unknown,
   ): Promise<T[]>;
+  deleteRows(table: string, query: URLSearchParams): Promise<void>;
   upsertRow<T>(
     table: string,
     query: URLSearchParams,
@@ -130,6 +131,13 @@ export class SupabaseRestClient implements UserDataClient {
     });
   }
 
+  async deleteRows(table: string, query: URLSearchParams): Promise<void> {
+    await this.request<unknown>(pathWithQuery(`/rest/v1/${table}`, query), {
+      method: "DELETE",
+      headers: { prefer: "return=minimal" },
+    });
+  }
+
   async upsertRow<T>(
     table: string,
     query: URLSearchParams,
@@ -158,8 +166,10 @@ export class SupabaseRestClient implements UserDataClient {
     const uploadBody = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(uploadBody).set(bytes);
     await this.request<unknown>(
-      `/storage/v1/object/${encodeURIComponent(bucket)}/${path.split("/")
-        .map(encodeURIComponent).join("/")}`,
+      `/storage/v1/object/${encodeURIComponent(bucket)}/${
+        path.split("/")
+          .map(encodeURIComponent).join("/")
+      }`,
       {
         method: "POST",
         headers: {

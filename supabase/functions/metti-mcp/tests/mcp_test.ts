@@ -1,4 +1,5 @@
 import { createMcpHttpHandler, handleMcpRequest } from "../server.ts";
+import type { ImageServiceOptions } from "../../_shared/image-service.ts";
 import type { AuthenticatedUser, SupabaseConfig } from "../../_shared/types.ts";
 import { assert, assertEquals } from "./assert.ts";
 import { MemoryDataClient, outfitRow, wardrobeRow } from "./fake-client.ts";
@@ -15,11 +16,12 @@ const jpegData = "\/9j\/2Q==";
 function dependencies(
   db: MemoryDataClient,
   fetchImpl: typeof fetch,
+  imageOptions?: ImageServiceOptions,
 ) {
   return {
     config,
     fetchImpl,
-    handler: createMcpHttpHandler(config, fetchImpl),
+    handler: createMcpHttpHandler(config, fetchImpl, imageOptions),
     rateLimiter: { allow: () => true },
   };
 }
@@ -28,8 +30,9 @@ async function mcpRequest(
   db: MemoryDataClient,
   body: Record<string, unknown>,
   token = "valid-token",
+  fetchImpl = createSupabaseFetch(db, userA),
+  imageOptions?: ImageServiceOptions,
 ): Promise<{ response: Response; payload: Record<string, any> }> {
-  const fetchImpl = createSupabaseFetch(db, userA);
   const response = await handleMcpRequest(
     new Request("https://mcp.example.test/mcp", {
       method: "POST",
@@ -41,7 +44,7 @@ async function mcpRequest(
       },
       body: JSON.stringify(body),
     }),
-    dependencies(db, fetchImpl),
+    dependencies(db, fetchImpl, imageOptions),
   );
   return { response, payload: await mcpPayload(response) };
 }
@@ -153,6 +156,112 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assert(addTool?.inputSchema.required.includes("category"));
   assertEquals(addTool?._meta?.["openai/fileParams"], ["file"]);
   assert(addTool?.inputSchema.properties.file);
+  assert(
+    addTool?.inputSchema.properties.file.required.includes("download_url"),
+  );
+  assert(addTool?.inputSchema.properties.file.required.includes("file_id"));
+  assert(addTool?.inputSchema.properties.imagePath);
+  assert(addTool?.inputSchema.properties.styles);
+  const updateTool = tools.find((tool) => tool.name === "update_wardrobe_item");
+  assert(updateTool?.inputSchema.properties.file);
+  assert(updateTool?.inputSchema.properties.imagePath);
+  assert(updateTool?.inputSchema.properties.styles);
+  assertEquals(updateTool?._meta?.["openai/fileParams"], ["file"]);
+});
+
+Deno.test("MCP file parameters attach on add and replace on update", async () => {
+  const db = new MemoryDataClient(userA.id);
+  let remoteFetchCalls = 0;
+  const remoteFetch = async (
+    _input: RequestInfo | URL,
+    _init?: RequestInit,
+  ): Promise<Response> => {
+    remoteFetchCalls += 1;
+    return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+      headers: { "content-type": "image/jpeg" },
+    });
+  };
+  const supabaseFetch = createSupabaseFetch(db, userA);
+  const fetchImpl = (async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = new URL(
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+        ? input.href
+        : input.url,
+    );
+    return url.hostname === "files.openai.com"
+      ? remoteFetch(input, init)
+      : supabaseFetch(input, init);
+  }) as typeof fetch;
+
+  const added = await mcpRequest(
+    db,
+    {
+      jsonrpc: "2.0",
+      id: 20,
+      method: "tools/call",
+      params: {
+        name: "add_wardrobe_item",
+        arguments: {
+          name: "MCP file blouse",
+          category: "top",
+          styles: ["Minimal"],
+          file: {
+            download_url: "https://files.openai.com/add.jpg",
+            file_id: "file-mcp-add",
+            mime_type: "image/jpeg",
+            file_name: "add.jpg",
+          },
+        },
+      },
+    },
+    "valid-token",
+    fetchImpl,
+    { fetchImpl, openAiFileHosts: ["files.openai.com"] },
+  );
+  assertEquals(added.payload.result.structuredContent.imageAttached, true);
+  assertEquals(added.payload.result.structuredContent.imageStatus, "attached");
+  assert(typeof added.payload.result.structuredContent.imageUrl === "string");
+  const itemId = added.payload.result.structuredContent.id as string;
+
+  const updated = await mcpRequest(
+    db,
+    {
+      jsonrpc: "2.0",
+      id: 21,
+      method: "tools/call",
+      params: {
+        name: "update_wardrobe_item",
+        arguments: {
+          itemId,
+          file: {
+            download_url: "https://files.openai.com/update.jpg",
+            file_id: "file-mcp-update",
+            mime_type: "image/jpeg",
+            file_name: "update.jpg",
+          },
+        },
+      },
+    },
+    "valid-token",
+    fetchImpl,
+    { fetchImpl, openAiFileHosts: ["files.openai.com"] },
+  );
+  assertEquals(updated.payload.result.structuredContent.imageAttached, true);
+  assertEquals(
+    updated.payload.result.structuredContent.imageStatus,
+    "attached",
+  );
+  assert(typeof updated.payload.result.structuredContent.imageUrl === "string");
+  assertEquals(remoteFetchCalls, 2);
+  assertEquals(
+    (await db.listRows("wardrobe_items", new URLSearchParams())).length,
+    1,
+  );
 });
 
 Deno.test("authenticated read and write tool calls use shared data and return structured results", async () => {

@@ -179,9 +179,10 @@ choosing reliable characteristics and deciding when to call MCP. MCP only
 validates and persists the supplied structured fields; it does not perform
 image recognition, fashion reasoning or call OpenAI/Gemini/another LLM.
 
-For ChatGPT specifically, both wardrobe-create tools advertise the official
-top-level file parameter with `_meta["openai/fileParams"] = ["file"]`. When an
-attached image is available, ChatGPT supplies a file object like this:
+For ChatGPT specifically, the wardrobe create, compatibility-add and update
+tools advertise the official top-level file parameter with
+`_meta["openai/fileParams"] = ["file"]`. When an attached image is available,
+ChatGPT supplies a file object like this:
 
 ```json
 {
@@ -199,6 +200,18 @@ OpenAI file hosts and sends the bytes through the same `ImageService` and
 private Storage path as every other image. This is the documented ChatGPT file
 input shape; the optional standard MCP resource shapes below remain available
 for other hosts. See the [OpenAI file parameter reference](https://developers.openai.com/plugins/reference).
+
+The local path is converted into this protected object by the ChatGPT/Codex
+host; it must not be sent to the server as `file: "/path/photo.jpg"`, and an
+ordinary ChatGPT Library page URL is not a substitute for the temporary
+`download_url`. A missing, expired or unauthorized temporary URL returns a
+clear error before an item is created or an existing image is changed.
+
+`update_wardrobe_item` accepts the same `file` object and replaces the existing
+private Storage object in place. This updates the current item and does not
+create a duplicate. `imagePath` remains available for a file already stored in
+the authenticated user's private folder; `file` and `imagePath` cannot be sent
+together. `styles` is available on both create and update.
 
 When the MCP host can provide the original image, `create_wardrobe_item` or an
 image tool accepts the standard MCP resource vocabulary:
@@ -250,8 +263,9 @@ HTTPS hostname is explicitly in `MCP_ALLOWED_IMAGE_HOSTS`.
 ### Fallback when the original attachment is unavailable
 
 An MCP host is not assumed to expose raw attachment bytes. If a resource is a
-reference that cannot be safely fetched, or a remote fetch times out/fails, the
-metadata item is still created and the action response contains:
+reference that the server deliberately cannot safely fetch (for example, an
+unallowlisted host or a text-only resource), the metadata item is still created
+and the action response contains:
 
 ```json
 {
@@ -264,11 +278,14 @@ Without an image argument the response uses `imageStatus: "none"`. The user can
 then add the photo through the existing app upload flow. A successful upload
 returns `imageAttached: true` and `imageStatus: "attached"`.
 
-If an image upload succeeds but linking it to a new row fails, the service
-attempts compensating Storage deletion and leaves a valid item without an
-image. Replacing an existing path uses Storage upsert so a link remains valid;
-removal clears the link and deletes the object, rolling back the link if the
-delete fails.
+Once the server starts a remote download, an HTTP error, timeout or invalid
+response returns a clear error instead of creating a permanent `pending` item.
+
+If an image upload or link operation fails while creating an item, the service
+attempts compensating Storage deletion and rolls back the new row; it never
+leaves a newly created item in an eternal `pending` state. Replacing an
+existing path uses Storage upsert so the current item remains linked, and a
+failed replacement returns an error without changing the database link.
 
 The image tools use the same ownership checks as wardrobe tools:
 

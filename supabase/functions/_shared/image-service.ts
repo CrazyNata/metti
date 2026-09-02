@@ -93,7 +93,11 @@ function encodedLengthFor(maxBytes: number): number {
   return Math.ceil(maxBytes / 3) * 4 + 4;
 }
 
-function decodeBase64(value: string, maxBytes: number, field: string): Uint8Array {
+function decodeBase64(
+  value: string,
+  maxBytes: number,
+  field: string,
+): Uint8Array {
   const encoded = value.replace(/\s+/g, "");
   if (!encoded || encoded.length > encodedLengthFor(maxBytes)) {
     throw new AppError("invalid_input", `${field} is too large.`);
@@ -135,7 +139,9 @@ function sniffMime(bytes: Uint8Array): SupportedImageMimeType | null {
     bytes.length >= 12 &&
     String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
   ) return "image/webp";
-  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp") {
+  if (
+    bytes.length >= 12 && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp"
+  ) {
     const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
     if (["heic", "heix", "hevc", "hevx"].includes(brand)) {
       return "image/heic";
@@ -153,7 +159,10 @@ function assertContentMatchesMime(
   if (!detected) return;
   const heifFamily = (value: SupportedImageMimeType) =>
     value === "image/heic" || value === "image/heif";
-  if (detected !== contentType && !(heifFamily(detected) && heifFamily(contentType))) {
+  if (
+    detected !== contentType &&
+    !(heifFamily(detected) && heifFamily(contentType))
+  ) {
     throw new AppError(
       "invalid_input",
       "The image content does not match its MIME type.",
@@ -261,12 +270,18 @@ async function readLimitedBody(
 ): Promise<Uint8Array> {
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (declaredLength > maxBytes) {
-    throw new AppError("invalid_input", "Image exceeds the configured size limit.");
+    throw new AppError(
+      "invalid_input",
+      "Image exceeds the configured size limit.",
+    );
   }
   if (!response.body) {
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > maxBytes) {
-      throw new AppError("invalid_input", "Image exceeds the configured size limit.");
+      throw new AppError(
+        "invalid_input",
+        "Image exceeds the configured size limit.",
+      );
     }
     return bytes;
   }
@@ -282,7 +297,10 @@ async function readLimitedBody(
       total += chunk.byteLength;
       if (total > maxBytes) {
         await reader.cancel();
-        throw new AppError("invalid_input", "Image exceeds the configured size limit.");
+        throw new AppError(
+          "invalid_input",
+          "Image exceeds the configured size limit.",
+        );
       }
       chunks.push(chunk);
     }
@@ -347,7 +365,9 @@ export class ImageService {
     this.allowHttp = options.allowHttp === true;
   }
 
-  async resolve(input: WardrobeImageInput | undefined): Promise<ImageResolution> {
+  async resolve(
+    input: WardrobeImageInput | undefined,
+  ): Promise<ImageResolution> {
     if (!input) return { file: null, status: "pending" };
     if (input.type === "image") {
       const image = input as McpImageContent;
@@ -377,10 +397,22 @@ export class ImageService {
         // never treats text as image bytes and never fetches them.
         return { file: null, status: "pending" };
       }
-      return this.resolveRemote(resource.uri, resource.mimeType);
+      return this.resolveRemote(
+        resource.uri,
+        resource.mimeType,
+        this.allowedHosts,
+        false,
+        true,
+      );
     }
     const link = input as McpResourceLink;
-    return this.resolveRemote(link.uri, link.mimeType);
+    return this.resolveRemote(
+      link.uri,
+      link.mimeType,
+      this.allowedHosts,
+      false,
+      true,
+    );
   }
 
   async resolveOpenAiFile(input: OpenAiFileInput): Promise<ImageResolution> {
@@ -399,6 +431,8 @@ export class ImageService {
       url.toString(),
       input.mime_type ?? mimeFromFileName(input.file_name),
       this.openAiFileHosts,
+      true,
+      true,
     );
   }
 
@@ -406,6 +440,8 @@ export class ImageService {
     uri: string,
     declaredMime?: string,
     allowedHosts = this.allowedHosts,
+    failOnUnavailable = false,
+    failOnFetchError = false,
   ): Promise<ImageResolution> {
     const url = this.validateRemoteUri(uri);
     if (url.protocol === "data:") {
@@ -414,9 +450,16 @@ export class ImageService {
         status: "attached",
       };
     }
-    // An unconfigured host is deliberately a non-fatal fallback. The item can
-    // still be created and the user can add the photo through the app later.
     if (!hostIsAllowed(url.hostname, allowedHosts)) {
+      if (failOnUnavailable) {
+        throw new AppError(
+          "invalid_input",
+          "file.download_url host is not allowed. Use the temporary URL supplied by ChatGPT.",
+        );
+      }
+      // An unconfigured generic MCP host is deliberately a non-fatal fallback.
+      // The item can still be created and the user can add the photo through
+      // the app later.
       return { file: null, status: "pending" };
     }
 
@@ -428,7 +471,22 @@ export class ImageService {
         redirect: "error",
         signal: controller.signal,
       });
-      if (!response.ok) return { file: null, status: "pending" };
+      if (!response.ok) {
+        if (failOnUnavailable || failOnFetchError) {
+          if (!failOnUnavailable) {
+            throw new AppError(
+              "data_access_error",
+              `Не удалось скачать изображение (HTTP ${response.status}).`,
+              502,
+            );
+          }
+          const message = response.status === 401 || response.status === 403
+            ? "Не удалось скачать файл ChatGPT: временная ссылка недействительна или требует авторизацию. Передайте файл через параметр file ещё раз."
+            : `Не удалось скачать файл ChatGPT (HTTP ${response.status}).`;
+          throw new AppError("data_access_error", message, 502);
+        }
+        return { file: null, status: "pending" };
+      }
 
       if (declaredMime !== undefined) supportedMime(declaredMime, "image");
       const responseMime = normalizedMime(
@@ -442,6 +500,15 @@ export class ImageService {
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
+      if (failOnUnavailable || failOnFetchError) {
+        throw new AppError(
+          "data_access_error",
+          failOnUnavailable
+            ? "Не удалось скачать файл по file.download_url. Передайте файл через параметр file ещё раз."
+            : "Не удалось скачать изображение по указанной ссылке.",
+          502,
+        );
+      }
       return { file: null, status: "pending" };
     } finally {
       clearTimeout(timer);

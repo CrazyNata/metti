@@ -2,6 +2,7 @@ import { AppError } from "../../_shared/errors.ts";
 import { createApplicationServices } from "../../_shared/services.ts";
 import type {
   AuthenticatedUser,
+  OpenAiFileInput,
   WardrobeImageInput,
 } from "../../_shared/types.ts";
 import { assert, assertEquals, assertRejects } from "./assert.ts";
@@ -12,6 +13,19 @@ const userB: AuthenticatedUser = { id: "user-b", email: "b@example.com" };
 
 function appError(code: string) {
   return (error: unknown) => error instanceof AppError && error.code === code;
+}
+
+function openAiFile(
+  downloadUrl: string,
+  mimeType = "image/jpeg",
+  fileName = "photo.jpg",
+): OpenAiFileInput {
+  return {
+    download_url: downloadUrl,
+    file_id: `file-${downloadUrl.split("/").pop() ?? "photo"}`,
+    mime_type: mimeType,
+    file_name: fileName,
+  };
 }
 
 Deno.test("wardrobe service lists, searches, paginates and isolates items", async () => {
@@ -224,25 +238,37 @@ Deno.test("wardrobe image operations use one private storage path and compensate
   );
 
   db.failImageLinkUpdate = true;
-  const compensated = await services.wardrobe.add({
-    name: "Compensated image",
-    category: "top",
-    image: inlineImage,
-  });
-  assertEquals(compensated.imageAttached, false);
-  assertEquals(compensated.imageStatus, "pending");
-  assertEquals(db.wardrobe(compensated.id)?.image_path, null);
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "Compensated image",
+        category: "top",
+        image: inlineImage,
+      }),
+    appError("data_access_error"),
+    "A failed image link must roll back the created item instead of pending forever.",
+  );
+  assertEquals(
+    (await services.wardrobe.search({ query: "Compensated image" })).items,
+    [],
+  );
   assertEquals(db.uploadedImages.size, 0);
 
   db.failImageUpload = true;
-  const failedUpload = await services.wardrobe.add({
-    name: "Failed upload",
-    category: "top",
-    image: inlineImage,
-  });
-  assertEquals(failedUpload.imageAttached, false);
-  assertEquals(failedUpload.imageStatus, "pending");
-  assertEquals(db.wardrobe(failedUpload.id)?.image_path, null);
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "Failed upload",
+        category: "top",
+        image: inlineImage,
+      }),
+    appError("data_access_error"),
+    "A failed image upload must roll back the created item.",
+  );
+  assertEquals(
+    (await services.wardrobe.search({ query: "Failed upload" })).items,
+    [],
+  );
   db.failImageUpload = false;
 });
 
@@ -261,7 +287,10 @@ Deno.test("MCP image uploads are marked for the app editorial background pass", 
   assertEquals(metadata.image_background, "pending");
 
   await services.wardrobe.removeImage(item.id);
-  const removedMetadata = db.wardrobe(item.id)?.metadata as Record<string, unknown>;
+  const removedMetadata = db.wardrobe(item.id)?.metadata as Record<
+    string,
+    unknown
+  >;
   assertEquals(removedMetadata.image_source, undefined);
   assertEquals(removedMetadata.image_background, undefined);
 });
@@ -318,6 +347,185 @@ Deno.test("remote image resources require an allowlisted HTTPS host", async () =
   });
   assertEquals(attachedFromChatGptFile.imageStatus, "attached");
   assertEquals(fetchCalls, 2);
+});
+
+Deno.test("ChatGPT files validate, attach and replace an existing image", async () => {
+  const db = new MemoryDataClient(userA.id);
+  const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const pngBytes = new Uint8Array([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    0x00,
+  ]);
+  const remoteFetch = async (input: RequestInfo | URL): Promise<Response> => {
+    const url = new URL(input.toString());
+    if (url.pathname.endsWith("/png")) {
+      return new Response(pngBytes, {
+        headers: { "content-type": "image/png" },
+      });
+    }
+    if (url.pathname.endsWith("/unauthorized")) {
+      return new Response(null, { status: 401 });
+    }
+    return new Response(jpegBytes, {
+      headers: { "content-type": "image/jpeg" },
+    });
+  };
+  const services = createApplicationServices(db, userA, {
+    image: { fetchImpl: remoteFetch },
+  });
+
+  const jpg = await services.wardrobe.add({
+    name: "JPG blouse",
+    category: "top",
+    imageFile: openAiFile("https://files.openai.com/jpg"),
+  });
+  assertEquals(jpg.imageAttached, true);
+  assertEquals(jpg.imageStatus, "attached");
+  assert(typeof jpg.imageUrl === "string" && jpg.imageUrl.length > 0);
+  const jpgPath = db.wardrobe(jpg.id)?.image_path;
+  assert(jpgPath?.startsWith(`${userA.id}/`));
+
+  const png = await services.wardrobe.add({
+    name: "PNG skirt",
+    category: "bottom",
+    imageFile: openAiFile(
+      "https://files.openai.com/png",
+      "image/png",
+      "skirt.png",
+    ),
+  });
+  assertEquals(png.imageAttached, true);
+  assertEquals(png.imageStatus, "attached");
+  assertEquals(
+    db.uploadedImages.get(`wardrobe/${db.wardrobe(png.id)?.image_path}`)
+      ?.contentType,
+    "image/png",
+  );
+
+  const replaced = await services.wardrobe.update(jpg.id, {
+    imageFile: openAiFile("https://files.openai.com/replacement"),
+    styles: ["Smart Casual"],
+  });
+  assertEquals(replaced.imageAttached, true);
+  assertEquals(replaced.imageStatus, "attached");
+  assert(typeof replaced.imageUrl === "string" && replaced.imageUrl.length > 0);
+  assertEquals(db.wardrobe(jpg.id)?.image_path, jpgPath);
+  assertEquals(db.uploadedImages.get(`wardrobe/${jpgPath}`)?.upsert, true);
+  assertEquals(
+    (db.wardrobe(jpg.id)?.metadata as Record<string, unknown>).styles,
+    ["smart-casual"],
+  );
+  assertEquals((await services.wardrobe.list()).items.length, 2);
+
+  const invalidMime = openAiFile(
+    "https://files.openai.com/invalid-mime",
+    "image/gif",
+  ) as unknown as OpenAiFileInput;
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "GIF",
+        category: "top",
+        imageFile: invalidMime,
+      }),
+    appError("invalid_input"),
+    "Unsupported ChatGPT MIME types must be rejected.",
+  );
+
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "Bad URL",
+        category: "top",
+        imageFile: openAiFile("not-a-url"),
+      }),
+    appError("invalid_input"),
+    "Invalid download URLs must be rejected.",
+  );
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "Untrusted URL",
+        category: "top",
+        imageFile: openAiFile("https://not-allowlisted.example/photo.jpg"),
+      }),
+    appError("invalid_input"),
+    "Untrusted download URL hosts must be rejected.",
+  );
+  await assertRejects(
+    () =>
+      services.wardrobe.add({
+        name: "Unauthorized URL",
+        category: "top",
+        imageFile: openAiFile("https://files.openai.com/unauthorized"),
+      }),
+    appError("data_access_error"),
+    "A 401 download must not leave a pending item.",
+  );
+  const genericRemoteServices = createApplicationServices(db, userA, {
+    image: {
+      fetchImpl: remoteFetch,
+      allowedHosts: ["files.openai.com"],
+    },
+  });
+  await assertRejects(
+    () =>
+      genericRemoteServices.wardrobe.add({
+        name: "Unauthorized resource link",
+        category: "top",
+        image: {
+          type: "resource_link",
+          uri: "https://files.openai.com/unauthorized",
+          mimeType: "image/jpeg",
+        },
+      }),
+    appError("data_access_error"),
+    "An unauthorized resource link must return an error instead of pending.",
+  );
+
+  const smallServices = createApplicationServices(db, userA, {
+    image: { fetchImpl: remoteFetch, maxBytes: 3 },
+  });
+  await assertRejects(
+    () =>
+      smallServices.wardrobe.add({
+        name: "Too large",
+        category: "top",
+        imageFile: openAiFile("https://files.openai.com/too-large"),
+      }),
+    appError("invalid_input"),
+    "Oversized ChatGPT files must be rejected.",
+  );
+
+  db.failImageUpload = true;
+  await assertRejects(
+    () =>
+      services.wardrobe.update(jpg.id, {
+        imageFile: openAiFile("https://files.openai.com/failing-replacement"),
+      }),
+    appError("data_access_error"),
+    "A replacement upload failure must return an error.",
+  );
+  db.failImageUpload = false;
+  assertEquals(db.wardrobe(jpg.id)?.image_path, jpgPath);
+
+  await assertRejects(
+    () =>
+      services.wardrobe.update(jpg.id, {
+        imageFile: openAiFile("https://files.openai.com/conflict"),
+        imagePath: `${userA.id}/already.jpg`,
+      }),
+    appError("invalid_input"),
+    "file and imagePath must not be accepted together on update.",
+  );
+  assertEquals((await services.wardrobe.list()).items.length, 2);
 });
 
 Deno.test("profile and outfit services share ownership, metadata and wear history", async () => {
