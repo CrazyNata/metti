@@ -187,7 +187,7 @@
   const outfitItemIds = (outfit) => Array.isArray(outfit?.item_ids) ? outfit.item_ids : Array.isArray(outfit?.itemIds) ? outfit.itemIds : [];
   const selectedOutfitItems = (outfit) => {
     const selected = outfitItemIds(outfit).map((id) => state.wardrobe.find((item) => String(item.id) === String(id))).filter(Boolean);
-    return selected.length ? selected : pickOutfitItems(state.wardrobe);
+    return selected.length || outfit ? selected : [];
   };
   const collageSlots = (items) => {
     const available = Array.isArray(items) ? items.filter((item) => item?.id) : [];
@@ -702,9 +702,9 @@
     node.style.setProperty('background-color', '#f0e9df', 'important');
     node.classList.add('has-image');
   };
-  const renderVisualNode = async (node, item, layoutClass, emptyLabel) => {
+  const renderVisualNode = async (node, item, layoutClass, emptyLabel, keepEmpty = false) => {
     if (!node) return;
-    node.hidden = !item;
+    node.hidden = !item && !keepEmpty;
     const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
     const canUseDemoArt = item && String(item.id).startsWith('demo-');
     const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
@@ -723,7 +723,11 @@
   const renderHomeCollage = async (outfit = state.currentOutfit) => {
     const collage = document.querySelector('.screen[data-screen-id="home"] .outfit-collage');
     if (!collage) return;
-    const slots = collageSlots(selectedOutfitItems(outfit));
+    const selectedItems = selectedOutfitItems(outfit);
+    const hasOutfit = selectedItems.length > 0;
+    document.querySelector('[data-action="wear"]')?.toggleAttribute('hidden', !hasOutfit);
+    document.querySelector('[data-action="other"]')?.toggleAttribute('hidden', !hasOutfit);
+    const slots = collageSlots(selectedItems);
     const definitions = [
       ['hero', '.collage-main', 'collage-main', 'Главная вещь'],
       ['top', '[data-collage-slot="top"]', 'pink', 'Верх'],
@@ -736,7 +740,7 @@
     const bottomCount = [slots.shoes, slots.bag, slots.accent].filter(Boolean).length;
     collage.classList.remove('side-count-0', 'side-count-1', 'side-count-2', 'bottom-count-0', 'bottom-count-1', 'bottom-count-2', 'bottom-count-3');
     collage.classList.add(`side-count-${sideCount}`, `bottom-count-${bottomCount}`);
-    await Promise.all(definitions.map(([key, selector, layoutClass, emptyLabel]) => renderVisualNode(collage.querySelector(selector), slots[key], layoutClass, emptyLabel)));
+    await Promise.all(definitions.map(([key, selector, layoutClass, emptyLabel]) => renderVisualNode(collage.querySelector(selector), slots[key], layoutClass, emptyLabel, !hasOutfit)));
     collage.setAttribute('aria-label', translate('Коллаж образа из вашего гардероба'));
   };
   const renderWardrobe = async () => {
@@ -1029,7 +1033,7 @@
       state.profile = { id: state.user.id, display_name: state.user.user_metadata?.full_name || state.user.email?.split('@')[0] || 'Наталия', city: 'Prague', preferences: {}, style_tags: ['Спокойный', 'Элегантный'], style_profile: {} };
       supabase.data.saveProfile(state.profile).catch(() => {});
     }
-    if (!state.currentOutfit) state.currentOutfit = state.outfits[0] || { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) };
+    if (!state.currentOutfit) state.currentOutfit = state.outfits[0] || null;
     renderProfile(); await renderWardrobe(); renderLooks(); await renderHomeCollage(); updateWeather();
     void normalizePendingMcpImages();
   };
