@@ -57,6 +57,23 @@ The model packages may download weights on first use depending on their model
 configuration. In production, bake or mount reviewed weights and disable
 outbound model downloads at the container/network layer.
 
+### Windows local launcher
+
+The repository includes `start-local.ps1` for starting the category-aware
+processor on the local machine. It reads the private key from
+`%LOCALAPPDATA%\Metti\image-processor\secrets\processor-upstream.key`, keeps
+the model paths out of the repository, and writes diagnostics to
+`%LOCALAPPDATA%\Metti\image-processor\logs`:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\start-local.ps1 -WaitForHealth
+```
+
+The launcher prefers `services/image-processor/.venv` and then the temporary
+environment used during local setup. It does not change the Android wardrobe
+UI or the `#F8F7F5` card background.
+
 ## Container
 
 ```powershell
