@@ -119,6 +119,7 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assertEquals(initialize.status, 200);
   const initializePayload = await mcpPayload(initialize);
   assertEquals(initializePayload.result.serverInfo.name, "metti-wardrobe");
+  assert(initializePayload.result.instructions.includes("top-level file"));
 
   const listed = await mcpRequest(db, {
     jsonrpc: "2.0",
@@ -129,7 +130,7 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assertEquals(listed.response.status, 200);
   const tools = listed.payload.result.tools as Array<Record<string, any>>;
   const names = tools.map((tool) => tool.name);
-  assertEquals(names.length, 21);
+  assertEquals(names.length, 22);
   for (const tool of tools) {
     assert(
       typeof tool.description === "string" && tool.description.length > 20,
@@ -139,6 +140,7 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assert(names.includes("get_profile"));
   assert(names.includes("search_wardrobe"));
   assert(names.includes("create_wardrobe_item"));
+  assert(names.includes("create_wardrobe_item_with_photo"));
   assert(names.includes("add_wardrobe_item"));
   assert(names.includes("attach_image_to_wardrobe_item"));
   assert(names.includes("replace_wardrobe_item_image"));
@@ -151,6 +153,11 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assert(createTool?.inputSchema.required.includes("category"));
   assertEquals(createTool?._meta?.["openai/fileParams"], ["file"]);
   assert(createTool?.inputSchema.properties.file);
+  const photoTool = tools.find((tool) =>
+    tool.name === "create_wardrobe_item_with_photo"
+  );
+  assert(photoTool?.inputSchema.required.includes("file"));
+  assertEquals(photoTool?._meta?.["openai/fileParams"], ["file"]);
   const addTool = tools.find((tool) => tool.name === "add_wardrobe_item");
   assert(addTool?.inputSchema.required.includes("name"));
   assert(addTool?.inputSchema.required.includes("category"));

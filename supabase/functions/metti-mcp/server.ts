@@ -25,7 +25,10 @@ import type {
   WardrobeListOptions,
 } from "../_shared/types.ts";
 
-export const MCP_VERSION = "1.1.0";
+export const MCP_VERSION = "1.2.0";
+
+const MCP_INSTRUCTIONS =
+  "When the user attaches a photo and asks to add or update a wardrobe item, use the photo-capable wardrobe tool and pass the attachment in its top-level file argument. Do not create a metadata-only item for an attached photo. The backend downloads the temporary file immediately, stores the original separately, processes the card, and only reports imageAttached=true after the Storage links are ready. If the file argument is missing, ask the user to attach the photo again.";
 
 type FetchLike = typeof fetch;
 type McpHttpHandler = ReturnType<typeof createMcpHandler>;
@@ -182,6 +185,10 @@ const createWardrobeItemSchema = z.object({
   // attaches an image. It stays optional for generic MCP clients and the
   // existing metadata-only fallback.
   file: openAiFileSchema.optional(),
+}).strict();
+const createWardrobeItemWithPhotoSchema = z.object({
+  ...wardrobeItemFields,
+  file: openAiFileSchema,
 }).strict();
 const updateWardrobeItemSchema = z.object({
   itemId: idSchema,
@@ -465,9 +472,22 @@ export function registerTools(
     annotations: readAnnotations,
   }, (args) => runTool(() => services.wardrobe.get(args.itemId)));
 
+  server.registerTool("create_wardrobe_item_with_photo", {
+    description:
+      "Create a clothing or accessory item from the photo attached in the current ChatGPT message. This is the required tool for an attached photo: pass the attachment in the top-level file parameter. The backend downloads the temporary file immediately, stores originalImage separately, runs the category-aware wardrobe image-processing service, validates the result and stores a square processed card only after quality is sufficient. Do not invent unknown characteristics. If the photo is unavailable, do not call this tool; ask the user to attach it again.",
+    inputSchema: createWardrobeItemWithPhotoSchema,
+    _meta: { "openai/fileParams": ["file"] },
+    annotations: { ...writeAnnotations, idempotentHint: false },
+  }, (args) =>
+    runTool(() =>
+      services.wardrobe.add(
+        normalizeWardrobeCreateInput(args as Record<string, unknown>),
+      )
+    ));
+
   server.registerTool("create_wardrobe_item", {
     description:
-      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If the user supplied an image, first infer only reliable characteristics from it and pass the structured fields plus the top-level file parameter whenever ChatGPT provides one; do not invent an unknown brand, material or size. ChatGPT supplies file.download_url, file.file_id and optional file MIME/name for an attached photo. The optional image accepts standard MCP image, resource_link or resource shapes for other MCP hosts. The backend stores originalImage separately, runs the shared wardrobe image-processing service with wardrobe_card or eyewear_card automatically, validates the result and stores a square processed card when quality is sufficient. If processing is unavailable or quality is unsafe, the original remains visible with imageStatus=needs_review; it is never reported as attached processed output. Do not send user_id: ownership comes from the bearer token. If a generic MCP resource cannot be fetched, the item reports imageStatus=pending; a concrete ChatGPT file download failure returns an error and rolls back creation.",
+      "Create a clothing or accessory item in the authenticated user's wardrobe without requiring a photo. Use create_wardrobe_item_with_photo when the user attached a photo; never silently omit an attached file. If the user supplied an image through another MCP client, use the image parameter. Infer only reliable characteristics and do not invent an unknown brand, material or size. The backend stores originalImage separately, runs the shared wardrobe image-processing service with wardrobe_card or eyewear_card automatically, validates the result and stores a square processed card when quality is sufficient. If processing is unavailable or quality is unsafe, the original remains visible with imageStatus=needs_review; it is never reported as attached processed output. Do not send user_id: ownership comes from the bearer token.",
     inputSchema: createWardrobeItemSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
@@ -480,7 +500,7 @@ export function registerTools(
 
   server.registerTool("add_wardrobe_item", {
     description:
-      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields and top-level ChatGPT file parameter. The existing backend image service keeps the original photo, applies the category-aware wardrobe/eyewear card pipeline and only reports imageStatus=attached after the processed image is uploaded and linked. Do not send user_id; ownership comes from the bearer token.",
+      "Compatibility alias for create_wardrobe_item. For a ChatGPT attachment prefer create_wardrobe_item_with_photo so the top-level file parameter is mandatory. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields. The existing backend image service keeps the original photo, applies the category-aware wardrobe/eyewear card pipeline and only reports imageStatus=attached after the processed image is uploaded and linked. Do not send user_id; ownership comes from the bearer token.",
     inputSchema: createWardrobeItemSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
@@ -644,7 +664,10 @@ export function createMcpHttpHandler(
       user,
     };
     return registerTools(
-      new McpServer({ name: "metti-wardrobe", version: MCP_VERSION }),
+      new McpServer(
+        { name: "metti-wardrobe", version: MCP_VERSION },
+        { instructions: MCP_INSTRUCTIONS },
+      ),
       servicesFor(config, context, fetchImpl, imageOptions),
     );
   });
