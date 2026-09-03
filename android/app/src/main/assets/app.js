@@ -73,6 +73,8 @@
     кофты: 'sweater',
     толстовки: 'hoodie',
     пиджаки: 'blazer',
+    jacket: 'blazer',
+    jackets: 'blazer',
     рубашки: 'shirt',
     платья: 'dress',
     юбки: 'skirt',
@@ -83,8 +85,17 @@
     туфли: 'pumps',
     сапоги: 'boots',
     ботинки: 'ankle-boots',
+    bag: 'bag',
+    bags: 'bag',
     сумки: 'bag',
     сумка: 'bag',
+    'cross body': 'bag',
+    crossbody: 'bag',
+    'shoulder bag': 'bag',
+    tote: 'bag',
+    'tote bag': 'bag',
+    handbag: 'bag',
+    purse: 'bag',
     очки: 'glasses',
     glasses: 'glasses',
     sunglasses: 'glasses',
@@ -92,20 +103,24 @@
     'головные уборы': 'headwear',
     бижутерия: 'jewelry'
   });
+  const bagSubcategoryPattern = /(^|[\s_-])(bag|bags|tote|handbag|purse|crossbody|shoulder[\s_-]*bag|clutch|satchel)(?=$|[\s_-])/;
   const canonicalSubcategory = (value) => {
     const raw = String(value || '').trim();
-    return subcategoryAliases[raw.toLowerCase()] || raw;
+    const key = raw.toLowerCase();
+    const normalizedKey = key.replace(/[_-]+/g, ' ');
+    return subcategoryAliases[key] || subcategoryAliases[normalizedKey] || (key.includes('сум') || bagSubcategoryPattern.test(key) ? 'bag' : raw);
   };
   const categoryForItem = (item) => {
     const category = String(item?.category || '').trim().toLowerCase();
     if (category === 'outer') return 'top';
     return ['top', 'bottom', 'shoes', 'accessory'].includes(category) ? category : 'accessory';
   };
+  const itemText = (item) => `${item?.name || ''} ${item?.description || item?.metadata?.description || ''}`.toLowerCase();
   const itemSubcategory = (item) => {
     const saved = canonicalSubcategory(item?.subcategory || item?.metadata?.subcategory);
     if (saved) return saved;
     if (item?.category === 'outer') return 'outerwear';
-    const value = String(item?.name || '').toLowerCase();
+    const value = itemText(item);
     const category = categoryForItem(item);
     if (category === 'top') {
       if (value.includes('жакет') || value.includes('пидж')) return 'blazer';
@@ -128,13 +143,13 @@
       if (value.includes('сапог')) return 'boots';
       return 'ankle-boots';
     }
-    if (value.includes('сум')) return 'bag';
+    if (value.includes('сум') || bagSubcategoryPattern.test(value)) return 'bag';
     if (value.includes('очк')) return 'glasses';
     if (value.includes('серьг') || value.includes('кольц') || value.includes('брас') || value.includes('цеп') || value.includes('украш')) return 'jewelry';
     return 'headwear';
   };
   const demoItems = [
-    { id: 'demo-jacket', name: 'Бежевый жакет оверсайз', category: 'top', subcategory: 'blazer', color: 'Бежевый', season: 'Осень / Весна', photoClass: 'photo-jacket' },
+    { id: 'demo-jacket', name: 'Бежевый верхний слой', category: 'top', subcategory: 'blazer', color: 'Бежевый', season: 'Осень / Весна', photoClass: 'photo-jacket' },
     { id: 'demo-shirt', name: 'Белый топ', category: 'top', subcategory: 'tshirt', color: 'Молочный', season: 'Круглый год', photoClass: 'photo-shirt' },
     { id: 'demo-jeans', name: 'Прямые джинсы', category: 'bottom', subcategory: 'jeans', color: 'Чёрный', season: 'Круглый год', photoClass: 'photo-jeans' },
     { id: 'demo-loafers', name: 'Коричневые лоферы', category: 'shoes', subcategory: 'pumps', color: 'Коричневый', season: 'Осень / Весна', photoClass: 'photo-loafers' },
@@ -146,15 +161,19 @@
   ];
   const itemClass = (item) => {
     if (item?.photoClass) return item.photoClass;
-    const value = `${item.name || ''} ${item.category || ''}`.toLowerCase();
+    const value = itemText(item);
+    const category = categoryForItem(item);
     const subcategory = itemSubcategory(item);
-    if (subcategory === 'bag' || value.includes('сум')) return 'item-bag photo-bag';
-    if (subcategory === 'jewelry' || value.includes('серьг')) return 'photo-earrings';
-    if (subcategory === 'headwear') return 'photo-scarf';
-    if (value.includes('жакет') || item.category === 'outer' || ['blazer', 'outerwear'].includes(subcategory)) return 'item-jacket photo-jacket';
-    if (value.includes('джин') || value.includes('брюк') || item.category === 'bottom') return 'item-jeans photo-jeans';
-    if (value.includes('лофер') || item.category === 'shoes') return 'item-loafers photo-loafers';
-    return 'item-shirt photo-shirt';
+    if (subcategory === 'bag') return 'item-bag photo-bag';
+    if (subcategory === 'jewelry') return value.includes('серьг') || value.includes('earring') ? 'photo-earrings' : 'item-neutral';
+    if (subcategory === 'headwear') return value.includes('плат') || value.includes('scarf') ? 'photo-scarf' : 'item-neutral';
+    if (subcategory === 'skirt') return 'photo-skirt';
+    if (subcategory === 'sneakers') return 'photo-sneakers';
+    if (category === 'top' && ['blazer', 'outerwear'].includes(subcategory)) return 'item-jacket photo-jacket';
+    if (category === 'bottom' && subcategory === 'jeans') return 'item-jeans photo-jeans';
+    if (category === 'shoes' && (value.includes('лофер') || value.includes('loafer'))) return 'item-loafers photo-loafers';
+    if (category === 'top' && ['tshirt', 'shirt'].includes(subcategory)) return 'item-shirt photo-shirt';
+    return 'item-neutral';
   };
   const pickOutfitItems = (items) => {
     const available = Array.isArray(items) ? items.filter((item) => item?.id) : [];
@@ -207,6 +226,16 @@
   const subcategoryLabel = (value) => {
     const canonical = canonicalSubcategory(value);
     return Object.values(wardrobeSubcategoryOptions).flat().find((option) => option.value === canonical)?.label || value;
+  };
+  const itemMatchCopy = (item) => {
+    const category = categoryForItem(item);
+    const subcategory = itemSubcategory(item);
+    if (subcategory === 'bag') return 'Эта сумка сочетается с 8 вещами';
+    if (subcategory === 'glasses') return 'Эти очки сочетаются с 8 вещами';
+    if (category === 'accessory') return 'Этот аксессуар сочетается с 8 вещами';
+    if (category === 'shoes') return 'Эта обувь сочетается с 8 вещами';
+    if (category === 'top' && ['blazer', 'outerwear'].includes(subcategory)) return 'Этот верхний слой сочетается с 8 вещами';
+    return 'Эта вещь сочетается с 8 вещами';
   };
   const filterSubcategoryOptions = (category) => category === 'all' ? [{ value: 'all', label: 'Все виды' }] : [{ value: 'all', label: 'Все виды' }, ...(wardrobeSubcategoryOptions[category] || [])];
   const mettiSelectLabel = (select) => {
@@ -754,6 +783,7 @@
     const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
     const imageReady = Boolean(item?.image_path);
     const visualClasses = item && (imageReady || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
+    if (imageReady) visualClasses.push('has-uploaded-image');
     node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
     ['background-image', 'background-position', 'background-size', 'background-repeat', 'background-color'].forEach((property) => node.style.removeProperty(property));
     node.classList.remove('has-image');
@@ -804,7 +834,7 @@
       button.dataset.category = categoryForItem(item);
       button.dataset.subcategory = itemSubcategory(item);
       const art = document.createElement('div');
-      art.className = `item-art ${itemClass(item)}`;
+      art.className = `item-art ${itemClass(item)}${isEditorialImageReady(item) ? ' has-uploaded-image' : ''}`;
       const label = document.createElement('span');
       label.textContent = translate(item.name || 'Вещь');
       art.append(label); button.append(art); grid.append(button);
@@ -817,12 +847,14 @@
     state.activeItem = item;
     const art = document.querySelector('.item-detail-art');
     if (art) {
-      art.className = `item-detail-art placeholder ${itemClass(item)}`;
+      art.className = `item-detail-art placeholder ${itemClass(item)}${isEditorialImageReady(item) ? ' has-uploaded-image' : ''}`;
       art.innerHTML = '';
       const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); art.append(label);
       if (isEditorialImageReady(item)) void addImageBackground(art, item.image_path);
     }
     setText('.screen[data-screen-id="item"] .detail-title', item.name || 'Вещь');
+    const matchTitle = document.querySelector('.screen[data-screen-id="item"] .match-note strong');
+    if (matchTitle) matchTitle.textContent = translate(itemMatchCopy(item));
     const chips = document.querySelector('.detail-chips');
     if (chips) {
       chips.innerHTML = '';

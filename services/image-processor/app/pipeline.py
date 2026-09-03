@@ -438,6 +438,14 @@ def _primary_model_prompt(request: SegmentRequest) -> str:
         if "optical" in value or "eyeglass" in value:
             return "eyeglasses"
         return "glasses"
+    if request.category == "shoes" and request.subcategory in {
+        "sneaker",
+        "sneakers",
+    }:
+        # Wardrobe photos normally contain a displayed pair. Asking for the
+        # pair prevents Grounding DINO from selecting only one shoe and lets
+        # SAM segment the complete displayed object as one card.
+        return "a pair of sneakers"
     return _model_prompts(request)[0]
 
 

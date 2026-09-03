@@ -1,6 +1,8 @@
 (() => {
   const splash = document.querySelector('#loading-splash');
   if (!splash) return;
+  const nativeApp = Boolean(window.MettiAndroid);
+  if (nativeApp) splash.classList.add('native-loading');
   const setNativeSystemBars = (loading) => {
     try { window.MettiAndroid?.setLoadingSystemBars(loading); } catch (_) {}
   };

@@ -8,6 +8,8 @@ import logging
 import os
 import secrets
 import threading
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from dataclasses import dataclass
 
 from fastapi import FastAPI, File, Form, Header, UploadFile
@@ -70,6 +72,8 @@ class Settings:
     max_input_bytes: int
     max_pixels: int
     max_output_bytes: int
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -103,6 +107,11 @@ class Settings:
                 8 * 1024 * 1024,
                 16 * 1024 * 1024,
             ),
+            supabase_url=os.getenv("METTI_SUPABASE_URL", "").strip().rstrip("/"),
+            supabase_publishable_key=os.getenv(
+                "METTI_SUPABASE_PUBLISHABLE_KEY",
+                "",
+            ).strip(),
         )
 
 
@@ -178,16 +187,42 @@ def _check_access(
     authorization: str | None,
     x_api_key: str | None,
 ) -> None:
-    if not settings.api_key:
-        if settings.allow_anonymous:
-            return
-        raise ModelNotReadyError("The processor API key is not configured.")
     bearer = ""
     if authorization and authorization.lower().startswith("bearer "):
         bearer = authorization[7:].strip()
+
     candidate = (x_api_key or bearer).strip()
-    if not candidate or not hmac.compare_digest(candidate, settings.api_key):
-        raise AuthenticationError("Invalid processor credentials.")
+    if settings.api_key and candidate and hmac.compare_digest(
+        candidate,
+        settings.api_key,
+    ):
+        return
+
+    # The hosted Supabase Edge Function forwards the authenticated user's JWT
+    # when this service is reached through the temporary development tunnel.
+    # Validate it against Supabase instead of weakening the processor to an
+    # anonymous public endpoint.
+    if bearer and settings.supabase_url and settings.supabase_publishable_key:
+        request = Request(
+            f"{settings.supabase_url}/auth/v1/user",
+            headers={
+                "accept": "application/json",
+                "apikey": settings.supabase_publishable_key,
+                "authorization": f"Bearer {bearer}",
+            },
+        )
+        try:
+            with urlopen(request, timeout=5) as response:
+                if 200 <= response.status < 300:
+                    return
+        except (HTTPError, URLError, TimeoutError, OSError):
+            pass
+
+    if not settings.api_key and settings.allow_anonymous:
+        return
+    if not settings.api_key:
+        raise ModelNotReadyError("The processor API key is not configured.")
+    raise AuthenticationError("Invalid processor credentials.")
 
 
 def _error_response(error: ProcessorError, request_id: str) -> JSONResponse:

@@ -69,6 +69,15 @@
   background: linear-gradient(180deg, transparent 64%, rgba(23, 21, 15, .1) 100%) !important;
 }
 
+/* Uploaded photos already contain the item's silhouette. Do not draw the
+   placeholder garment, bag handle or other decorative shapes over them. */
+.placeholder.has-uploaded-image::before,
+.placeholder.has-uploaded-image::after,
+.placeholder.has-image::before,
+.placeholder.has-image::after {
+  display: none !important;
+}
+
 @media (max-width: 500px) {
   .screen[data-screen-id="home"] .photo-outfit { background-position: center 48% !important; }
 }

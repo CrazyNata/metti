@@ -5,6 +5,10 @@
 .screen[data-screen-id="home"].active{display:flex!important;flex-direction:column!important;height:calc(100vh - 152px)!important;min-height:0!important;padding:28px 24px 18px!important}.screen[data-screen-id="home"] h1{font-size:34px!important;line-height:1.02!important;margin-top:6px!important;margin-bottom:10px!important}.screen[data-screen-id="home"] .outfit-card{display:flex!important;flex:1 1 auto!important;min-height:0!important;flex-direction:column!important}.screen[data-screen-id="home"] .outfit-collage{height:390px!important;flex:none!important;grid-template-rows:minmax(108px,1fr) minmax(108px,1fr) 102px!important;margin-top:12px!important}.screen[data-screen-id="home"] .primary{height:52px!important;margin-top:auto!important}.screen[data-screen-id="home"] .button-row{gap:10px!important;margin-top:10px!important}.screen[data-screen-id="home"] .button-row .outline{height:48px!important}
 .screen[data-screen-id="wardrobe"] .wardrobe-grid{padding-bottom:120px!important}.bottom-nav{background:var(--bg)!important;backdrop-filter:none!important}
 
+/* The APK already has real system bars, so the HTML mock status row and notch
+   must not flash on top of the native loading frame. */
+.loading-splash-statusbar,.loading-splash-notch{display:none!important}.loading-splash-content{min-height:100%!important;padding-top:calc(29px + var(--metti-native-top-inset,0px))!important}
+
 /* Profile follows the reference canvas: restore the full content width and
    leave the same breathing room below the native status area. */
 .screen[data-screen-id="profile"]{margin-left:-11px!important;margin-right:-11px!important;padding:51px 22px 30px!important}
