@@ -16,6 +16,7 @@ dependencies = [
   "rembg==2.0.62",
   "onnxruntime==1.20.1",
   "ultralytics==8.3.68",
+  "transformers==5.16.1",
   "uvicorn[standard]==0.34.0",
 ]
 

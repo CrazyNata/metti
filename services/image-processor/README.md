@@ -8,18 +8,24 @@ does not generate or redraw the product. The Supabase service creates the
 
 ## Production backend
 
-Use `grounded_sam2` for wardrobe photos:
+Use `grounding_dino_sam2` for wardrobe photos:
 
-1. YOLO-World/YOLOE detects an object using the wardrobe category prompt;
+1. Grounding DINO detects an object using the wardrobe category prompt;
 2. SAM or SAM2 segments the selected detection box;
 3. rembg alpha matting supplies soft edges and semi-transparent pixels;
 4. the pipeline clips the matte to the selected ROI, keeps thin eyewear
    components, and emits diagnostics for the Supabase quality gate.
 
-Model weights are intentionally not committed. Place approved weights in a
-private volume and set `METTI_DETECTOR_MODEL` and `METTI_SAM_MODEL`. The
-detector must support `set_classes()` (YOLO-World/YOLOE), otherwise the service
-returns `processor_not_ready` rather than silently using a generic detector.
+Model weights are intentionally not committed. Set
+`METTI_DETECTOR_MODEL` to an approved local Grounding DINO directory or a
+Hugging Face model id such as `IDEA-Research/grounding-dino-tiny`, and set
+`METTI_SAM_MODEL` to the local SAM/SAM2 weights. The detector is always
+category-aware; the service returns `processor_not_ready` rather than silently
+falling back to a generic background remover.
+
+`grounded_sam2` is retained as a legacy YOLO-World adapter for installations
+that already have those weights. It is not the default because its detector
+confidence is less reliable for narrow categories such as eyewear.
 
 The `rembg` backend is an explicit prototype option. It has no category-aware
 detector and intentionally reports conservative eyewear confidence/detail
@@ -33,8 +39,8 @@ From this directory, install the pinned dependencies and provide model files:
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[test]"
 $env:METTI_PROCESSOR_API_KEY = "local-only-secret"
-$env:METTI_PROCESSOR_BACKEND = "grounded_sam2"
-$env:METTI_DETECTOR_MODEL = "C:\models\yolov8s-worldv2.pt"
+$env:METTI_PROCESSOR_BACKEND = "grounding_dino_sam2"
+$env:METTI_DETECTOR_MODEL = "IDEA-Research/grounding-dino-tiny"
 $env:METTI_SAM_MODEL = "C:\models\sam2_b.pt"
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8080
 ```
@@ -57,8 +63,8 @@ outbound model downloads at the container/network layer.
 docker build -t metti-image-processor .
 docker run --rm -p 8080:8080 `
   -e METTI_PROCESSOR_API_KEY="replace-me" `
-  -e METTI_PROCESSOR_BACKEND=grounded_sam2 `
-  -e METTI_DETECTOR_MODEL=/models/yolov8s-worldv2.pt `
+  -e METTI_PROCESSOR_BACKEND=grounding_dino_sam2 `
+  -e METTI_DETECTOR_MODEL=/models/grounding-dino-tiny `
   -e METTI_SAM_MODEL=/models/sam2_b.pt `
   -v "C:\models:/models:ro" `
   metti-image-processor

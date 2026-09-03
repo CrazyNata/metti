@@ -88,7 +88,7 @@ It applies Cloudflare Images `segment=foreground` (BiRefNet) to the raw
 request bytes and returns the same binary-PNG plus `x-metti-*` quality
 contract. The Worker validates the forwarded Supabase JWT against Auth and
 does not persist uploads. A configured `METTI_IMAGE_PROCESSOR_URL` still
-takes precedence, so the category-aware `grounded_sam2` service below can
+takes precedence, so the category-aware `grounding_dino_sam2` service below can
 replace it for higher-control eyewear segmentation.
 
 The external endpoint can be a private service running a detector + SAM/SAM2
@@ -99,13 +99,13 @@ fine-detail diagnostics. A local/self-hosted deployment has no per-image API
 credit charge, but it needs GPU/CPU hosting and model operations.
 
 This repository now includes a runnable reference implementation in
-`services/image-processor/`. Its `grounded_sam2` backend uses a YOLO-World/YOLOE
-detector, prompted SAM/SAM2 and optional rembg alpha matting. The detector and
-SAM weights are deliberately mounted/configured separately. Start with
-`services/image-processor/.env.example`, keep the service on a private network,
-and set the same `METTI_PROCESSOR_API_KEY` value in the container and the
-Supabase Edge Function secret. The service has no persistence and exposes only
-`GET /healthz` and `POST /process`.
+`services/image-processor/`. Its `grounding_dino_sam2` backend uses a
+Grounding DINO category detector, prompted SAM/SAM2 and optional rembg alpha
+matting. The detector and SAM weights are deliberately mounted/configured
+separately. Start with `services/image-processor/.env.example`, keep the
+service on a private network, and set the same `METTI_PROCESSOR_API_KEY` value
+in the container and the Supabase Edge Function secret. The service has no
+persistence and exposes only `GET /healthz` and `POST /process`.
 
 When the Supabase project is hosted, `METTI_IMAGE_PROCESSOR_URL` must be an
 HTTPS endpoint reachable from the Edge Function runtime. “Private” means it is

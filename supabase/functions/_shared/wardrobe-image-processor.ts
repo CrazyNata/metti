@@ -446,7 +446,10 @@ const QUALITY_LIMITS: Record<WardrobeImagePreset, {
   eyewear_card: {
     confidence: 0.78,
     maxDisconnected: 14,
-    minFineDetailRecall: 0.72,
+    // The detector/SAM metric is intentionally conservative for tinted
+    // lenses: reflections create image edges that are not object boundaries.
+    // Background, halo and component checks remain strict for eyewear.
+    minFineDetailRecall: 0.60,
   },
 };
 

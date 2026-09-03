@@ -4,10 +4,14 @@ The service deliberately returns a transparent cutout only. The shared
 Supabase service owns the final 1024x1024 card canvas, background and shadow.
 This keeps the MCP and first-party app on one deterministic presentation path.
 
-The production backend is ``grounded_sam2``:
+The production backend is ``grounding_dino_sam2``:
 
-    YOLO-World detector (category prompt) -> SAM/SAM2 mask -> optional rembg
-    alpha matting -> conservative refinement and diagnostics.
+    Grounding DINO detector (category prompt) -> SAM/SAM2 mask -> optional
+    rembg alpha matting -> conservative refinement and diagnostics.
+
+``grounded_sam2`` remains available as a legacy YOLO-World adapter. Grounding
+DINO is the default because its open-vocabulary detector produces a reliable
+box for narrow categories such as sunglasses in cluttered photos.
 
 ``rembg`` is available as an explicit prototype backend. It is intentionally
 not category-aware and reports conservative eyewear diagnostics so a generic
@@ -18,6 +22,7 @@ from __future__ import annotations
 
 import io
 import threading
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Protocol, Sequence
 
@@ -391,15 +396,49 @@ def _png_alpha_probe(payload: bytes) -> np.ndarray:
 
 def _model_prompts(request: SegmentRequest) -> list[str]:
     if request.preset == "eyewear_card":
-        return ["glasses", "sunglasses", "eyewear", "spectacles"]
+        return [
+            "a pair of sunglasses",
+            "black sunglasses",
+            "eyeglasses",
+            "glasses",
+        ]
     prompts = {
-        "outer": ["jacket", "coat", "blazer", "outerwear"],
-        "top": ["shirt", "top", "blouse", "sweater", "hoodie"],
-        "bottom": ["pants", "trousers", "jeans", "skirt", "shorts"],
-        "shoes": ["shoe", "sneaker", "boot", "heel", "sandals"],
-        "accessory": ["bag", "hat", "scarf", "belt", "watch", "jewelry"],
+        "outer": ["a jacket", "a coat", "a blazer", "outerwear"],
+        "top": ["a shirt", "a top", "a blouse", "a sweater", "a hoodie"],
+        "bottom": ["pants", "trousers", "jeans", "a skirt", "shorts"],
+        "shoes": ["a shoe", "a sneaker", "a boot", "a heel", "sandals"],
+        "accessory": [
+            "a bag",
+            "a hat",
+            "a scarf",
+            "a belt",
+            "a watch",
+            "jewelry",
+        ],
     }
     return prompts.get(request.category, ["clothing", "fashion item"])
+
+
+def _primary_model_prompt(request: SegmentRequest) -> str:
+    """Choose one focused phrase for an open-vocabulary detector.
+
+    Grounding DINO scores the text tokens in a caption. Combining several
+    synonyms in one caption lowers the score of the correct box and makes the
+    quality gate unnecessarily reject a good detection. The legacy YOLO-World
+    path still receives the full synonym list above.
+    """
+
+    value = unicodedata.normalize(
+        "NFKC",
+        " ".join(part for part in (request.subcategory, request.name) if part),
+    ).lower()
+    if request.preset == "eyewear_card":
+        if "sunglass" in value:
+            return "sunglasses"
+        if "optical" in value or "eyeglass" in value:
+            return "eyeglasses"
+        return "glasses"
+    return _model_prompts(request)[0]
 
 
 class RembgSegmenter:
@@ -410,7 +449,7 @@ class RembgSegmenter:
             from rembg import new_session, remove
         except ImportError as error:
             raise ModelNotReadyError(
-                "Install the rembg extra or select grounded_sam2."
+                "Install rembg or select a category-aware SAM backend."
             ) from error
         self._remove = remove
         self._session = new_session(model_name)
@@ -486,6 +525,7 @@ class GroundedSam2Segmenter:
             )
         self._lock = threading.RLock()
         self._detector_confidence = detector_confidence
+        self._provider_name = "ultralytics-grounded-sam2"
         self._matting: RembgSegmenter | None = None
         if matting_enabled and matting_model:
             self._matting = RembgSegmenter(matting_model, alpha_matting=True)
@@ -603,18 +643,140 @@ class GroundedSam2Segmenter:
             return SegmentResult(
                 alpha=alpha,
                 confidence=confidence,
-                provider="ultralytics-grounded-sam2-matting" if self._matting else
-                "ultralytics-grounded-sam2",
+                provider=f"{self._provider_name}-matting" if self._matting else
+                self._provider_name,
                 selected_box=selected_box,
                 fine_detail_recall=estimate_fine_detail_recall(request.image, alpha),
                 transparent_region_preserved=transparent,
             )
 
 
+class GroundingDinoSam2Segmenter(GroundedSam2Segmenter):
+    """Grounding DINO detector + SAM2 prompt segmentation + matting.
+
+    Grounding DINO accepts open-vocabulary text prompts, so the same service
+    can select sunglasses, a blazer or shoes without a custom class list. The
+    detector score is kept as the confidence evidence sent to the shared
+    quality gate; no score is invented from the image bytes.
+    """
+
+    def __init__(
+        self,
+        detector_model: str,
+        sam_model: str,
+        matting_model: str | None = "u2net",
+        detector_confidence: float = 0.25,
+        matting_enabled: bool = True,
+    ):
+        try:
+            import torch
+            from transformers import (
+                AutoModelForZeroShotObjectDetection,
+                AutoProcessor,
+            )
+            from ultralytics import SAM
+        except ImportError as error:
+            raise ModelNotReadyError(
+                "Install transformers, ultralytics and provide detector/SAM models."
+            ) from error
+        try:
+            self._torch = torch
+            self._processor = AutoProcessor.from_pretrained(detector_model)
+            self._detector = AutoModelForZeroShotObjectDetection.from_pretrained(
+                detector_model,
+            )
+            self._device = "cuda" if torch.cuda.is_available() else "cpu"
+            self._detector.to(self._device)
+            self._detector.eval()
+            self._sam = SAM(sam_model)
+        except Exception as error:
+            raise ModelNotReadyError(
+                "The Grounding DINO or SAM model weights could not be loaded."
+            ) from error
+        self._lock = threading.RLock()
+        self._detector_confidence = detector_confidence
+        self._provider_name = "grounding-dino-sam2"
+        self._matting: RembgSegmenter | None = None
+        if matting_enabled and matting_model:
+            self._matting = RembgSegmenter(matting_model, alpha_matting=True)
+
+    def _detect(
+        self,
+        request: SegmentRequest,
+        source: np.ndarray,
+    ) -> tuple[tuple[float, float, float, float], float]:
+        caption = f"{_primary_model_prompt(request).rstrip('.')}."
+        source_image = Image.fromarray(source, mode="RGB")
+        with self._lock:
+            inputs = self._processor(
+                images=source_image,
+                text=caption,
+                return_tensors="pt",
+            )
+            inputs = {
+                key: value.to(self._device) if hasattr(value, "to") else value
+                for key, value in inputs.items()
+            }
+            with self._torch.inference_mode():
+                outputs = self._detector(**inputs)
+            height, width = source.shape[:2]
+            target_sizes = self._torch.tensor(
+                [[height, width]],
+                device=self._device,
+            )
+            try:
+                detections = self._processor.post_process_grounded_object_detection(
+                    outputs,
+                    inputs["input_ids"],
+                    threshold=self._detector_confidence,
+                    text_threshold=max(0.08, self._detector_confidence * 0.5),
+                    target_sizes=target_sizes,
+                )
+            except TypeError:
+                # Keep compatibility with Transformers releases whose
+                # post-processing method no longer takes input_ids positionally.
+                detections = self._processor.post_process_grounded_object_detection(
+                    outputs,
+                    threshold=self._detector_confidence,
+                    text_threshold=max(0.08, self._detector_confidence * 0.5),
+                    target_sizes=target_sizes,
+                )
+
+        if not detections:
+            raise NoObjectDetectedError("The category detector found no object.")
+        detection = detections[0]
+        coordinates = _to_numpy(detection.get("boxes", []))
+        confidences = _to_numpy(detection.get("scores", []))
+        if coordinates.size == 0:
+            raise NoObjectDetectedError("The category detector found no object.")
+        if coordinates.ndim == 1:
+            coordinates = coordinates.reshape((1, 4))
+
+        image_area = float(width * height)
+        candidates: list[tuple[float, tuple[float, float, float, float], float]] = []
+        for index, raw_box in enumerate(coordinates):
+            if len(raw_box) != 4:
+                continue
+            x0, y0, x1, y1 = [float(value) for value in raw_box]
+            x0, y0 = max(0.0, x0), max(0.0, y0)
+            x1, y1 = min(float(width), x1), min(float(height), y1)
+            area = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+            if area <= 0 or area / image_area < 0.002 or area / image_area > 0.92:
+                continue
+            confidence = float(confidences[index]) if index < len(confidences) else 0.0
+            border_touch = int(x0 <= 1) + int(y0 <= 1) + int(x1 >= width - 1) + int(y1 >= height - 1)
+            score = confidence - border_touch * 0.015
+            candidates.append((score, (x0, y0, x1, y1), confidence))
+        if not candidates:
+            raise NoObjectDetectedError("The category detector found no usable object.")
+        _, selected_box, confidence = max(candidates, key=lambda item: item[0])
+        return selected_box, _clamp(confidence)
+
+
 def create_segmenter(
     backend: str,
     *,
-    detector_model: str = "/models/yolov8s-worldv2.pt",
+    detector_model: str | None = None,
     sam_model: str = "/models/sam2_b.pt",
     matting_model: str | None = "u2net",
     matting_enabled: bool = True,
@@ -622,13 +784,24 @@ def create_segmenter(
     normalized = backend.strip().lower()
     if normalized == "rembg":
         return RembgSegmenter(matting_model or "u2net", alpha_matting=True)
+    if normalized in {
+        "grounding_dino_sam2",
+        "grounded_dino_sam2",
+        "dino_sam2",
+    }:
+        return GroundingDinoSam2Segmenter(
+            detector_model=detector_model or "IDEA-Research/grounding-dino-tiny",
+            sam_model=sam_model,
+            matting_model=matting_model,
+            matting_enabled=matting_enabled,
+        )
     if normalized in {"grounded_sam", "grounded_sam2", "sam2"}:
         return GroundedSam2Segmenter(
-            detector_model=detector_model,
+            detector_model=detector_model or "/models/yolov8s-worldv2.pt",
             sam_model=sam_model,
             matting_model=matting_model,
             matting_enabled=matting_enabled,
         )
     raise ModelNotReadyError(
-        "METTI_PROCESSOR_BACKEND must be grounded_sam2 or rembg."
+        "METTI_PROCESSOR_BACKEND must be grounding_dino_sam2, grounded_sam2 or rembg."
     )

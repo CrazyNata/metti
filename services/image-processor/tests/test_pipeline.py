@@ -8,6 +8,7 @@ from PIL import Image
 from app.pipeline import (
     SegmentRequest,
     SegmentResult,
+    _primary_model_prompt,
     encode_png,
     process_image,
 )
@@ -28,6 +29,27 @@ class FakeSegmenter:
             fine_detail_recall=0.92,
             transparent_region_preserved=0.96,
         )
+
+
+def test_grounding_dino_uses_a_focused_category_prompt() -> None:
+    image = Image.new("RGB", (320, 200), "white")
+    sunglasses = SegmentRequest(
+        image=image,
+        source_bytes=encode_png(image),
+        preset="eyewear_card",
+        category="accessory",
+        subcategory="sunglasses",
+        name="black sunglasses",
+    )
+    optical = SegmentRequest(
+        image=image,
+        source_bytes=encode_png(image),
+        preset="eyewear_card",
+        category="accessory",
+        subcategory="optical_glasses",
+    )
+    assert _primary_model_prompt(sunglasses) == "sunglasses"
+    assert _primary_model_prompt(optical) == "eyeglasses"
 
 
 def test_process_returns_transparent_png_and_source_pixels() -> None:

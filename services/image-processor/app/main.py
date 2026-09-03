@@ -77,10 +77,13 @@ class Settings:
         return cls(
             api_key=os.getenv("METTI_PROCESSOR_API_KEY", "").strip(),
             allow_anonymous=_env_bool("METTI_PROCESSOR_ALLOW_ANONYMOUS", False),
-            backend=os.getenv("METTI_PROCESSOR_BACKEND", "grounded_sam2").strip(),
+            backend=os.getenv(
+                "METTI_PROCESSOR_BACKEND",
+                "grounding_dino_sam2",
+            ).strip(),
             detector_model=os.getenv(
                 "METTI_DETECTOR_MODEL",
-                "/models/yolov8s-worldv2.pt",
+                "IDEA-Research/grounding-dino-tiny",
             ).strip(),
             sam_model=os.getenv("METTI_SAM_MODEL", "/models/sam2_b.pt").strip(),
             matting_model=matting_model or None,
