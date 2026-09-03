@@ -33,6 +33,8 @@ interface Env {
   SUPABASE_URL?: string;
   SUPABASE_PUBLISHABLE_KEY?: string;
   METTI_PROCESSOR_API_KEY?: string;
+  METTI_PROCESSOR_UPSTREAM_URL?: string;
+  METTI_PROCESSOR_UPSTREAM_API_KEY?: string;
 }
 
 interface AlphaAnalysis {
@@ -109,6 +111,53 @@ async function authorized(request: Request, env: Env): Promise<boolean> {
     return response.ok;
   } catch (_) {
     return false;
+  }
+}
+
+async function proxyToUpstream(
+  request: Request,
+  env: Env,
+  upstreamValue: string,
+): Promise<Response> {
+  let upstream: URL;
+  try {
+    upstream = new URL(upstreamValue);
+  } catch (_) {
+    return json({ error: "Upstream image processor URL is invalid." }, 502);
+  }
+  if (upstream.protocol !== "https:" && upstream.protocol !== "http:") {
+    return json({ error: "Upstream image processor URL must use HTTP(S)." }, 502);
+  }
+
+  const headers = new Headers({
+    accept: "application/json, image/png",
+    "content-type": request.headers.get("content-type") ?? "",
+  });
+  const upstreamKey = String(env.METTI_PROCESSOR_UPSTREAM_API_KEY ?? "")
+    .trim();
+  if (upstreamKey) {
+    headers.set("authorization", `Bearer ${upstreamKey}`);
+    headers.set("x-api-key", upstreamKey);
+  }
+
+  try {
+    // The upload is capped at 5 MiB. Buffering it here keeps the multipart
+    // body intact while the Worker adds the private upstream credential.
+    const body = await request.arrayBuffer();
+    const response = await fetch(upstream, {
+      method: "POST",
+      headers,
+      body,
+    });
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.set("cache-control", "no-store");
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+  } catch (_) {
+    return json({ error: "Upstream image processor is unavailable." }, 502);
   }
 }
 
@@ -360,6 +409,10 @@ function metricHeaders(metrics: AlphaAnalysis): Headers {
 async function processImage(request: Request, env: Env): Promise<Response> {
   if (!(await authorized(request, env))) {
     return json({ error: "Authentication is required." }, 401);
+  }
+  const upstream = String(env.METTI_PROCESSOR_UPSTREAM_URL ?? "").trim();
+  if (upstream) {
+    return proxyToUpstream(request, env, upstream);
   }
   let form: FormData;
   try {
