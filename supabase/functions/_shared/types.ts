@@ -99,6 +99,7 @@ export interface WardrobeItemRow {
   id: string;
   user_id: string;
   name: string;
+  description: string | null;
   category: WardrobeCategory;
   color: string | null;
   size: string | null;
@@ -136,6 +137,7 @@ export interface SavedOutfitRow {
 export interface WardrobeItemDto {
   id: string;
   name: string;
+  description: string | null;
   category: WardrobeCategory;
   subcategory: string | null;
   brand: string | null;
@@ -255,6 +257,7 @@ export interface WardrobeListOptions {
 
 export interface WardrobeItemInput {
   name: string;
+  description?: string | null;
   category: WardrobeCategory;
   subcategory?: string;
   brand?: string | null;

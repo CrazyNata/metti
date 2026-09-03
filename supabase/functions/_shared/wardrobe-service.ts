@@ -47,6 +47,7 @@ export const WARDROBE_SELECT = [
   "id",
   "user_id",
   "name",
+  "description",
   "category",
   "color",
   "size",
@@ -203,6 +204,7 @@ function rowMatches(
       row.color,
       row.brand,
       row.season,
+      row.description,
       row.notes,
       metadata.subcategory,
       metadata.material,
@@ -773,6 +775,7 @@ export class WardrobeService {
     const payload = {
       user_id: this.user.id,
       name,
+      description: optionalString(input.description, "description", 2000) ?? null,
       category,
       color: color === undefined ? colors?.[0] ?? null : color,
       size: optionalString(input.size, "size", 40) ?? null,
@@ -918,6 +921,9 @@ export class WardrobeService {
     }
     if (hasOwn(input, "brand")) {
       patch.brand = optionalString(input.brand, "brand", 120) ?? null;
+    }
+    if (hasOwn(input, "description")) {
+      patch.description = optionalString(input.description, "description", 2000) ?? null;
     }
     if (hasOwn(input, "notes")) {
       patch.notes = optionalString(input.notes, "notes", 1000) ?? null;

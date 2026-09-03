@@ -110,6 +110,7 @@ export function wardrobeItemFromRow(
   return {
     id: row.id,
     name: row.name,
+    description: asString(row.description),
     category: row.category,
     subcategory: asString(metadata.subcategory),
     brand: asString(row.brand),

@@ -130,6 +130,9 @@ failures are standard MCP input-validation errors without stack traces.
 `name` and `category` are required. The remaining metadata is optional so the
 client can omit characteristics that cannot be inferred reliably:
 
+`description` is an optional user-visible summary of the item. `notes` remains
+available for private user notes and styling reminders.
+
 For compatibility with older Metti instructions, `add_wardrobe_item` accepts
 the same schema and performs the same authenticated create action.
 

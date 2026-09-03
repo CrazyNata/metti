@@ -157,6 +157,7 @@ const searchWardrobeSchema = z.object({
 
 const wardrobeItemFields = {
   name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(2000).nullable().optional(),
   category: categoryInputSchema,
   subcategory: z.string().trim().max(80).optional(),
   brand: z.string().trim().max(120).nullable().optional(),
@@ -193,6 +194,7 @@ const createWardrobeItemWithPhotoSchema = z.object({
 const updateWardrobeItemSchema = z.object({
   itemId: idSchema,
   name: wardrobeItemFields.name.optional(),
+  description: wardrobeItemFields.description,
   category: wardrobeItemFields.category.optional(),
   subcategory: wardrobeItemFields.subcategory,
   brand: wardrobeItemFields.brand,

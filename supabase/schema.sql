@@ -16,6 +16,7 @@ create table if not exists public.wardrobe_items (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
+  description text,
   category text not null check (category in ('outer', 'top', 'bottom', 'shoes', 'accessory')),
   color text,
   size text,
