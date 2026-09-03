@@ -1,1 +1,1 @@
-# Metti currently ships as a local WebView prototype; no custom shrinking rules are required.
+# Metti currently ships as a WebView-based app; no custom shrinking rules are required.

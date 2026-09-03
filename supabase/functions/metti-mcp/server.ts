@@ -8,10 +8,8 @@ import * as z from "https://esm.sh/zod@4.2.0?target=deno";
 import { authenticateRequest, getSupabaseConfig } from "../_shared/auth.ts";
 import { AppError, publicErrorPayload, toAppError } from "../_shared/errors.ts";
 import {
-  DEFAULT_IMAGE_FETCH_TIMEOUT_MS,
-  DEFAULT_IMAGE_MAX_BYTES,
-  DEFAULT_OPENAI_FILE_HOSTS,
   type ImageServiceOptions,
+  imageServiceOptionsFromEnv,
 } from "../_shared/image-service.ts";
 import { createApplicationServices } from "../_shared/services.ts";
 import { SupabaseRestClient } from "../_shared/supabase-client.ts";
@@ -27,7 +25,7 @@ import type {
   WardrobeListOptions,
 } from "../_shared/types.ts";
 
-export const MCP_VERSION = "1.0.1";
+export const MCP_VERSION = "1.1.0";
 
 type FetchLike = typeof fetch;
 type McpHttpHandler = ReturnType<typeof createMcpHandler>;
@@ -269,7 +267,10 @@ const servicesFor = (
     new SupabaseRestClient(config, context.accessToken, fetchImpl),
     context.user,
     {
-      image: imageOptions ?? imageOptionsFromEnv(),
+      image: {
+        ...(imageOptions ?? imageServiceOptionsFromEnv()),
+        processorAuthToken: context.accessToken,
+      },
       wardrobe: { imageOrigin: "mcp" },
     },
   );
@@ -466,7 +467,7 @@ export function registerTools(
 
   server.registerTool("create_wardrobe_item", {
     description:
-      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If the user supplied an image, first infer only reliable characteristics from it and pass the structured fields plus the top-level file parameter whenever ChatGPT provides one; do not invent an unknown brand, material or size. ChatGPT supplies file.download_url, file.file_id and optional file MIME/name for an attached photo. The optional image accepts standard MCP image, resource_link or resource shapes for other MCP hosts. An attached photo is saved in the existing private Storage bucket and queued for the existing app's deterministic Metti editorial-background treatment; no separate image service or LLM is used. Do not send user_id: ownership comes from the bearer token. If a generic MCP resource cannot be fetched, the item reports imageStatus=pending; a concrete ChatGPT file download failure returns an error and rolls back creation.",
+      "Create a clothing or accessory item in the authenticated user's wardrobe. Use this after the user asks to save or add an item. If the user supplied an image, first infer only reliable characteristics from it and pass the structured fields plus the top-level file parameter whenever ChatGPT provides one; do not invent an unknown brand, material or size. ChatGPT supplies file.download_url, file.file_id and optional file MIME/name for an attached photo. The optional image accepts standard MCP image, resource_link or resource shapes for other MCP hosts. The backend stores originalImage separately, runs the shared wardrobe image-processing service with wardrobe_card or eyewear_card automatically, validates the result and stores a square processed card when quality is sufficient. If processing is unavailable or quality is unsafe, the original remains visible with imageStatus=needs_review; it is never reported as attached processed output. Do not send user_id: ownership comes from the bearer token. If a generic MCP resource cannot be fetched, the item reports imageStatus=pending; a concrete ChatGPT file download failure returns an error and rolls back creation.",
     inputSchema: createWardrobeItemSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
@@ -479,7 +480,7 @@ export function registerTools(
 
   server.registerTool("add_wardrobe_item", {
     description:
-      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields, top-level ChatGPT file parameter, image handling and deterministic Metti editorial-background treatment. When an attached photo is available, pass file so the server can save the original image in the existing private Storage bucket. A concrete ChatGPT file download failure returns an error and does not leave a pending item. Do not send user_id; ownership comes from the bearer token.",
+      "Compatibility alias for create_wardrobe_item. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields and top-level ChatGPT file parameter. The existing backend image service keeps the original photo, applies the category-aware wardrobe/eyewear card pipeline and only reports imageStatus=attached after the processed image is uploaded and linked. Do not send user_id; ownership comes from the bearer token.",
     inputSchema: createWardrobeItemSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
@@ -517,7 +518,7 @@ export function registerTools(
     "attach_image_to_wardrobe_item",
     {
       description:
-        "Attach an available user-provided image resource to an existing wardrobe item owned by the authenticated user. Use this only when the MCP client provides an image, resource_link or embedded resource. The image is validated, stored in the existing private wardrobe Storage bucket and queued for the app's deterministic Metti editorial-background treatment; use replace_wardrobe_item_image when the item already has a photo.",
+        "Attach an available user-provided image resource to an existing wardrobe item owned by the authenticated user. Use this only when the MCP client provides an image, resource_link or embedded resource. The backend keeps the original, runs the shared category-aware image pipeline and stores a processed wardrobe card only after quality validation; use replace_wardrobe_item_image when the item already has a photo.",
       inputSchema: attachImageSchema,
       annotations: { ...writeAnnotations, idempotentHint: false },
     },
@@ -529,7 +530,7 @@ export function registerTools(
     "replace_wardrobe_item_image",
     {
       description:
-        "Replace the photo of an existing wardrobe item owned by the authenticated user with an available MCP image or resource. The existing private Storage path is updated safely, the new image is queued for the app's deterministic Metti editorial-background treatment, and the item remains usable if the host cannot provide the original image.",
+        "Replace the photo of an existing wardrobe item owned by the authenticated user with an available MCP image or resource. The backend stores a new original version, processes it through the shared wardrobe/eyewear pipeline, links the processed card only after validation and keeps the old image until the new link is ready.",
       inputSchema: attachImageSchema,
       annotations: { ...writeAnnotations, idempotentHint: false },
     },
@@ -685,47 +686,13 @@ function envNumber(
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function envBoolean(
-  name: string,
-  fallback: boolean,
-  env: typeof Deno.env = Deno.env,
-): boolean {
-  const value = String(env.get(name) ?? "").trim().toLowerCase();
-  if (value === "true" || value === "1" || value === "yes") return true;
-  if (value === "false" || value === "0" || value === "no") return false;
-  return fallback;
-}
-
-function configuredImageHosts(env: typeof Deno.env = Deno.env): string[] {
-  return String(env.get("MCP_ALLOWED_IMAGE_HOSTS") ?? "").split(",").map((
-    value,
-  ) => value.trim()).filter(Boolean);
-}
-
-function configuredOpenAiFileHosts(env: typeof Deno.env = Deno.env): string[] {
-  const configured = String(env.get("MCP_OPENAI_FILE_HOSTS") ?? "").split(",")
-    .map((value) => value.trim()).filter(Boolean);
-  return configured.length ? configured : [...DEFAULT_OPENAI_FILE_HOSTS];
-}
-
 function imageOptionsFromEnv(
   env: typeof Deno.env = Deno.env,
 ): ImageServiceOptions {
-  return {
-    allowedHosts: configuredImageHosts(env),
-    openAiFileHosts: configuredOpenAiFileHosts(env),
-    maxBytes: envNumber(
-      "MCP_IMAGE_MAX_BYTES",
-      DEFAULT_IMAGE_MAX_BYTES,
-      env,
-    ),
-    fetchTimeoutMs: envNumber(
-      "MCP_IMAGE_FETCH_TIMEOUT_MS",
-      DEFAULT_IMAGE_FETCH_TIMEOUT_MS,
-      env,
-    ),
-    allowHttp: envBoolean("MCP_ALLOW_HTTP_IMAGE_RESOURCES", false, env),
-  };
+  return imageServiceOptionsFromEnv(
+    env,
+    "https://metti-image-processor.road-guide-natasha7261.workers.dev/process",
+  );
 }
 
 function getDefaultRateLimiter(): FixedWindowRateLimiter {

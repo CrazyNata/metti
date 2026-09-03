@@ -1,10 +1,19 @@
 import { AppError } from "./errors.ts";
-import { ImageService, type PreparedImage } from "./image-service.ts";
+import {
+  type ImageProcessingOutcome,
+  ImageService,
+  type PreparedImage,
+} from "./image-service.ts";
 import {
   asJsonObject,
   stringList,
+  wardrobeImageStatus,
   wardrobeItemFromRow,
 } from "./serializers.ts";
+import {
+  imagePresetForWardrobeItem,
+  type WardrobeImagePreset,
+} from "./wardrobe-image-processor.ts";
 import type { UserDataClient } from "./supabase-client.ts";
 import {
   type AuthenticatedUser,
@@ -45,6 +54,10 @@ export const WARDROBE_SELECT = [
   "brand",
   "notes",
   "image_path",
+  "original_image_path",
+  "processed_image_path",
+  "image_status",
+  "image_error",
   "metadata",
   "created_at",
   "updated_at",
@@ -55,11 +68,7 @@ const PAGE_MAX = 10_000;
 const LIST_MAX = 100;
 
 export interface WardrobeServiceOptions {
-  /**
-   * The MCP path keeps the original upload in the existing bucket and marks
-   * it for the app's deterministic editorial-background pass. The ordinary
-   * app path does not set this marker.
-   */
+  /** Identifies the caller in image-processing metadata; it is not ownership. */
   imageOrigin?: "app" | "mcp";
 }
 
@@ -324,21 +333,76 @@ export class WardrobeService {
     private readonly options: WardrobeServiceOptions = {},
   ) {}
 
-  private markMcpImageMetadata(metadata: unknown): JsonObject | undefined {
-    if (this.options.imageOrigin !== "mcp") return undefined;
-    return {
-      ...asJsonObject(metadata),
-      image_source: "mcp",
-      image_background: "pending",
+  private imagePath(row: WardrobeItemRow): string | null {
+    return row.image_path || row.processed_image_path ||
+      row.original_image_path || null;
+  }
+
+  private imagePaths(row: WardrobeItemRow): string[] {
+    return [
+      ...new Set([
+        row.image_path,
+        row.original_image_path,
+        row.processed_image_path,
+      ].filter((path): path is string => Boolean(path))),
+    ];
+  }
+
+  private imageMetadata(
+    metadata: unknown,
+    preset: WardrobeImagePreset,
+    status: ImageProcessingOutcome["status"] | "processing",
+    outcome?: ImageProcessingOutcome,
+  ): JsonObject {
+    const result = { ...asJsonObject(metadata) };
+    // These keys belonged to the old client-side post-processing pass. Never
+    // leave them on a server-processed item, otherwise an old app build can
+    // process the already-composited card a second time.
+    delete result.image_background;
+    if (this.options.imageOrigin) {
+      result.image_source = this.options.imageOrigin;
+    }
+    const processing = {
+      ...asJsonObject(result.image_processing),
+      preset,
+      status,
+      updatedAt: new Date().toISOString(),
+      ...(outcome?.provider ? { provider: outcome.provider } : {}),
+      ...(outcome?.reason ? { reason: outcome.reason.slice(0, 240) } : {}),
+      ...(outcome?.quality
+        ? { quality: outcome.quality as unknown as JsonObject }
+        : {}),
     };
+    result.image_processing = processing as unknown as JsonObject;
+    return result;
+  }
+
+  private async updateImageState(
+    itemId: string,
+    patch: Record<string, unknown>,
+  ): Promise<WardrobeItemRow> {
+    const rows = await this.client.updateRows<WardrobeItemRow>(
+      "wardrobe_items",
+      new URLSearchParams({
+        id: `eq.${idValue(itemId, "itemId")}`,
+        limit: "1",
+      }),
+      patch,
+    );
+    if (!rows[0]) {
+      throw new AppError(
+        "not_found",
+        "Wardrobe item not found.",
+        404,
+      );
+    }
+    return rows[0];
   }
 
   private async withImageUrls(
     rows: WardrobeItemRow[],
   ): Promise<WardrobeItemDto[]> {
-    const paths = rows.map((row) => row.image_path).filter((
-      path,
-    ): path is string => Boolean(path));
+    const paths = [...new Set(rows.flatMap((row) => this.imagePaths(row)))];
     let urls = new Map<string, string>();
     if (paths.length) {
       try {
@@ -347,12 +411,19 @@ export class WardrobeService {
         // Image URLs are optional. A Storage outage must not hide wardrobe data.
       }
     }
-    return rows.map((row) =>
-      wardrobeItemFromRow(
+    return rows.map((row) => {
+      const displayPath = this.imagePath(row);
+      return wardrobeItemFromRow(
         row,
-        row.image_path ? urls.get(row.image_path) ?? null : null,
-      )
-    );
+        displayPath ? urls.get(displayPath) ?? null : null,
+        row.original_image_path
+          ? urls.get(row.original_image_path) ?? null
+          : null,
+        row.processed_image_path
+          ? urls.get(row.processed_image_path) ?? null
+          : null,
+      );
+    });
   }
 
   private actionDto(
@@ -361,6 +432,143 @@ export class WardrobeService {
     imageStatus: WardrobeItemActionDto["imageStatus"],
   ): WardrobeItemActionDto {
     return { ...item, imageAttached, imageStatus };
+  }
+
+  private async persistResolvedImage(
+    current: WardrobeItemRow,
+    image: PreparedImage,
+    replace: boolean,
+  ): Promise<WardrobeItemActionDto> {
+    const preset = imagePresetForWardrobeItem(
+      current.category,
+      asJsonObject(current.metadata).subcategory as string | undefined,
+      current.name,
+    );
+    const previousPaths = this.imagePaths(current);
+    const previousState = {
+      image_path: current.image_path,
+      original_image_path: current.original_image_path ?? null,
+      processed_image_path: current.processed_image_path ?? null,
+      image_status: wardrobeImageStatus(current),
+      image_error: current.image_error ?? null,
+      metadata: asJsonObject(current.metadata),
+    };
+    let originalPath = "";
+    let processedPath = "";
+    try {
+      originalPath = await this.images.uploadForItem(
+        current.id,
+        image,
+        null,
+        "original",
+      );
+      await this.updateImageState(current.id, {
+        image_path: originalPath,
+        original_image_path: originalPath,
+        processed_image_path: null,
+        image_status: "processing",
+        image_error: null,
+        metadata: this.imageMetadata(current.metadata, preset, "processing"),
+      });
+
+      const outcome = await this.images.processForItem(image, {
+        category: current.category,
+        subcategory: asJsonObject(current.metadata).subcategory as
+          | string
+          | null
+          | undefined,
+        name: current.name,
+        preset,
+      });
+      if (outcome.status === "attached" && outcome.image) {
+        processedPath = await this.images.uploadForItem(
+          current.id,
+          outcome.image,
+          null,
+          "processed",
+        );
+        await this.updateImageState(current.id, {
+          image_path: processedPath,
+          original_image_path: originalPath,
+          processed_image_path: processedPath,
+          image_status: "attached",
+          image_error: null,
+          metadata: this.imageMetadata(
+            current.metadata,
+            preset,
+            "attached",
+            outcome,
+          ),
+        });
+        // The row is linked to both new objects before old versions are
+        // cleaned up. A failed cleanup is harmless and never downgrades a
+        // valid attached result.
+        await Promise.all(
+          previousPaths.map((path) =>
+            this.images.removePath(path).catch(() => {})
+          ),
+        );
+        return this.actionDto(await this.get(current.id), true, "attached");
+      }
+
+      const fallbackStatus = outcome.status === "needs_review"
+        ? "needs_review"
+        : "failed";
+      await this.updateImageState(current.id, {
+        image_path: originalPath,
+        original_image_path: originalPath,
+        processed_image_path: null,
+        image_status: fallbackStatus,
+        image_error: outcome.reason ?? "image_processing_failed",
+        metadata: this.imageMetadata(
+          current.metadata,
+          preset,
+          fallbackStatus,
+          outcome,
+        ),
+      });
+      await Promise.all(
+        previousPaths.map((path) =>
+          this.images.removePath(path).catch(() => {})
+        ),
+      );
+      return this.actionDto(
+        await this.get(current.id),
+        true,
+        fallbackStatus,
+      );
+    } catch (error) {
+      // Restore the previous display/link before compensating new uploads.
+      // For a new item the caller will remove the row; clearing its transient
+      // state also prevents a partially written item from claiming success.
+      await this.updateImageState(
+        current.id,
+        replace ? previousState : {
+          image_path: null,
+          original_image_path: null,
+          processed_image_path: null,
+          image_status: "failed",
+          image_error: "image_processing_failed",
+          metadata: this.imageMetadata(
+            current.metadata,
+            preset,
+            "failed",
+          ),
+        },
+      ).catch(() => {});
+      if (processedPath) {
+        await this.images.removePath(processedPath).catch(() => {});
+      }
+      if (originalPath) {
+        await this.images.removePath(originalPath).catch(() => {});
+      }
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        "data_access_error",
+        "Не удалось сохранить фотографию вещи.",
+        502,
+      );
+    }
   }
 
   private baseQuery(options: WardrobeListOptions): URLSearchParams {
@@ -561,10 +769,7 @@ export class WardrobeService {
       {},
       "active",
     );
-    if (imageResolution?.file) {
-      const imageMetadata = this.markMcpImageMetadata(metadata);
-      if (imageMetadata) Object.assign(metadata, imageMetadata);
-    }
+    const hasResolvedImage = Boolean(imageResolution?.file);
     const payload = {
       user_id: this.user.id,
       name,
@@ -574,7 +779,17 @@ export class WardrobeService {
       season: season === undefined ? seasons?.[0] ?? null : season,
       brand: optionalString(input.brand, "brand", 120) ?? null,
       notes: optionalString(input.notes, "notes", 1000) ?? null,
-      image_path: imagePath ?? null,
+      image_path: hasResolvedImage ? null : imagePath ?? null,
+      original_image_path: null,
+      processed_image_path: hasResolvedImage ? null : imagePath ?? null,
+      image_status: hasResolvedImage
+        ? "processing"
+        : imagePath
+        ? "attached"
+        : input.image !== undefined || input.imageFile !== undefined
+        ? "pending"
+        : "none",
+      image_error: null,
       metadata,
     };
     const row = await this.client.insertRow<WardrobeItemRow>(
@@ -588,10 +803,9 @@ export class WardrobeService {
         502,
       );
     }
-    const withoutImage = () => this.get(row.id);
     if (!imageResolution?.file) {
       return this.actionDto(
-        await withoutImage(),
+        await this.get(row.id),
         Boolean(imagePath),
         imagePath
           ? "attached"
@@ -601,34 +815,10 @@ export class WardrobeService {
       );
     }
 
-    let uploadedPath: string | null = null;
     try {
-      uploadedPath = await this.images.uploadForItem(
-        row.id,
-        imageResolution.file,
-      );
-      const updated = await this.client.updateRows<WardrobeItemRow>(
-        "wardrobe_items",
-        new URLSearchParams({
-          id: `eq.${idValue(row.id, "itemId")}`,
-          limit: "1",
-        }),
-        { image_path: uploadedPath },
-      );
-      if (!updated[0]) {
-        throw new AppError(
-          "data_access_error",
-          "Не удалось привязать фотографию к вещи.",
-          502,
-        );
-      }
-      return this.actionDto(await withoutImage(), true, "attached");
+      return await this.persistResolvedImage(row, imageResolution.file, false);
     } catch (error) {
-      // A failed image operation must not leave a row that claims the upload is
-      // pending forever. Remove the uploaded object and roll back the new row.
-      if (uploadedPath) {
-        await this.images.removePath(uploadedPath).catch(() => {});
-      }
+      // A failed image operation must not leave a half-created item behind.
       await this.client.deleteRows(
         "wardrobe_items",
         new URLSearchParams({
@@ -733,7 +923,12 @@ export class WardrobeService {
       patch.notes = optionalString(input.notes, "notes", 1000) ?? null;
     }
     if (hasOwn(input, "imagePath")) {
-      patch.image_path = safeImagePath(input.imagePath, this.user.id) ?? null;
+      const safePath = safeImagePath(input.imagePath, this.user.id) ?? null;
+      patch.image_path = safePath;
+      patch.original_image_path = null;
+      patch.processed_image_path = safePath;
+      patch.image_status = safePath ? "attached" : "none";
+      patch.image_error = null;
     }
     if (hasWardrobeExtensions(input)) {
       patch.metadata = wardrobeMetadata(input, current.metadata);
@@ -760,9 +955,8 @@ export class WardrobeService {
     }
 
     if (imageResolution?.file) {
-      // Reload metadata after the ordinary patch so the image marker and all
-      // user-edited fields are preserved while the existing Storage path is
-      // upserted in place.
+      // Reload metadata after the ordinary patch so the image processing
+      // marker and all user-edited fields are preserved.
       const refreshed = Object.keys(patch).length
         ? await this.getRow(updatedRow.id)
         : current;
@@ -772,34 +966,9 @@ export class WardrobeService {
     const updated = await this.get(updatedRow.id);
     return this.actionDto(
       updated,
-      Boolean(updatedRow.image_path),
-      updatedRow.image_path ? "attached" : "none",
+      Boolean(this.imagePath(updatedRow)),
+      wardrobeImageStatus(updatedRow),
     );
-  }
-
-  private async updateImagePath(
-    itemId: string,
-    imagePath: string | null,
-    metadata?: JsonObject,
-  ): Promise<WardrobeItemRow> {
-    const patch: Record<string, unknown> = { image_path: imagePath };
-    if (metadata !== undefined) patch.metadata = metadata;
-    const rows = await this.client.updateRows<WardrobeItemRow>(
-      "wardrobe_items",
-      new URLSearchParams({
-        id: `eq.${idValue(itemId, "itemId")}`,
-        limit: "1",
-      }),
-      patch,
-    );
-    if (!rows[0]) {
-      throw new AppError(
-        "not_found",
-        "Wardrobe item not found.",
-        404,
-      );
-    }
-    return rows[0];
   }
 
   private async saveResolvedImage(
@@ -807,33 +976,7 @@ export class WardrobeService {
     image: PreparedImage,
     replace: boolean,
   ): Promise<WardrobeItemActionDto> {
-    const existingPath = replace ? current.image_path : null;
-    let uploadedPath: string | null = null;
-    try {
-      uploadedPath = await this.images.uploadForItem(
-        current.id,
-        image,
-        existingPath,
-      );
-      const imageMetadata = this.markMcpImageMetadata(current.metadata);
-      if (uploadedPath !== current.image_path || imageMetadata) {
-        await this.updateImagePath(current.id, uploadedPath, imageMetadata);
-      }
-      return this.actionDto(await this.get(current.id), true, "attached");
-    } catch (error) {
-      // Replacing an existing path uses Storage upsert, so deleting it here
-      // would remove the previous image after a successful overwrite. Only a
-      // newly-created object needs compensation.
-      if (uploadedPath && uploadedPath !== current.image_path) {
-        await this.images.removePath(uploadedPath).catch(() => {});
-      }
-      if (error instanceof AppError) throw error;
-      throw new AppError(
-        "data_access_error",
-        "Не удалось прикрепить фотографию.",
-        502,
-      );
-    }
+    return this.persistResolvedImage(current, image, replace);
   }
 
   async attachImage(
@@ -841,7 +984,7 @@ export class WardrobeService {
     imageInput: WardrobeImageInput,
   ): Promise<WardrobeItemActionDto> {
     const current = await this.getRow(itemId);
-    if (current.image_path) {
+    if (this.imagePath(current)) {
       throw new AppError(
         "conflict",
         "This item already has a photo. Use replace_wardrobe_item_image.",
@@ -869,22 +1012,26 @@ export class WardrobeService {
 
   async removeImage(itemId: unknown): Promise<WardrobeItemActionDto> {
     const current = await this.getRow(itemId);
-    if (!current.image_path) {
+    const imagePaths = this.imagePaths(current);
+    if (!imagePaths.length) {
       return this.actionDto(await this.get(current.id), false, "none");
     }
 
-    const imagePath = current.image_path;
     const currentMetadata = asJsonObject(current.metadata);
-    const hasMcpImageMetadata = currentMetadata.image_source === "mcp" ||
-      currentMetadata.image_background !== undefined;
-    const metadata = hasMcpImageMetadata ? { ...currentMetadata } : undefined;
-    if (metadata) {
-      delete metadata.image_source;
-      delete metadata.image_background;
-    }
-    await this.updateImagePath(current.id, null, metadata);
+    const metadata = { ...currentMetadata };
+    delete metadata.image_source;
+    delete metadata.image_background;
+    delete metadata.image_processing;
+    await this.updateImageState(current.id, {
+      image_path: null,
+      original_image_path: null,
+      processed_image_path: null,
+      image_status: "none",
+      image_error: null,
+      metadata,
+    });
     try {
-      await this.images.removePath(imagePath);
+      await Promise.all(imagePaths.map((path) => this.images.removePath(path)));
     } catch (_) {
       // Keep the database and Storage consistent if object deletion fails.
       await this.client.updateRows<WardrobeItemRow>(
@@ -893,7 +1040,14 @@ export class WardrobeService {
           id: `eq.${idValue(current.id, "itemId")}`,
           limit: "1",
         }),
-        { image_path: imagePath },
+        {
+          image_path: current.image_path,
+          original_image_path: current.original_image_path ?? null,
+          processed_image_path: current.processed_image_path ?? null,
+          image_status: current.image_status ?? wardrobeImageStatus(current),
+          image_error: current.image_error ?? null,
+          metadata: current.metadata ?? {},
+        },
       ).catch(() => {});
       throw new AppError(
         "data_access_error",

@@ -18,3 +18,7 @@ android/keystore.properties
 *.jks
 *.keystore
 .wrangler/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+services/image-processor/models/

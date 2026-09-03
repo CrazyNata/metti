@@ -96,7 +96,7 @@
   const rawRequest = async (path, options = {}) => {
     const requestSession = Object.prototype.hasOwnProperty.call(options, 'session') ? options.session : readSession();
     const headers = makeHeaders(options.headers, requestSession);
-    if (options.body !== undefined && !(options.body instanceof Blob) && !headers.has('content-type')) headers.set('content-type', 'application/json');
+    if (options.body !== undefined && !(options.body instanceof Blob) && !(options.body instanceof FormData) && !headers.has('content-type')) headers.set('content-type', 'application/json');
     const response = await fetch(`${config.url}${path}`, { ...options, headers });
     const body = await parseBody(response);
     if (!response.ok) {
@@ -265,6 +265,21 @@
       const result = await request(`/rest/v1/wardrobe_items?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { prefer: 'return=representation' }, body: JSON.stringify(changes) });
       return Array.isArray(result) ? result[0] : result;
     },
+    saveWardrobeItemWithImage: async (item, file) => {
+      if (!item || !file) throw new Error('Для загрузки нужна фотография.');
+      const form = new FormData();
+      form.append('item', JSON.stringify(item));
+      form.append('image', file, file.name || 'wardrobe-image');
+      return request('/functions/v1/metti-wardrobe', { method: 'POST', headers: { 'x-client-info': 'metti-web' }, body: form });
+    },
+    updateWardrobeItemWithImage: async (id, changes, file) => {
+      if (!id || !changes || !file) throw new Error('Для замены нужна фотография.');
+      const form = new FormData();
+      form.append('item_id', String(id));
+      form.append('item', JSON.stringify(changes));
+      form.append('image', file, file.name || 'wardrobe-image');
+      return request('/functions/v1/metti-wardrobe', { method: 'PATCH', headers: { 'x-client-info': 'metti-web' }, body: form });
+    },
     deleteWardrobeItem: (id) => request(`/rest/v1/wardrobe_items?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' }),
     uploadWardrobeImage: async (file, userId, itemId = crypto.randomUUID()) => {
       if (!file || !userId) throw new Error('Для загрузки нужна фотография и авторизация.');
@@ -279,9 +294,19 @@
       if (!userId || !itemId) return [];
       const result = await request('/storage/v1/object/list/wardrobe', {
         method: 'POST',
-        body: JSON.stringify({ prefix: `${userId}/${itemId}`, limit: 100, offset: 0, sortBy: { column: 'created_at', order: 'asc' } })
+        // Storage treats the first path segment as a directory. Images are
+        // stored as `${userId}/${itemId}-${timestamp}.jpg`, so listing the
+        // full item id as a prefix returns nothing on current Storage API
+        // versions. List the private user folder and filter the item prefix
+        // locally instead.
+        body: JSON.stringify({ prefix: `${userId}/`, limit: 100, offset: 0, sortBy: { column: 'created_at', order: 'asc' } })
       });
-      return Array.isArray(result) ? result : [];
+      const prefix = `${userId}/${itemId}-`;
+      return (Array.isArray(result) ? result : []).filter((row) => {
+        const rawName = String(row?.name || '').trim();
+        const path = rawName.includes('/') ? rawName : `${userId}/${rawName}`;
+        return path.startsWith(prefix);
+      });
     },
     createWardrobeImageUrl: async (path, expiresIn = 3600) => {
       if (!path) return '';

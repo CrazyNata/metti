@@ -166,6 +166,15 @@ export class MemoryDataClient implements UserDataClient {
         brand: (input.brand as string | null | undefined) ?? null,
         notes: (input.notes as string | null | undefined) ?? null,
         image_path: (input.image_path as string | null | undefined) ?? null,
+        original_image_path:
+          (input.original_image_path as string | null | undefined) ?? null,
+        processed_image_path:
+          (input.processed_image_path as string | null | undefined) ?? null,
+        image_status: (input.image_status as
+          | WardrobeItemRow["image_status"]
+          | null
+          | undefined) ?? "none",
+        image_error: (input.image_error as string | null | undefined) ?? null,
         metadata: (input.metadata as JsonObject | null | undefined) ?? {},
         created_at: now,
         updated_at: now,
@@ -349,6 +358,14 @@ export function wardrobeRow(
     brand: values.brand ?? null,
     notes: values.notes ?? null,
     image_path: values.image_path ?? null,
+    original_image_path: values.original_image_path ?? null,
+    processed_image_path: values.processed_image_path ?? null,
+    image_status: values.image_status ??
+      (values.image_path || values.original_image_path ||
+          values.processed_image_path
+        ? "attached"
+        : "none"),
+    image_error: values.image_error ?? null,
     metadata: values.metadata ?? {},
     created_at: values.created_at ?? "2026-01-01T00:00:00.000Z",
     updated_at: values.updated_at ?? "2026-01-01T00:00:00.000Z",

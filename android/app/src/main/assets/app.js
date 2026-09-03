@@ -27,24 +27,9 @@
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
   };
-  const EDITORIAL_IMAGE_BACKGROUND = 'metti-editorial-v4';
-  const EDITORIAL_BACKGROUND_COLOR = '#f0e9df';
-  const pendingImageNormalizations = new Set();
-  const pendingImageFailures = new Set();
-  const nativeImageRequests = new Map();
   const imageUrlCache = new Map();
   const imageUrlRequests = new Map();
   const IMAGE_URL_CACHE_TTL_MS = 50 * 60 * 1000;
-  let pendingImageNormalizationTimer = 0;
-  window.MettiImageProcessing = window.MettiImageProcessing || {};
-  window.MettiImageProcessing.resolve = (requestId, processedUrl, errorMessage) => {
-    const request = nativeImageRequests.get(requestId);
-    if (!request) return;
-    clearTimeout(request.timeout);
-    nativeImageRequests.delete(requestId);
-    if (errorMessage) request.reject(new Error(errorMessage));
-    else request.resolve(processedUrl);
-  };
   const isEditorialImageReady = (item) => Boolean(item?.image_path);
   let lastDataSyncAt = 0;
   let toastTimer;
@@ -101,6 +86,9 @@
     сумки: 'bag',
     сумка: 'bag',
     очки: 'glasses',
+    glasses: 'glasses',
+    sunglasses: 'glasses',
+    eyeglasses: 'glasses',
     'головные уборы': 'headwear',
     бижутерия: 'jewelry'
   });
@@ -753,7 +741,7 @@
     node.style.setProperty('background-position', 'center', 'important');
     node.style.setProperty('background-size', 'cover', 'important');
     node.style.setProperty('background-repeat', 'no-repeat', 'important');
-    node.style.setProperty('background-color', '#f0e9df', 'important');
+    node.style.setProperty('background-color', 'var(--wardrobe-card-background)', 'important');
     node.classList.remove('image-loading', 'image-failed');
     node.classList.add('has-image');
     return true;
@@ -843,282 +831,6 @@
     const addButton = document.querySelector('[data-action="add-item"]');
     if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
   };
-  const processNativeWardrobeImage = async (file) => {
-    const bridge = window.MettiAndroid;
-    if (!bridge || typeof bridge.removeImageBackground !== 'function') return null;
-    if (typeof bridge.isNativeImageProcessingAvailable === 'function' && !bridge.isNativeImageProcessingAvailable()) return null;
-    let processedUrl = '';
-    const requestId = `metti-image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Не удалось прочитать фотографию.'));
-        reader.readAsDataURL(file);
-      });
-      processedUrl = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          nativeImageRequests.delete(requestId);
-          reject(new Error('Обработка фотографии заняла слишком много времени.'));
-        }, 120000);
-        nativeImageRequests.set(requestId, { resolve, reject, timeout });
-        try {
-          bridge.removeImageBackground(dataUrl, requestId);
-        } catch (error) {
-          clearTimeout(timeout);
-          nativeImageRequests.delete(requestId);
-          reject(error);
-        }
-      });
-      const response = await fetch(processedUrl);
-      if (!response.ok) throw new Error('Не удалось получить обработанную фотографию.');
-      const blob = await response.blob();
-      if (!blob.size || !String(blob.type || '').startsWith('image/')) throw new Error('Обработанная фотография повреждена.');
-      return new File([blob], `${String(file.name || 'wardrobe').replace(/\.[^.]+$/, '')}-metti-editorial.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
-    } catch (_) {
-      return null;
-    } finally {
-      if (processedUrl && typeof bridge.releaseProcessedImage === 'function') bridge.releaseProcessedImage(processedUrl);
-      nativeImageRequests.delete(requestId);
-    }
-  };
-  const prepareWardrobeImage = async (file) => {
-    if (!file || !String(file.type || '').startsWith('image/') || /heic|heif/i.test(file.type || '')) return file;
-    const nativeProcessed = await processNativeWardrobeImage(file);
-    if (nativeProcessed) return nativeProcessed;
-    const objectUrl = URL.createObjectURL(file);
-    let canvas;
-    let output;
-    try {
-      const image = await new Promise((resolve, reject) => {
-        const node = new Image();
-        node.crossOrigin = 'anonymous';
-        node.onload = () => resolve(node);
-        node.onerror = reject;
-        node.src = objectUrl;
-      });
-      const sourceWidth = image.naturalWidth || image.width;
-      const sourceHeight = image.naturalHeight || image.height;
-      if (!sourceWidth || !sourceHeight) return file;
-      const scale = Math.min(1, 1400 / Math.max(sourceWidth, sourceHeight));
-      const width = Math.max(1, Math.round(sourceWidth * scale));
-      const height = Math.max(1, Math.round(sourceHeight * scale));
-      canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) return file;
-      context.drawImage(image, 0, 0, width, height);
-      const imageData = context.getImageData(0, 0, width, height);
-      const pixels = imageData.data;
-      let hasTransparency = false;
-      for (let i = 3; i < pixels.length; i += 4) {
-        if (pixels[i] < 250) { hasTransparency = true; break; }
-      }
-      let removedBackgroundPixels = 0;
-      if (!hasTransparency) {
-        const samples = [];
-        const step = Math.max(1, Math.floor(Math.max(width, height) / 32));
-        const sample = (x, y) => {
-          const index = (y * width + x) * 4;
-          samples.push([pixels[index], pixels[index + 1], pixels[index + 2]]);
-        };
-        for (let x = 0; x < width; x += step) { sample(x, 0); sample(x, height - 1); }
-        for (let y = step; y < height; y += step) { sample(0, y); sample(width - 1, y); }
-        const background = [0, 1, 2].map((channel) => {
-          const values = samples.map((value) => value[channel]).sort((left, right) => left - right);
-          return values[Math.floor(values.length / 2)] || 0;
-        });
-        const thresholdSquared = 72 * 72;
-        const mask = new Uint8Array(width * height);
-        const queue = new Int32Array(width * height);
-        let head = 0; let tail = 0;
-        const closeToBackground = (pixelIndex) => {
-          const index = pixelIndex * 4;
-          const red = pixels[index] - background[0];
-          const green = pixels[index + 1] - background[1];
-          const blue = pixels[index + 2] - background[2];
-          return red * red + green * green + blue * blue <= thresholdSquared;
-        };
-        const mark = (pixelIndex) => {
-          if (mask[pixelIndex] || !closeToBackground(pixelIndex)) return;
-          mask[pixelIndex] = 1; queue[tail++] = pixelIndex;
-        };
-        for (let x = 0; x < width; x += 1) { mark(x); mark((height - 1) * width + x); }
-        for (let y = 1; y < height - 1; y += 1) { mark(y * width); mark(y * width + width - 1); }
-        while (head < tail) {
-          const pixelIndex = queue[head++];
-          const x = pixelIndex % width;
-          if (x > 0) mark(pixelIndex - 1);
-          if (x < width - 1) mark(pixelIndex + 1);
-          if (pixelIndex >= width) mark(pixelIndex - width);
-          if (pixelIndex < width * (height - 1)) mark(pixelIndex + width);
-        }
-        for (let i = 0; i < mask.length; i += 1) {
-          if (mask[i]) { pixels[i * 4 + 3] = 0; removedBackgroundPixels += 1; }
-        }
-        context.putImageData(imageData, 0, 0);
-      }
-      if (!hasTransparency && !removedBackgroundPixels) return file;
-
-      let visibleLeft = width;
-      let visibleTop = height;
-      let visibleRight = -1;
-      let visibleBottom = -1;
-      for (let y = 0; y < height; y += 1) {
-        for (let x = 0; x < width; x += 1) {
-          const alpha = pixels[(y * width + x) * 4 + 3];
-          if (alpha <= 14) continue;
-          if (x < visibleLeft) visibleLeft = x;
-          if (x > visibleRight) visibleRight = x;
-          if (y < visibleTop) visibleTop = y;
-          if (y > visibleBottom) visibleBottom = y;
-        }
-      }
-      if (visibleRight < visibleLeft || visibleBottom < visibleTop) return file;
-      visibleLeft = Math.max(0, visibleLeft - 2);
-      visibleTop = Math.max(0, visibleTop - 2);
-      visibleRight = Math.min(width - 1, visibleRight + 2);
-      visibleBottom = Math.min(height - 1, visibleBottom + 2);
-      const visibleWidth = visibleRight - visibleLeft + 1;
-      const visibleHeight = visibleBottom - visibleTop + 1;
-
-      output = document.createElement('canvas');
-      output.width = width; output.height = height;
-      const outputContext = output.getContext('2d');
-      if (!outputContext) return file;
-      const backgroundGradient = outputContext.createLinearGradient(0, 0, 0, height);
-      backgroundGradient.addColorStop(0, '#faf6ef');
-      backgroundGradient.addColorStop(0.58, '#f1eae1');
-      backgroundGradient.addColorStop(1, '#e1d8cc');
-      outputContext.fillStyle = backgroundGradient;
-      outputContext.fillRect(0, 0, width, height);
-      const lightGradient = outputContext.createRadialGradient(width * 0.5, height * 0.28, 0, width * 0.5, height * 0.28, Math.max(width, height) * 0.82);
-      lightGradient.addColorStop(0, 'rgba(255,255,255,.26)');
-      lightGradient.addColorStop(1, 'rgba(255,255,255,0)');
-      outputContext.fillStyle = lightGradient;
-      outputContext.fillRect(0, 0, width, height);
-
-      const itemScale = Math.min(width * 0.82 / Math.max(1, visibleWidth), height * 0.82 / Math.max(1, visibleHeight));
-      const safeScale = Math.min(1.35, Math.max(0.72, Number.isFinite(itemScale) && itemScale > 0 ? itemScale : 1));
-      const destinationWidth = visibleWidth * safeScale;
-      const destinationHeight = visibleHeight * safeScale;
-      const destinationLeft = (width - destinationWidth) * 0.5;
-      const destinationTop = (height - destinationHeight) * 0.48;
-      const shadowX = destinationLeft + destinationWidth * 0.5;
-      const shadowY = Math.min(height - 5, destinationTop + destinationHeight + Math.max(7, height * 0.025));
-      const shadowRadius = Math.max(24, Math.min(width * 0.42, destinationWidth * 0.46));
-      const shadowGradient = outputContext.createRadialGradient(shadowX, shadowY, 0, shadowX, shadowY, shadowRadius);
-      shadowGradient.addColorStop(0, 'rgba(102,87,75,.23)');
-      shadowGradient.addColorStop(0.48, 'rgba(102,87,75,.11)');
-      shadowGradient.addColorStop(1, 'rgba(102,87,75,0)');
-      outputContext.fillStyle = shadowGradient;
-      outputContext.beginPath();
-      outputContext.ellipse(shadowX, shadowY, shadowRadius, Math.max(5, height * 0.022), 0, 0, Math.PI * 2);
-      outputContext.fill();
-      outputContext.drawImage(canvas, visibleLeft, visibleTop, visibleWidth, visibleHeight, destinationLeft, destinationTop, destinationWidth, destinationHeight);
-      const blob = await new Promise((resolve) => output.toBlob(resolve, 'image/jpeg', 0.9));
-      if (!blob) return file;
-      return new File([blob], `${String(file.name || 'wardrobe').replace(/\.[^.]+$/, '')}-metti-editorial.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
-    } catch (_) {
-      return file;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-      if (canvas) { canvas.width = 0; canvas.height = 0; }
-      if (output) { output.width = 0; output.height = 0; }
-    }
-  };
-  const isPendingMcpImage = (item) => Boolean(item?.id && item?.image_path && item?.metadata?.image_source === 'mcp' && item?.metadata?.image_background !== EDITORIAL_IMAGE_BACKGROUND && !pendingImageFailures.has(item.id));
-  const findOriginalMcpImagePath = async (item) => {
-    const userId = state.user?.id;
-    if (!userId || !item?.id || typeof supabase?.data?.listWardrobeImageVersions !== 'function') return '';
-    try {
-      const rows = await supabase.data.listWardrobeImageVersions(userId, item.id);
-      const uuidSuffix = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const prefix = `${item.id}-`;
-      const candidates = (Array.isArray(rows) ? rows : []).map((row) => {
-        const rawName = String(row?.name || '').trim();
-        if (!rawName) return null;
-        const path = rawName.includes('/') ? rawName : `${userId}/${rawName}`;
-        const name = path.split('/').pop() || '';
-        const extension = name.match(/\.[^.]+$/)?.[0] || '';
-        const suffix = name.startsWith(prefix) ? name.slice(prefix.length, -extension.length || undefined) : '';
-        return uuidSuffix.test(suffix) ? { path, createdAt: String(row?.created_at || '') } : null;
-      }).filter(Boolean);
-      candidates.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-      return candidates[0]?.path || '';
-    } catch (_) {
-      return '';
-    }
-  };
-  const normalizePendingMcpImage = async (item) => {
-    if (!isPendingMcpImage(item) || pendingImageNormalizations.has(item.id)) return false;
-    pendingImageNormalizations.add(item.id);
-    const userId = state.user?.id;
-    const originalPath = item.image_path;
-    let replacementPath = '';
-    try {
-      const originalSourcePath = await findOriginalMcpImagePath(item);
-      const isLegacyProcessedImage = item?.metadata?.image_background === 'metti-editorial-v3';
-      // A v3 image cannot be improved safely by processing the already-rendered
-      // card again. Only retry it when the original MCP upload still exists.
-      if (isLegacyProcessedImage && !originalSourcePath) {
-        pendingImageFailures.add(item.id);
-        return false;
-      }
-      const sourcePath = originalSourcePath || originalPath;
-      const sourceUrl = await imageUrl(sourcePath);
-      if (!sourceUrl) { pendingImageFailures.add(item.id); return false; }
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      let response;
-      try {
-        response = await fetch(sourceUrl, { signal: controller.signal });
-      } finally {
-        clearTimeout(timeout);
-      }
-      if (!response.ok) { pendingImageFailures.add(item.id); return false; }
-      const blob = await response.blob();
-      const mimeType = String(blob.type || '').toLowerCase().split(';')[0];
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) { pendingImageFailures.add(item.id); return false; }
-      const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
-      const sourceFile = new File([blob], `mcp-${item.id}.${extension}`, { type: mimeType, lastModified: Date.now() });
-      const processedFile = await prepareWardrobeImage(sourceFile);
-      if (!processedFile || processedFile === sourceFile) { pendingImageFailures.add(item.id); return false; }
-      if (!userId || state.user?.id !== userId) return false;
-      replacementPath = await supabase.data.uploadWardrobeImage(processedFile, userId, item.id);
-      const metadata = item.metadata && typeof item.metadata === 'object' ? { ...item.metadata } : {};
-      metadata.image_background = EDITORIAL_IMAGE_BACKGROUND;
-      const saved = await supabase.data.updateWardrobeItem(item.id, { image_path: replacementPath, metadata });
-      if (!saved) throw new Error('Не удалось обновить фотографию вещи.');
-      await Promise.all([...new Set([originalPath, sourcePath].filter((path) => path && path !== replacementPath))].map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
-      const index = state.wardrobe.findIndex((value) => value.id === item.id);
-      if (index >= 0) state.wardrobe[index] = saved;
-      return true;
-    } catch (_) {
-      if (replacementPath) await supabase.data.removeWardrobeImage(replacementPath).catch(() => {});
-      pendingImageFailures.add(item.id);
-      return false;
-    } finally {
-      pendingImageNormalizations.delete(item.id);
-    }
-  };
-  const normalizePendingMcpImages = async () => {
-    if (!state.user || !supabase?.data) return;
-    const pending = state.wardrobe.filter(isPendingMcpImage).slice(0, 1);
-    if (!pending.length) return;
-    showToast(`Оформляю фото…`);
-    if (await normalizePendingMcpImage(pending[0])) {
-      await renderWardrobe();
-      await renderHomeCollage();
-      showToast('Фото оформлены в стиле Metti', 'success');
-    }
-    if (state.wardrobe.some(isPendingMcpImage) && !pendingImageNormalizationTimer) {
-      pendingImageNormalizationTimer = window.setTimeout(() => {
-        pendingImageNormalizationTimer = 0;
-        void normalizePendingMcpImages();
-      }, 450);
-    }
-  };
   const renderOutfitCards = (outfits) => {
     const grid = document.querySelector('.looks-grid');
     if (!grid) return;
@@ -1183,11 +895,6 @@
     }
     if (!state.currentOutfit) state.currentOutfit = state.outfits[0] || null;
     renderProfile(); await renderWardrobe(); renderLooks(); await renderHomeCollage(); updateWeather();
-    if (pendingImageNormalizationTimer) window.clearTimeout(pendingImageNormalizationTimer);
-    pendingImageNormalizationTimer = window.setTimeout(() => {
-      pendingImageNormalizationTimer = 0;
-      void normalizePendingMcpImages();
-    }, 1200);
   };
   const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; state.currentOutfit = { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) }; renderProfile(); renderWardrobe(); renderLooks(); renderHomeCollage(); };
 
@@ -1236,24 +943,31 @@
     const existing = state.wardrobe.find((item) => item.id === form.dataset.itemId && !String(item.id).startsWith('demo-'));
     const file = form.elements.image.files?.[0];
     if (file && file.size > 5 * 1024 * 1024) return setFormStatus('wardrobe-form-status', 'Файл должен быть меньше 5 МБ.', 'error');
-    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Оформляю фото в стиле Metti…' : 'Сохраняю…');
-    let newPath = existing?.image_path || null;
+    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Отправляю фото в Metti…' : 'Сохраняю…');
     try {
-      const processedFile = file ? await prepareWardrobeImage(file) : null;
-      if (processedFile && processedFile.size > 5 * 1024 * 1024) throw new Error('После обработки файл получился больше 5 МБ. Выберите фото поменьше.');
-      if (processedFile) { setFormStatus('wardrobe-form-status', 'Загружаю фотографию…'); newPath = await supabase.data.uploadWardrobeImage(processedFile, state.user.id, existing?.id || uuid()); }
-      const metadata = existing?.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
-      if (file) { delete metadata.image_source; delete metadata.image_background; }
-      metadata.subcategory = subcategory;
-      const payload = { user_id: state.user.id, name, category, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null, image_path: newPath, metadata };
-      const saved = existing ? await supabase.data.updateWardrobeItem(existing.id, payload) : await supabase.data.saveWardrobeItem(payload);
+      const payload = { name, category, subcategory, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null };
+      let saved;
+      if (file) {
+        saved = existing
+          ? await supabase.data.updateWardrobeItemWithImage(existing.id, payload, file)
+          : await supabase.data.saveWardrobeItemWithImage(payload, file);
+      } else {
+        const metadata = existing?.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
+        metadata.subcategory = subcategory;
+        const { subcategory: _subcategory, ...rowPayload } = payload;
+        const directPayload = { ...rowPayload, image_path: existing?.image_path || null, metadata };
+        saved = existing ? await supabase.data.updateWardrobeItem(existing.id, directPayload) : await supabase.data.saveWardrobeItem(directPayload);
+      }
       if (!saved) throw new Error('Вещь не вернулась из Supabase.');
-      if (existing?.image_path && newPath && existing.image_path !== newPath) await supabase.data.removeWardrobeImage(existing.image_path).catch(() => {});
-      const index = state.wardrobe.findIndex((item) => item.id === existing?.id);
-      if (index >= 0) state.wardrobe[index] = saved; else state.wardrobe.unshift(saved);
-      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile(); showToast(existing ? 'Вещь обновлена' : 'Вещь добавлена', 'success');
+      if (file) state.wardrobe = await supabase.data.listWardrobe();
+      else {
+        const index = state.wardrobe.findIndex((item) => item.id === existing?.id);
+        if (index >= 0) state.wardrobe[index] = saved; else state.wardrobe.unshift(saved);
+      }
+      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile();
+      const review = file && ['needs_review', 'failed'].includes(String(saved.imageStatus || saved.image_status || ''));
+      showToast(review ? 'Вещь сохранена, фото оставлено как оригинал для проверки' : (existing ? 'Вещь обновлена' : 'Вещь добавлена'), review ? 'error' : 'success');
     } catch (error) {
-      if (newPath && newPath !== existing?.image_path) await supabase.data.removeWardrobeImage(newPath).catch(() => {});
       setFormStatus('wardrobe-form-status', error?.message || 'Не удалось сохранить вещь.', 'error');
     } finally { setBusy(form, false); }
   };
@@ -1265,7 +979,8 @@
     try {
       if (state.user && supabase?.data && !String(item.id).startsWith('demo-')) {
         await supabase.data.deleteWardrobeItem(item.id);
-        if (item.image_path) await supabase.data.removeWardrobeImage(item.image_path).catch(() => {});
+        const imagePaths = [...new Set([item.image_path, item.original_image_path, item.processed_image_path].filter(Boolean))];
+        await Promise.all(imagePaths.map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
       }
       state.wardrobe = state.wardrobe.filter((value) => value.id !== item.id); state.activeItem = null;
       await renderWardrobe(); await renderHomeCollage(); renderProfile(); go('wardrobe'); showToast('Вещь удалена', 'success');

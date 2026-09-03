@@ -7,3 +7,6 @@ verify_jwt = false
 
 [functions.metti-delete-account]
 verify_jwt = true
+
+[functions.metti-wardrobe]
+verify_jwt = true

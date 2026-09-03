@@ -6,6 +6,7 @@ import type {
   ProfileRow,
   SavedOutfitRow,
   StylePreferencesDto,
+  WardrobeImageStatus,
   WardrobeItemDto,
   WardrobeItemRow,
 } from "./types.ts";
@@ -73,11 +74,31 @@ export function metadataStatus(
     : "active";
 }
 
+const IMAGE_STATUSES = new Set<WardrobeImageStatus>([
+  "attached",
+  "pending",
+  "processing",
+  "needs_review",
+  "failed",
+  "none",
+]);
+
+export function wardrobeImageStatus(row: WardrobeItemRow): WardrobeImageStatus {
+  const status = row.image_status;
+  if (status && IMAGE_STATUSES.has(status)) return status;
+  return row.image_path || row.original_image_path || row.processed_image_path
+    ? "attached"
+    : "none";
+}
+
 export function wardrobeItemFromRow(
   row: WardrobeItemRow,
   imageUrl: string | null = null,
+  originalImageUrl: string | null = null,
+  processedImageUrl: string | null = null,
 ): WardrobeItemDto {
   const metadata = asJsonObject(row.metadata);
+  const imageStatus = wardrobeImageStatus(row);
   const color = firstString(row.color, metadata.color);
   const colors = stringList(metadata.colors ?? (color ? [color] : []));
   const season = firstString(row.season, metadata.season);
@@ -108,6 +129,9 @@ export function wardrobeItemFromRow(
     favorite: boolValue(metadata.favorite),
     status: metadataStatus(row),
     imageUrl,
+    originalImageUrl,
+    processedImageUrl,
+    imageStatus,
     createdAt: row.created_at,
   };
 }

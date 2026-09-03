@@ -5,6 +5,11 @@ import type {
   OpenAiFileInput,
   WardrobeImageInput,
 } from "../../_shared/types.ts";
+import type {
+  ImageProcessorResult,
+  ImageQualityMetrics,
+  WardrobeImageProcessor,
+} from "../../_shared/wardrobe-image-processor.ts";
 import { assert, assertEquals, assertRejects } from "./assert.ts";
 import { MemoryDataClient, outfitRow, wardrobeRow } from "./fake-client.ts";
 
@@ -25,6 +30,54 @@ function openAiFile(
     file_id: `file-${downloadUrl.split("/").pop() ?? "photo"}`,
     mime_type: mimeType,
     file_name: fileName,
+  };
+}
+
+const transparentPngStub = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  ),
+  (character) => character.charCodeAt(0),
+);
+
+function processorQuality(
+  overrides: Partial<ImageQualityMetrics> = {},
+): ImageQualityMetrics {
+  return {
+    width: 1024,
+    height: 1024,
+    segmentationConfidence: 0.96,
+    foregroundRatio: 0.32,
+    foregroundWidthRatio: 0.82,
+    foregroundHeightRatio: 0.72,
+    disconnectedRegions: 1,
+    haloRatio: 0.01,
+    edgeTruncationRatio: 0,
+    retainedBackgroundRatio: 0.01,
+    sourceSimilarity: 0.42,
+    fineDetailRecall: 0.94,
+    transparentRegionPreserved: 0.98,
+    ...overrides,
+  };
+}
+
+function testImageProcessor(
+  overrides: Partial<ImageQualityMetrics> = {},
+  seenPresets: string[] = [],
+): WardrobeImageProcessor {
+  return {
+    process: async (input): Promise<ImageProcessorResult> => {
+      seenPresets.push(input.preset);
+      return {
+        cutout: {
+          bytes: transparentPngStub,
+          contentType: "image/png",
+          size: transparentPngStub.byteLength,
+        },
+        quality: processorQuality(overrides),
+        provider: "test-processor",
+      };
+    },
   };
 }
 
@@ -141,7 +194,7 @@ Deno.test("wardrobe service adds, partially updates and archives an item", async
   assertEquals((await services.wardrobe.archive(added.id)).status, "archived");
 });
 
-Deno.test("wardrobe image operations use one private storage path and compensate failures", async () => {
+Deno.test("wardrobe image operations keep an original fallback and compensate failures", async () => {
   const db = new MemoryDataClient(userA.id);
   const services = createApplicationServices(db, userA);
   const inlineImage: WardrobeImageInput = {
@@ -157,9 +210,11 @@ Deno.test("wardrobe image operations use one private storage path and compensate
     image: inlineImage,
   });
   assertEquals(created.imageAttached, true);
-  assertEquals(created.imageStatus, "attached");
+  assertEquals(created.imageStatus, "needs_review");
   const originalPath = db.wardrobe(created.id)?.image_path;
   assert(originalPath?.startsWith(`${userA.id}/`));
+  assertEquals(db.wardrobe(created.id)?.original_image_path, originalPath);
+  assertEquals(db.wardrobe(created.id)?.processed_image_path, null);
   assertEquals(db.uploadedImages.size, 1);
   assertEquals(
     (await services.wardrobe.search({ colors: ["ЧЁРНЫЙ"] })).items.map((item) =>
@@ -185,6 +240,7 @@ Deno.test("wardrobe image operations use one private storage path and compensate
     },
   });
   assertEquals(attached.imageAttached, true);
+  assertEquals(attached.imageStatus, "needs_review");
   const attachedPath = db.wardrobe(withoutImage.id)?.image_path;
   assert(attachedPath?.startsWith(`${userA.id}/`));
 
@@ -193,7 +249,13 @@ Deno.test("wardrobe image operations use one private storage path and compensate
     inlineImage,
   );
   assertEquals(replaced.imageAttached, true);
-  assertEquals(db.uploadedImages.get(`wardrobe/${attachedPath}`)?.upsert, true);
+  const replacementPath = db.wardrobe(withoutImage.id)?.image_path;
+  assert(replacementPath && replacementPath !== attachedPath);
+  assertEquals(
+    db.uploadedImages.get(`wardrobe/${replacementPath}`)?.upsert,
+    false,
+  );
+  assert(db.removedImagePaths.includes(attachedPath!));
 
   const removed = await services.wardrobe.removeImage(withoutImage.id);
   assertEquals(removed.imageStatus, "none");
@@ -272,7 +334,7 @@ Deno.test("wardrobe image operations use one private storage path and compensate
   db.failImageUpload = false;
 });
 
-Deno.test("MCP image uploads are marked for the app editorial background pass", async () => {
+Deno.test("MCP image uploads use the shared processor and safe fallback state", async () => {
   const db = new MemoryDataClient(userA.id);
   const services = createApplicationServices(db, userA, {
     wardrobe: { imageOrigin: "mcp" },
@@ -284,7 +346,12 @@ Deno.test("MCP image uploads are marked for the app editorial background pass", 
   });
   const metadata = db.wardrobe(item.id)?.metadata as Record<string, unknown>;
   assertEquals(metadata.image_source, "mcp");
-  assertEquals(metadata.image_background, "pending");
+  assertEquals(metadata.image_background, undefined);
+  assertEquals(db.wardrobe(item.id)?.image_status, "needs_review");
+  assertEquals(db.wardrobe(item.id)?.processed_image_path, null);
+  const processing = metadata.image_processing as Record<string, unknown>;
+  assertEquals(processing.preset, "wardrobe_card");
+  assertEquals(processing.status, "needs_review");
 
   await services.wardrobe.removeImage(item.id);
   const removedMetadata = db.wardrobe(item.id)?.metadata as Record<
@@ -293,6 +360,95 @@ Deno.test("MCP image uploads are marked for the app editorial background pass", 
   >;
   assertEquals(removedMetadata.image_source, undefined);
   assertEquals(removedMetadata.image_background, undefined);
+  assertEquals(removedMetadata.image_processing, undefined);
+});
+
+Deno.test("a validated processor links original and square processed variants", async () => {
+  const db = new MemoryDataClient(userA.id);
+  const services = createApplicationServices(db, userA, {
+    image: { processor: testImageProcessor() },
+    wardrobe: { imageOrigin: "app" },
+  });
+  const item = await services.wardrobe.add({
+    name: "Silver glasses",
+    category: "accessory",
+    subcategory: "glasses",
+    image: { type: "image", data: "/9j/2Q==", mimeType: "image/jpeg" },
+  });
+  const row = db.wardrobe(item.id)!;
+  assertEquals(item.imageStatus, "attached");
+  assertEquals(row.image_status, "attached");
+  assert(row.original_image_path?.startsWith(`${userA.id}/`));
+  assert(row.processed_image_path?.startsWith(`${userA.id}/`));
+  assert(row.original_image_path !== row.processed_image_path);
+  assertEquals(db.uploadedImages.size, 2);
+  assertEquals(
+    db.uploadedImages.get(`wardrobe/${row.original_image_path}`)?.contentType,
+    "image/jpeg",
+  );
+  assertEquals(
+    db.uploadedImages.get(`wardrobe/${row.processed_image_path}`)?.contentType,
+    "image/svg+xml",
+  );
+  const processing = (row.metadata as Record<string, unknown>)
+    .image_processing as Record<string, unknown>;
+  assertEquals(processing.preset, "eyewear_card");
+  assertEquals(processing.provider, "test-processor");
+});
+
+Deno.test("eyewear scenarios use the specialized preset and reject unsafe masks", async () => {
+  const scenarios = [
+    ["black chunky sunglasses", "sunglasses"],
+    ["thin metal frame", "optical_glasses"],
+    ["transparent optical lenses", "optical_glasses"],
+    ["tinted lenses", "sunglasses"],
+    ["glasses on a light background", "glasses"],
+    ["glasses on a dark background", "glasses"],
+    ["glasses next to a case", "glasses"],
+    ["glasses on a cluttered table", "eyewear"],
+    ["glasses with ultra-thin temples", "glasses"],
+  ] as const;
+  const seenPresets: string[] = [];
+  const processor = testImageProcessor({}, seenPresets);
+  for (const [name, subcategory] of scenarios) {
+    const db = new MemoryDataClient(userA.id);
+    const services = createApplicationServices(db, userA, {
+      image: { processor },
+    });
+    const item = await services.wardrobe.add({
+      name,
+      category: "accessory",
+      subcategory,
+      image: { type: "image", data: "/9j/2Q==", mimeType: "image/jpeg" },
+    });
+    assertEquals(item.imageStatus, "attached");
+  }
+  assertEquals(seenPresets, scenarios.map(() => "eyewear_card"));
+
+  const failedDb = new MemoryDataClient(userA.id);
+  const failedServices = createApplicationServices(failedDb, userA, {
+    image: {
+      processor: testImageProcessor({
+        segmentationConfidence: 0.2,
+        foregroundWidthRatio: 0.01,
+        haloRatio: 0.4,
+        retainedBackgroundRatio: 0.8,
+        fineDetailRecall: 0.1,
+        transparentRegionPreserved: 0.2,
+      }),
+    },
+  });
+  const failed = await failedServices.wardrobe.add({
+    name: "Bad eyewear photo",
+    category: "accessory",
+    subcategory: "glasses",
+    image: { type: "image", data: "/9j/2Q==", mimeType: "image/jpeg" },
+  });
+  const failedRow = failedDb.wardrobe(failed.id)!;
+  assertEquals(failed.imageStatus, "needs_review");
+  assertEquals(failedRow.processed_image_path, null);
+  assert(failedRow.original_image_path);
+  assertEquals(failedDb.uploadedImages.size, 1);
 });
 
 Deno.test("remote image resources require an allowlisted HTTPS host", async () => {
@@ -332,7 +488,7 @@ Deno.test("remote image resources require an allowlisted HTTPS host", async () =
       uri: "https://images.example/image.jpg",
     },
   });
-  assertEquals(attached.imageStatus, "attached");
+  assertEquals(attached.imageStatus, "needs_review");
   assertEquals(fetchCalls, 1);
 
   const attachedFromChatGptFile = await services.wardrobe.add({
@@ -345,7 +501,7 @@ Deno.test("remote image resources require an allowlisted HTTPS host", async () =
       file_name: "blouse.jpg",
     },
   });
-  assertEquals(attachedFromChatGptFile.imageStatus, "attached");
+  assertEquals(attachedFromChatGptFile.imageStatus, "needs_review");
   assertEquals(fetchCalls, 2);
 });
 
@@ -387,7 +543,7 @@ Deno.test("ChatGPT files validate, attach and replace an existing image", async 
     imageFile: openAiFile("https://files.openai.com/jpg"),
   });
   assertEquals(jpg.imageAttached, true);
-  assertEquals(jpg.imageStatus, "attached");
+  assertEquals(jpg.imageStatus, "needs_review");
   assert(typeof jpg.imageUrl === "string" && jpg.imageUrl.length > 0);
   const jpgPath = db.wardrobe(jpg.id)?.image_path;
   assert(jpgPath?.startsWith(`${userA.id}/`));
@@ -402,7 +558,7 @@ Deno.test("ChatGPT files validate, attach and replace an existing image", async 
     ),
   });
   assertEquals(png.imageAttached, true);
-  assertEquals(png.imageStatus, "attached");
+  assertEquals(png.imageStatus, "needs_review");
   assertEquals(
     db.uploadedImages.get(`wardrobe/${db.wardrobe(png.id)?.image_path}`)
       ?.contentType,
@@ -414,10 +570,15 @@ Deno.test("ChatGPT files validate, attach and replace an existing image", async 
     styles: ["Smart Casual"],
   });
   assertEquals(replaced.imageAttached, true);
-  assertEquals(replaced.imageStatus, "attached");
+  assertEquals(replaced.imageStatus, "needs_review");
   assert(typeof replaced.imageUrl === "string" && replaced.imageUrl.length > 0);
-  assertEquals(db.wardrobe(jpg.id)?.image_path, jpgPath);
-  assertEquals(db.uploadedImages.get(`wardrobe/${jpgPath}`)?.upsert, true);
+  const replacementPath = db.wardrobe(jpg.id)?.image_path;
+  assert(replacementPath && replacementPath !== jpgPath);
+  assertEquals(
+    db.uploadedImages.get(`wardrobe/${replacementPath}`)?.upsert,
+    false,
+  );
+  assert(db.removedImagePaths.includes(jpgPath!));
   assertEquals(
     (db.wardrobe(jpg.id)?.metadata as Record<string, unknown>).styles,
     ["smart-casual"],
@@ -514,7 +675,7 @@ Deno.test("ChatGPT files validate, attach and replace an existing image", async 
     "A replacement upload failure must return an error.",
   );
   db.failImageUpload = false;
-  assertEquals(db.wardrobe(jpg.id)?.image_path, jpgPath);
+  assertEquals(db.wardrobe(jpg.id)?.image_path, replacementPath);
 
   await assertRejects(
     () =>

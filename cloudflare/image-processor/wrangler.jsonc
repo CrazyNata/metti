@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "metti-image-processor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-03",
+  "workers_dev": true,
+  "images": {
+    "binding": "IMAGES"
+  },
+  "vars": {
+    "SUPABASE_URL": "https://fkicjvawvaddjdmcpiei.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_yCONBgzsJZ_V-rDjoKFzBg_UoB_JGom"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

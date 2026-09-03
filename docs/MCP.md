@@ -161,16 +161,19 @@ remain ordinary editable wardrobe fields in the existing app.
 
 ### Existing app upload
 
-The app flow is unchanged:
+The app keeps the existing form and storage entities, but a photo now goes
+through the shared backend image service before the row is finalized:
 
 ```text
-App Add Item -> select/take photo -> upload to private wardrobe bucket
+App Add Item -> select/take photo -> metti-wardrobe backend
+             -> WardrobeService + shared image processor -> private Storage
              -> create/update wardrobe row -> manual metadata editing
 ```
 
-The existing client still uploads JPEG/PNG/WebP/HEIC/HEIF files to the private
-`wardrobe` bucket, signs URLs for display, replaces images and removes images.
-MCP does not replace this flow and no AI is required for it.
+The existing client still uses the private `wardrobe` bucket and signed URLs,
+but multipart image writes are sent to `metti-wardrobe`; it does not run a
+second background-removal algorithm. MCP and app image writes therefore share
+the same original/processed storage contract.
 
 ### ChatGPT recognition and MCP persistence
 
@@ -207,11 +210,13 @@ ordinary ChatGPT Library page URL is not a substitute for the temporary
 `download_url`. A missing, expired or unauthorized temporary URL returns a
 clear error before an item is created or an existing image is changed.
 
-`update_wardrobe_item` accepts the same `file` object and replaces the existing
-private Storage object in place. This updates the current item and does not
-create a duplicate. `imagePath` remains available for a file already stored in
-the authenticated user's private folder; `file` and `imagePath` cannot be sent
-together. `styles` is available on both create and update.
+`update_wardrobe_item` accepts the same `file` object and creates a new original
+and processed version for the existing item. The old version stays linked until
+the new image is uploaded and the database link is updated, so a failed
+replacement cannot destroy the current image. `imagePath` remains available
+for a file already stored in the authenticated user's private folder; `file`
+and `imagePath` cannot be sent together. `styles` is available on both create
+and update.
 
 When the MCP host can provide the original image, `create_wardrobe_item` or an
 image tool accepts the standard MCP resource vocabulary:
@@ -240,22 +245,20 @@ image tool accepts the standard MCP resource vocabulary:
 ```
 
 The server decodes/streams the supported representation, validates it and
-uploads it through `ImageService` to the same private `wardrobe` bucket. It
-then stores the user-scoped `image_path` on the wardrobe row. It never stores
-base64 in the database and never returns image bytes; read responses contain a
-short-lived signed `imageUrl` where available.
+passes it through the shared backend wardrobe image pipeline. The original is
+stored as `original_image_path`; a validated square card is stored as
+`processed_image_path`; `image_path` remains the display alias for older app
+builds. It never stores base64 in the database and never returns image bytes;
+read responses contain short-lived signed `imageUrl`, `originalImageUrl` and
+`processedImageUrl` values where available.
 
-When an image was added through MCP, the shared wardrobe service marks it with
-an internal `image_source=mcp` and `image_background=pending` metadata value.
-On the next authenticated app sync, the Android app uses Google ML Kit subject
-segmentation on the device to isolate the foreground object, composites it onto
-the same solid warm cream editorial background used by the mockup, uploads the
-formatted JPEG to the private bucket and removes the old object only after the
-new database link succeeds. The browser fallback removes a connected
-plain-color border when possible and uses the same solid background. MCP still
-does not call an LLM or an image-generation API. If processing or Storage
-replacement fails, the old image remains available, is not shown as a finished
-editorial image, and can be retried on the next sync.
+MCP and the first-party app use the same `WardrobeService` and processor. The
+backend selects `wardrobe_card` or the category-aware `eyewear_card` preset,
+validates confidence, thin-detail preservation, halo, truncation and retained
+background, and only then links the processed object. If processing is not
+configured or the result is unsafe, the original remains visible and the row
+is returned as `imageStatus=needs_review`; client-side background removal is
+not used. MCP still does not call an LLM or an image-generation API.
 
 The accepted inline image formats are JPEG, PNG, WebP, HEIC and HEIF, with a
 default maximum of 5 MiB. A remote `resource_link` is fetched only when its
@@ -275,18 +278,21 @@ and the action response contains:
 }
 ```
 
-Without an image argument the response uses `imageStatus: "none"`. The user can
-then add the photo through the existing app upload flow. A successful upload
-returns `imageAttached: true` and `imageStatus: "attached"`.
+Without an image argument the response uses `imageStatus: "none"`. The user
+can then add the photo through the app, which calls the same backend service. A
+successful processed upload returns `imageAttached: true` and
+`imageStatus: "attached"`; a safe original fallback returns
+`imageStatus: "needs_review"`.
 
 Once the server starts a remote download, an HTTP error, timeout or invalid
 response returns a clear error instead of creating a permanent `pending` item.
 
-If an image upload or link operation fails while creating an item, the service
-attempts compensating Storage deletion and rolls back the new row; it never
-leaves a newly created item in an eternal `pending` state. Replacing an
-existing path uses Storage upsert so the current item remains linked, and a
-failed replacement returns an error without changing the database link.
+If an image upload, processing or link operation fails while creating an item,
+the service attempts compensating Storage deletion and rolls back the new row;
+it never leaves a newly created item in an eternal `pending` state. Replacing
+an image uses new versioned paths and keeps the old links until the new result
+is ready; a failed replacement returns an error without changing the database
+link.
 
 The image tools use the same ownership checks as wardrobe tools:
 
@@ -305,7 +311,8 @@ The existing private bucket is `wardrobe`. MCP paths are generated below the
 authenticated user folder, for example:
 
 ```text
-<authenticated-user-id>/<item-id>-<random-id>.jpg
+<authenticated-user-id>/<item-id>-original-<random-id>.jpg
+<authenticated-user-id>/<item-id>-processed-<random-id>.svg
 ```
 
 The service validates user-folder paths and item-id segments. It does not make
@@ -371,6 +378,10 @@ MCP_OPENAI_FILE_HOSTS=files.openai.com,*.files.openai.com,*.oaiusercontent.com,*
 MCP_IMAGE_MAX_BYTES=5242880
 MCP_IMAGE_FETCH_TIMEOUT_MS=10000
 MCP_ALLOW_HTTP_IMAGE_RESOURCES=false
+METTI_IMAGE_PROCESSOR_URL=https://<private-processor>/process
+METTI_IMAGE_PROCESSOR_API_KEY=<server-only-key>
+METTI_IMAGE_PROCESSOR_TIMEOUT_MS=60000
+METTI_IMAGE_PROCESSOR_MAX_OUTPUT_BYTES=8388608
 ```
 
 Do not put a `service_role` key in a client, MCP tool argument or committed
@@ -441,6 +452,8 @@ The Supabase MCP tests cover:
 - invalid/oversized/unsupported images;
 - failed image link/upload compensation and orphan prevention;
 - allowlisted remote resources and pending fallback;
+- wardrobe-card quality validation and all required eyewear scenarios, including
+  thin temples, transparent/tinted lenses, nearby cases and cluttered tables;
 - outfit create/get/update/archive behavior.
 
 Apply the existing database migrations before deploying an environment:
@@ -448,11 +461,12 @@ Apply the existing database migrations before deploying an environment:
 ```powershell
 supabase db push
 supabase functions deploy metti-mcp --no-verify-jwt
+supabase functions deploy metti-wardrobe
 ```
 
-No separate MCP migration or database is required. The archive migration is
-additive and applies to the existing `wardrobe_items` and `saved_outfits`
-tables; image metadata uses the existing `image_path` and `metadata` fields.
+No separate MCP database is required. The image migration is additive and
+applies to the existing `wardrobe_items` table; image metadata uses the
+existing `metadata` field plus explicit original/processed path columns.
 
 For the optional edge proxy, set the upstream URL, auth-server URL, exact
 allowed host/origins and request cap in `cloudflare/mcp-edge/wrangler.jsonc` or
@@ -479,8 +493,9 @@ For an image request, ChatGPT performs recognition and calls
 `create_wardrobe_item` or its `add_wardrobe_item` compatibility alias with only
 reliable fields and the top-level `file` object when available. If the client
 can forward an official file or MCP image/resource representation, MCP stores
-it in the existing bucket. Otherwise the item is still created and the user
-finishes the photo upload in the normal app. After changing the tool schema,
+it through the shared image service in the existing bucket. If the attachment
+is unavailable, the item is still created with the documented `pending` state
+and the user can add the photo in the app. After changing the tool schema,
 refresh the ChatGPT connection and start a new conversation so the updated
 file parameter is loaded. This supports both required flows:
 

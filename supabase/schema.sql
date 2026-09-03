@@ -23,6 +23,11 @@ create table if not exists public.wardrobe_items (
   brand text,
   notes text,
   image_path text,
+  original_image_path text,
+  processed_image_path text,
+  image_status text not null default 'none'
+    check (image_status in ('none', 'pending', 'processing', 'attached', 'needs_review', 'failed')),
+  image_error text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
@@ -112,7 +117,7 @@ create trigger saved_outfits_set_updated_at before update on public.saved_outfit
 for each row execute function public.set_updated_at();
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('wardrobe', 'wardrobe', false, 5242880, array['image/jpeg','image/png','image/webp','image/heic','image/heif'])
+values ('wardrobe', 'wardrobe', false, 5242880, array['image/jpeg','image/png','image/webp','image/heic','image/heif','image/svg+xml'])
 on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "wardrobe_storage_select_own" on storage.objects;

@@ -13,7 +13,13 @@ export const WARDROBE_CATEGORIES = [
 ] as const;
 export type WardrobeCategory = (typeof WARDROBE_CATEGORIES)[number];
 export type WardrobeStatus = "active" | "archived";
-export type WardrobeImageStatus = "attached" | "pending" | "none";
+export type WardrobeImageStatus =
+  | "attached"
+  | "pending"
+  | "processing"
+  | "needs_review"
+  | "failed"
+  | "none";
 
 /**
  * Image content shapes defined by MCP's content/resource vocabulary. The
@@ -100,6 +106,10 @@ export interface WardrobeItemRow {
   brand: string | null;
   notes: string | null;
   image_path: string | null;
+  original_image_path?: string | null;
+  processed_image_path?: string | null;
+  image_status?: WardrobeImageStatus | null;
+  image_error?: string | null;
   metadata: JsonObject | null;
   created_at: string;
   updated_at?: string;
@@ -145,6 +155,9 @@ export interface WardrobeItemDto {
   favorite: boolean;
   status: WardrobeStatus;
   imageUrl: string | null;
+  originalImageUrl: string | null;
+  processedImageUrl: string | null;
+  imageStatus: WardrobeImageStatus;
   createdAt: string;
 }
 

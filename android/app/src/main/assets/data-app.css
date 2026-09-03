@@ -1,7 +1,7 @@
 .icon-button{display:grid;width:34px;height:34px;place-items:center;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--rose);font-size:22px;line-height:1;cursor:pointer}.wardrobe-title-actions{display:flex;align-items:center;gap:9px}.wardrobe-title-actions span{color:var(--muted);font-size:10px}.wardrobe-empty{display:none;padding:32px 18px;border:1px dashed var(--line);border-radius:18px;background:var(--surface);text-align:center;color:var(--muted);font-size:12px;line-height:1.5}.wardrobe-empty.show{display:block}.wardrobe-item[data-item-id]{position:relative}.wardrobe-item[data-item-id]::after{content:"";position:absolute;right:9px;top:9px;width:7px;height:7px;border-radius:50%;background:#fff9;box-shadow:0 1px 4px #3d2f2a22}.wardrobe-item .item-art.has-image,.item-detail-art.has-image,.result-hero.has-image,.result-grid .placeholder.has-image{background-position:center;background-size:cover;background-repeat:no-repeat}.wardrobe-item .item-art.has-image span,.item-detail-art.has-image span,.result-hero.has-image span,.result-grid .placeholder.has-image span{display:none}.wardrobe-item .item-art{transition:transform .18s ease,box-shadow .18s ease}.wardrobe-item:active .item-art{transform:scale(.98)}.item-detail-art{position:relative;min-height:210px;margin:10px 0 16px;overflow:hidden;border-radius:18px}.item-detail-art span{position:absolute;left:14px;bottom:12px;color:#a79578;font-size:10px}.item-detail-actions{display:flex;gap:8px;margin-top:8px}.item-detail-actions button{flex:1}.full-button{width:100%;height:45px;margin-top:8px}.sheet-backdrop{position:fixed;inset:0;z-index:10;display:grid;place-items:end center;background:#1b171466;padding:14px}.sheet-backdrop[hidden]{display:none}.data-sheet{width:min(100%,420px);max-height:min(92vh,760px);overflow:auto;padding:22px 20px 24px;border:1px solid var(--line);border-radius:24px 24px 16px 16px;background:var(--surface);box-shadow:0 20px 55px #2b1a1a33}.data-sheet h2{margin:0 0 6px;font:500 29px/.98 var(--serif)}.data-sheet>p{margin:0 0 17px;color:var(--muted);font-size:11px;line-height:1.45}.data-sheet-close{float:right;width:30px;height:30px;border:0;border-radius:50%;background:var(--soft);color:var(--rose);font-size:20px;cursor:pointer}.data-form{display:grid;gap:11px}.data-form label{display:grid;gap:5px;color:var(--muted);font-size:10px}.data-form input,.data-form select,.data-form textarea{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fffaf8;color:var(--ink);font:13px var(--sans);outline:0}.data-form textarea{min-height:72px;resize:vertical}.data-form input:focus,.data-form select:focus,.data-form textarea:focus{border-color:var(--rose);box-shadow:0 0 0 3px #8b4e7020}.data-form .form-two{display:grid;grid-template-columns:1fr 1fr;gap:9px}.data-form .form-actions{display:flex;gap:8px;margin-top:7px}.data-form .form-actions button{flex:1}.data-form input[type=file]{padding:8px}.data-form .form-help{margin:-3px 0 2px;color:var(--muted);font-size:9px;line-height:1.35}.auth-status:empty{display:none}.profile-edit-button[data-action=profile-edit]{white-space:nowrap}.profile-email{display:block;margin-top:4px;color:var(--muted);font-size:10px}.profile-style-card small{line-height:1.35}.looks-data-note{display:none;margin:12px 0;padding:11px 13px;border-radius:14px;background:var(--soft);color:var(--muted);font-size:10px}.looks-data-note.show{display:block}.save-state{opacity:.65;pointer-events:none}.toast.error{background:#9d3f4c}.toast.success{background:#466c55}
 
 /* Keep uploaded photos on the same warm editorial canvas as the mockup. */
-.wardrobe-item .item-art.has-image,.item-detail-art.has-image,.result-hero.has-image,.result-grid .placeholder.has-image{background-color:#f0e9df!important}
+.wardrobe-item .item-art.has-image,.item-detail-art.has-image,.result-hero.has-image,.result-grid .placeholder.has-image{background-color:var(--wardrobe-card-background)!important}
 
 /* Wardrobe typography: keep every text label readable at the same scale. */
 .screen[data-screen-id="wardrobe"] .wardrobe-title-row{align-items:center!important}
@@ -108,12 +108,35 @@ body.modal-open{overflow:hidden}
    private signed URL is loading. Keep the tile neutral until the real photo
    arrives, and keep the failure state readable instead of silently showing
    the illustration. */
-.item-art.image-loading,.item-detail-art.image-loading,.placeholder.image-loading{background:#f0e9df!important;background-image:none!important}
+.item-art.image-loading,.item-detail-art.image-loading,.placeholder.image-loading{background:var(--wardrobe-card-background)!important;background-image:none!important}
 .item-art.image-loading::before,.item-detail-art.image-loading::before,.placeholder.image-loading::before{display:none!important}
 .item-art.image-loading::after,.item-detail-art.image-loading::after,.placeholder.image-loading::after{background:linear-gradient(105deg,transparent 20%,rgba(255,255,255,.62) 45%,transparent 70%)!important;background-size:240% 100%!important;animation:metti-image-shimmer 1.5s linear infinite}
-.item-art.image-failed,.item-detail-art.image-failed,.placeholder.image-failed{background:#f0e9df!important;background-image:none!important}
+.item-art.image-failed,.item-detail-art.image-failed,.placeholder.image-failed{background:var(--wardrobe-card-background)!important;background-image:none!important}
 .item-art.image-failed::before,.item-detail-art.image-failed::before,.placeholder.image-failed::before{display:none!important}
 @keyframes metti-image-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+
+/* Keep the wardrobe page inside the phone viewport. Long item names must not
+   become a grid column's minimum width and push the second photo off-screen. */
+.screen[data-screen-id="wardrobe"]{min-width:0!important;overflow-x:hidden!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-grid{width:100%!important;min-width:0!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 10px!important;overflow:hidden!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item{width:100%!important;min-width:0!important;max-width:100%!important;overflow:hidden!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art{width:100%!important;min-width:0!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art span{max-width:calc(100% - 24px)!important}
+
+/* Wardrobe page: compact two-column layout from the approved reference. */
+.screen[data-screen-id="wardrobe"]{padding-top:4px!important;padding-bottom:0!important}
+.phone:has(.screen[data-screen-id="wardrobe"].active)>.app-scroll>.statusbar{display:none!important;height:0!important;padding:0!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-title-row,.screen[data-screen-id="wardrobe"]>.search-box,.screen[data-screen-id="wardrobe"]>.filter-tabs{display:none!important}
+.screen[data-screen-id="wardrobe"] .subcategory-filter{display:grid!important;gap:6px!important;margin-top:0!important}
+.screen[data-screen-id="wardrobe"] .subcategory-filter>span{color:var(--muted)!important;font:10px/1.2 var(--mono)!important;letter-spacing:0!important}
+.screen[data-screen-id="wardrobe"] .subcategory-filter .subcategory-trigger{height:43px!important;border:1px solid var(--rose)!important;border-radius:13px!important;background:var(--surface)!important;color:var(--ink)!important;font:13px/1 var(--sans)!important}
+.screen[data-screen-id="wardrobe"] .subcategory-trigger-chevron{color:var(--rose)!important;font-size:16px!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-grid{margin-top:30px!important;padding:0 0 108px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 10px!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item{border-radius:16px!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art{aspect-ratio:1/1!important;border-radius:16px!important;background-color:var(--wardrobe-card-background)!important;box-shadow:0 4px 12px rgba(76,56,45,.06)!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art.has-image{background-color:var(--wardrobe-card-background)!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art.has-image::after{background:linear-gradient(180deg,transparent 60%,rgba(255,250,244,.9) 100%)!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-item .item-art span{right:10px!important;bottom:10px!important;max-width:calc(100% - 22px)!important;color:#92796c!important;font:500 10px/1.15 var(--sans)!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;text-shadow:0 1px 2px rgba(255,255,255,.7)!important}
 
 /* Open the wardrobe subcategory filter as a Metti bottom sheet instead of a native Android list. */
 .subcategory-filter .subcategory-trigger{display:flex!important;width:100%;height:43px;align-items:center;justify-content:space-between;padding:0 12px;border:1.5px solid var(--rose);border-radius:13px;background:var(--surface);color:var(--ink);font:12px var(--sans);text-align:left;cursor:pointer;outline:0}

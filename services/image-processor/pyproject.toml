@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools==75.8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metti-image-processor"
+version = "1.0.0"
+description = "Private category-aware segmentation and matting service for Metti Wardrobe"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "fastapi==0.115.6",
+  "numpy==1.26.4",
+  "opencv-python-headless==4.10.0.84",
+  "Pillow==11.1.0",
+  "python-multipart==0.0.20",
+  "rembg==2.0.62",
+  "onnxruntime==1.20.1",
+  "ultralytics==8.3.68",
+  "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx==0.28.1",
+  "pytest==8.3.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

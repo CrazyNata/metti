@@ -8,6 +8,16 @@ import type {
   WardrobeImageInput,
 } from "./types.ts";
 import type { UserDataClient } from "./supabase-client.ts";
+import {
+  composeWardrobeCard,
+  createConfiguredWardrobeImageProcessor,
+  imagePresetForWardrobeItem,
+  type ImageProcessingRequest,
+  type ImageQualityMetrics,
+  validateImageQuality,
+  type WardrobeImagePreset,
+  type WardrobeImageProcessor,
+} from "./wardrobe-image-processor.ts";
 
 type FetchLike = typeof fetch;
 
@@ -21,6 +31,8 @@ export const DEFAULT_OPENAI_FILE_HOSTS = [
   "*.chatgpt.com",
 ] as const;
 
+type EnvReader = { get(name: string): string | undefined };
+
 export const SUPPORTED_IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -29,7 +41,9 @@ export const SUPPORTED_IMAGE_MIME_TYPES = [
   "image/heif",
 ] as const;
 
-type SupportedImageMimeType = (typeof SUPPORTED_IMAGE_MIME_TYPES)[number];
+export type SupportedImageMimeType =
+  (typeof SUPPORTED_IMAGE_MIME_TYPES)[number];
+export type ImageMimeType = SupportedImageMimeType | "image/svg+xml";
 
 const EXTENSIONS: Record<SupportedImageMimeType, string> = {
   "image/jpeg": "jpg",
@@ -39,6 +53,11 @@ const EXTENSIONS: Record<SupportedImageMimeType, string> = {
   "image/heif": "heif",
 };
 
+const STORAGE_EXTENSIONS: Record<ImageMimeType, string> = {
+  ...EXTENSIONS,
+  "image/svg+xml": "svg",
+};
+
 export interface ImageServiceOptions {
   fetchImpl?: FetchLike;
   allowedHosts?: string[];
@@ -46,6 +65,14 @@ export interface ImageServiceOptions {
   maxBytes?: number;
   fetchTimeoutMs?: number;
   allowHttp?: boolean;
+  /** Backend-owned segmentation/matting adapter. */
+  processor?: WardrobeImageProcessor | null;
+  processorUrl?: string;
+  processorApiKey?: string;
+  /** Per-request Supabase bearer token for a processor that validates users. */
+  processorAuthToken?: string;
+  processorTimeoutMs?: number;
+  processorMaxOutputBytes?: number;
 }
 
 export interface PreparedImage {
@@ -54,9 +81,83 @@ export interface PreparedImage {
   size: number;
 }
 
+export interface StoredImage {
+  bytes: Uint8Array;
+  contentType: ImageMimeType;
+  size: number;
+}
+
 export interface ImageResolution {
   file: PreparedImage | null;
   status: "attached" | "pending";
+}
+
+export interface ImageProcessingOutcome {
+  status: "attached" | "needs_review" | "failed";
+  image?: StoredImage;
+  preset: WardrobeImagePreset;
+  provider?: string;
+  quality?: ImageQualityMetrics;
+  reason?: string;
+}
+
+function envNumber(
+  env: EnvReader,
+  name: string,
+  fallback: number,
+): number {
+  const value = Number(env.get(name));
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function envBoolean(
+  env: EnvReader,
+  name: string,
+  fallback: boolean,
+): boolean {
+  const value = String(env.get(name) ?? "").trim().toLowerCase();
+  if (["true", "1", "yes"].includes(value)) return true;
+  if (["false", "0", "no"].includes(value)) return false;
+  return fallback;
+}
+
+/** Shared backend configuration used by both MCP and the first-party app. */
+export function imageServiceOptionsFromEnv(
+  env: EnvReader = Deno.env,
+  fallbackProcessorUrl?: string,
+): ImageServiceOptions {
+  const configuredOpenAiFileHosts = String(
+    env.get("MCP_OPENAI_FILE_HOSTS") ?? "",
+  ).split(",").map((value) => value.trim()).filter(Boolean);
+  return {
+    allowedHosts: String(env.get("MCP_ALLOWED_IMAGE_HOSTS") ?? "").split(",")
+      .map((value) => value.trim()).filter(Boolean),
+    openAiFileHosts: configuredOpenAiFileHosts.length
+      ? configuredOpenAiFileHosts
+      : [...DEFAULT_OPENAI_FILE_HOSTS],
+    maxBytes: envNumber(env, "MCP_IMAGE_MAX_BYTES", DEFAULT_IMAGE_MAX_BYTES),
+    fetchTimeoutMs: envNumber(
+      env,
+      "MCP_IMAGE_FETCH_TIMEOUT_MS",
+      DEFAULT_IMAGE_FETCH_TIMEOUT_MS,
+    ),
+    allowHttp: envBoolean(env, "MCP_ALLOW_HTTP_IMAGE_RESOURCES", false),
+    processorUrl: String(env.get("METTI_IMAGE_PROCESSOR_URL") ?? "").trim() ||
+      String(fallbackProcessorUrl ?? "").trim() || undefined,
+    processorApiKey: String(
+      env.get("METTI_IMAGE_PROCESSOR_API_KEY") ?? "",
+    ).trim() || undefined,
+    processorTimeoutMs: envNumber(
+      env,
+      "METTI_IMAGE_PROCESSOR_TIMEOUT_MS",
+      60_000,
+    ),
+    processorMaxOutputBytes: envNumber(
+      env,
+      "METTI_IMAGE_PROCESSOR_MAX_OUTPUT_BYTES",
+      8 * 1024 * 1024,
+    ),
+  };
 }
 
 function normalizedMime(value: string | undefined): string {
@@ -343,6 +444,7 @@ export class ImageService {
   private readonly maxBytes: number;
   private readonly fetchTimeoutMs: number;
   private readonly allowHttp: boolean;
+  private readonly processor: WardrobeImageProcessor | null;
 
   constructor(
     private readonly client: UserDataClient,
@@ -363,6 +465,16 @@ export class ImageService {
       ? Math.min(options.fetchTimeoutMs, 60_000)
       : DEFAULT_IMAGE_FETCH_TIMEOUT_MS;
     this.allowHttp = options.allowHttp === true;
+    this.processor = options.processor === undefined
+      ? createConfiguredWardrobeImageProcessor({
+        endpoint: options.processorUrl,
+        apiKey: options.processorApiKey,
+        authToken: options.processorAuthToken,
+        timeoutMs: options.processorTimeoutMs,
+        maxOutputBytes: options.processorMaxOutputBytes,
+        fetchImpl: this.fetchImpl,
+      })
+      : options.processor;
   }
 
   async resolve(
@@ -434,6 +546,23 @@ export class ImageService {
       true,
       true,
     );
+  }
+
+  /**
+   * Validates a browser/app multipart upload with the same signature, MIME and
+   * size checks as MCP images. The caller still goes through WardrobeService,
+   * so this is not a second image-processing path.
+   */
+  resolveUploadedFile(
+    bytes: Uint8Array,
+    mimeType?: string,
+    fileName?: string,
+  ): ImageResolution {
+    const contentType = normalizedMime(mimeType) || mimeFromFileName(fileName);
+    return {
+      file: preparedImage(bytes, contentType, this.maxBytes, "image file"),
+      status: "attached",
+    };
   }
 
   private async resolveRemote(
@@ -540,14 +669,15 @@ export class ImageService {
 
   async uploadForItem(
     itemId: string,
-    image: PreparedImage,
+    image: StoredImage,
     existingPath?: string | null,
+    variant: "original" | "processed" = "original",
   ): Promise<string> {
     const safeItemId = validItemSegment(itemId);
     const path = existingPath
       ? validStoragePath(existingPath, this.user.id)
-      : `${this.user.id}/${safeItemId}-${crypto.randomUUID()}.${
-        EXTENSIONS[image.contentType]
+      : `${this.user.id}/${safeItemId}-${variant}-${crypto.randomUUID()}.${
+        STORAGE_EXTENSIONS[image.contentType]
       }`;
     await this.client.uploadObject(
       WARDROBE_IMAGE_BUCKET,
@@ -557,6 +687,60 @@ export class ImageService {
       Boolean(existingPath),
     );
     return path;
+  }
+
+  async processForItem(
+    image: PreparedImage,
+    context: Omit<ImageProcessingRequest, "image" | "preset"> & {
+      preset?: WardrobeImagePreset;
+    },
+  ): Promise<ImageProcessingOutcome> {
+    const preset = context.preset ?? imagePresetForWardrobeItem(
+      context.category,
+      context.subcategory,
+      context.name,
+    );
+    if (!this.processor) {
+      return {
+        status: "needs_review",
+        preset,
+        reason: "image_processor_not_configured",
+      };
+    }
+
+    try {
+      const result = await this.processor.process({
+        ...context,
+        image,
+        preset,
+      });
+      const validation = validateImageQuality(result.quality, preset);
+      if (!validation.valid) {
+        return {
+          status: "needs_review",
+          preset,
+          provider: result.provider,
+          quality: result.quality,
+          reason: validation.reasons.join(","),
+        };
+      }
+      const processedImage = composeWardrobeCard(result.cutout, preset);
+      return {
+        status: "attached",
+        image: processedImage,
+        preset,
+        provider: result.provider,
+        quality: result.quality,
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        preset,
+        reason: error instanceof Error
+          ? error.message.slice(0, 240)
+          : "image_processor_failed",
+      };
+    }
   }
 
   async removePath(path: string): Promise<void> {

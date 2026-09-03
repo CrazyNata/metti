@@ -224,7 +224,10 @@ Deno.test("MCP file parameters attach on add and replace on update", async () =>
     { fetchImpl, openAiFileHosts: ["files.openai.com"] },
   );
   assertEquals(added.payload.result.structuredContent.imageAttached, true);
-  assertEquals(added.payload.result.structuredContent.imageStatus, "attached");
+  assertEquals(
+    added.payload.result.structuredContent.imageStatus,
+    "needs_review",
+  );
   assert(typeof added.payload.result.structuredContent.imageUrl === "string");
   const itemId = added.payload.result.structuredContent.id as string;
 
@@ -254,7 +257,7 @@ Deno.test("MCP file parameters attach on add and replace on update", async () =>
   assertEquals(updated.payload.result.structuredContent.imageAttached, true);
   assertEquals(
     updated.payload.result.structuredContent.imageStatus,
-    "attached",
+    "needs_review",
   );
   assert(typeof updated.payload.result.structuredContent.imageUrl === "string");
   assertEquals(remoteFetchCalls, 2);
@@ -330,7 +333,7 @@ Deno.test("authenticated read and write tool calls use shared data and return st
   assertEquals(created.payload.result.structuredContent.imageAttached, true);
   assertEquals(
     created.payload.result.structuredContent.imageStatus,
-    "attached",
+    "needs_review",
   );
   const createdId = created.payload.result.structuredContent.id as string;
   assertEquals(db.wardrobe(createdId)?.category, "outer");
