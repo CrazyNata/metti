@@ -27,6 +27,7 @@ export const DEFAULT_IMAGE_FETCH_TIMEOUT_MS = 10_000;
 export const DEFAULT_OPENAI_FILE_HOSTS = [
   "files.openai.com",
   "*.files.openai.com",
+  "oaiusercontent.com",
   "*.oaiusercontent.com",
   "chatgpt.com",
   "*.chatgpt.com",
@@ -371,6 +372,15 @@ function hostIsAllowed(hostname: string, allowedHosts: string[]): boolean {
   });
 }
 
+function openAiAzureBlobHostIsAllowed(hostname: string): boolean {
+  // ChatGPT's file bridge currently serves temporary attachments from a
+  // region-specific OpenAI-owned Azure Blob host. Keep this matcher narrow;
+  // accepting every *.blob.core.windows.net host would create an SSRF hole.
+  return /^oaisdmntpr[a-z0-9-]+\.blob\.core\.windows\.net$/.test(
+    normalizedHost(hostname),
+  );
+}
+
 async function readLimitedBody(
   response: Response,
   maxBytes: number,
@@ -545,10 +555,13 @@ export class ImageService {
       throw new AppError("invalid_input", "file.download_url must use HTTPS.");
     }
 
+    const allowedHosts = openAiAzureBlobHostIsAllowed(url.hostname)
+      ? [...this.openAiFileHosts, url.hostname]
+      : this.openAiFileHosts;
     return this.resolveRemote(
       url.toString(),
       input.mime_type ?? mimeFromFileName(input.file_name),
-      this.openAiFileHosts,
+      allowedHosts,
       true,
       true,
     );
@@ -587,9 +600,12 @@ export class ImageService {
     }
     if (!hostIsAllowed(url.hostname, allowedHosts)) {
       if (failOnUnavailable) {
+        // Keep the tokenized URL out of logs; the hostname is enough to tune
+        // the allowlist for the ChatGPT file bridge.
+        console.warn(`[image-service] rejected remote image host: ${url.hostname}`);
         throw new AppError(
           "invalid_input",
-          "file.download_url host is not allowed. Use the temporary URL supplied by ChatGPT.",
+          `file.download_url host is not allowed (${url.hostname}). Use the temporary URL supplied by ChatGPT.`,
         );
       }
       // An unconfigured generic MCP host is deliberately a non-fatal fallback.
