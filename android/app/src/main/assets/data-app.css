@@ -126,12 +126,12 @@ body.modal-open{overflow:hidden}
 /* Wardrobe page: compact two-column layout from the approved reference. */
 .screen[data-screen-id="wardrobe"]{padding-top:4px!important;padding-bottom:0!important}
 .phone:has(.screen[data-screen-id="wardrobe"].active)>.app-scroll>.statusbar{display:none!important;height:0!important;padding:0!important}
-.screen[data-screen-id="wardrobe"] .wardrobe-title-row,.screen[data-screen-id="wardrobe"]>.search-box,.screen[data-screen-id="wardrobe"]>.filter-tabs{display:none!important}
-.screen[data-screen-id="wardrobe"] .subcategory-filter{display:grid!important;gap:6px!important;margin-top:0!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-title-row,.screen[data-screen-id="wardrobe"]>.search-box,.screen[data-screen-id="wardrobe"]>.filter-tabs{display:flex!important}
+.screen[data-screen-id="wardrobe"] .subcategory-filter{display:grid!important;gap:6px!important;margin-top:10px!important}
 .screen[data-screen-id="wardrobe"] .subcategory-filter>span{color:var(--muted)!important;font:10px/1.2 var(--mono)!important;letter-spacing:0!important}
 .screen[data-screen-id="wardrobe"] .subcategory-filter .subcategory-trigger{height:43px!important;border:1px solid var(--rose)!important;border-radius:13px!important;background:var(--surface)!important;color:var(--ink)!important;font:13px/1 var(--sans)!important}
 .screen[data-screen-id="wardrobe"] .subcategory-trigger-chevron{color:var(--rose)!important;font-size:16px!important}
-.screen[data-screen-id="wardrobe"] .wardrobe-grid{margin-top:30px!important;padding:0 0 108px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 10px!important}
+.screen[data-screen-id="wardrobe"] .wardrobe-grid{margin-top:17px!important;padding:16px 0 120px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 10px!important}
 .screen[data-screen-id="wardrobe"] .wardrobe-item{border-radius:16px!important}
 .screen[data-screen-id="wardrobe"] .wardrobe-item .item-art{aspect-ratio:1/1!important;border-radius:16px!important;background-color:var(--wardrobe-card-background)!important;box-shadow:0 4px 12px rgba(76,56,45,.06)!important}
 .screen[data-screen-id="wardrobe"] .wardrobe-item .item-art.has-image{background-color:var(--wardrobe-card-background)!important}
