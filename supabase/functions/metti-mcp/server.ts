@@ -25,7 +25,7 @@ import type {
   WardrobeListOptions,
 } from "../_shared/types.ts";
 
-export const MCP_VERSION = "1.2.0";
+export const MCP_VERSION = "1.3.0";
 
 const MCP_INSTRUCTIONS =
   "When the user attaches a photo and asks to add or update a wardrobe item, use the photo-capable wardrobe tool and pass the attachment in its top-level file argument. Do not create a metadata-only item for an attached photo. The backend downloads the temporary file immediately, stores the original separately, processes the card, and only reports imageAttached=true after the Storage links are ready. If the file argument is missing, ask the user to attach the photo again.";
@@ -500,8 +500,8 @@ export function registerTools(
 
   server.registerTool("add_wardrobe_item", {
     description:
-      "Compatibility alias for create_wardrobe_item. For a ChatGPT attachment prefer create_wardrobe_item_with_photo so the top-level file parameter is mandatory. Add a clothing or accessory item to the authenticated user's wardrobe using the same fields. The existing backend image service keeps the original photo, applies the category-aware wardrobe/eyewear card pipeline and only reports imageStatus=attached after the processed image is uploaded and linked. Do not send user_id; ownership comes from the bearer token.",
-    inputSchema: createWardrobeItemSchema,
+      "Add a clothing or accessory item from the photo attached in the current ChatGPT message. The top-level file parameter is required for this tool. The backend downloads the attachment immediately, stores originalImage separately, runs the category-aware wardrobe/eyewear card pipeline and only reports imageStatus=attached after the processed image is uploaded and linked. Do not call this tool without file and do not send user_id; ownership comes from the bearer token. For metadata without a photo, use create_wardrobe_item.",
+    inputSchema: createWardrobeItemWithPhotoSchema,
     _meta: { "openai/fileParams": ["file"] },
     annotations: { ...writeAnnotations, idempotentHint: false },
   }, (args) =>
