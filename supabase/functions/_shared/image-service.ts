@@ -28,6 +28,7 @@ export const DEFAULT_OPENAI_FILE_HOSTS = [
   "files.openai.com",
   "*.files.openai.com",
   "*.oaiusercontent.com",
+  "chatgpt.com",
   "*.chatgpt.com",
 ] as const;
 
@@ -132,9 +133,14 @@ export function imageServiceOptionsFromEnv(
   return {
     allowedHosts: String(env.get("MCP_ALLOWED_IMAGE_HOSTS") ?? "").split(",")
       .map((value) => value.trim()).filter(Boolean),
-    openAiFileHosts: configuredOpenAiFileHosts.length
-      ? configuredOpenAiFileHosts
-      : [...DEFAULT_OPENAI_FILE_HOSTS],
+    // Keep the official ChatGPT/OpenAI defaults even when an older deployment
+    // left MCP_OPENAI_FILE_HOSTS configured with only files.openai.com. The
+    // environment may add a narrowly scoped host, but it must not silently
+    // remove the host used by ChatGPT's current temporary attachment URLs.
+    openAiFileHosts: [
+      ...DEFAULT_OPENAI_FILE_HOSTS,
+      ...configuredOpenAiFileHosts,
+    ],
     maxBytes: envNumber(env, "MCP_IMAGE_MAX_BYTES", DEFAULT_IMAGE_MAX_BYTES),
     fetchTimeoutMs: envNumber(
       env,

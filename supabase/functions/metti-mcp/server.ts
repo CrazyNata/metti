@@ -25,7 +25,7 @@ import type {
   WardrobeListOptions,
 } from "../_shared/types.ts";
 
-export const MCP_VERSION = "1.3.0";
+export const MCP_VERSION = "1.3.1";
 
 const MCP_INSTRUCTIONS =
   "When the user attaches a photo and asks to add or update a wardrobe item, use the photo-capable wardrobe tool and pass the attachment in its top-level file argument. Do not create a metadata-only item for an attached photo. The backend downloads the temporary file immediately, stores the original separately, processes the card, and only reports imageAttached=true after the Storage links are ready. If the file argument is missing, ask the user to attach the photo again.";
