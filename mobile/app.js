@@ -42,6 +42,7 @@
     top: Object.freeze([
       { value: 'tshirt', label: 'Футболки' },
       { value: 'sweater', label: 'Кофты' },
+      { value: 'turtleneck', label: 'Водолазки' },
       { value: 'hoodie', label: 'Толстовки' },
       { value: 'blazer', label: 'Пиджаки' },
       { value: 'shirt', label: 'Рубашки' },
@@ -64,13 +65,22 @@
       { value: 'bag', label: 'Сумки' },
       { value: 'glasses', label: 'Очки' },
       { value: 'headwear', label: 'Головные уборы' },
-      { value: 'jewelry', label: 'Бижутерия' }
+      { value: 'jewelry', label: 'Бижутерия' },
+      { value: 'hair-clips', label: 'Заколки для волос' }
     ])
   });
   const subcategoryAliases = Object.freeze({
     'верхняя одежда': 'outerwear',
     футболки: 'tshirt',
     кофты: 'sweater',
+    водолазки: 'turtleneck',
+    водолазка: 'turtleneck',
+    гольф: 'turtleneck',
+    гольфы: 'turtleneck',
+    turtleneck: 'turtleneck',
+    'turtle neck': 'turtleneck',
+    'mock neck': 'turtleneck',
+    'high neck': 'turtleneck',
     толстовки: 'hoodie',
     пиджаки: 'blazer',
     jacket: 'blazer',
@@ -101,7 +111,19 @@
     sunglasses: 'glasses',
     eyeglasses: 'glasses',
     'головные уборы': 'headwear',
-    бижутерия: 'jewelry'
+    бижутерия: 'jewelry',
+    заколка: 'hair-clips',
+    заколки: 'hair-clips',
+    'заколка для волос': 'hair-clips',
+    'заколки для волос': 'hair-clips',
+    'hair clip': 'hair-clips',
+    'hair clips': 'hair-clips',
+    hairclip: 'hair-clips',
+    hairclips: 'hair-clips',
+    barrette: 'hair-clips',
+    barrettes: 'hair-clips',
+    hairpin: 'hair-clips',
+    hairpins: 'hair-clips'
   });
   const bagSubcategoryPattern = /(^|[\s_-])(bag|bags|tote|handbag|purse|crossbody|shoulder[\s_-]*bag|clutch|satchel)(?=$|[\s_-])/;
   const canonicalSubcategory = (value) => {
@@ -126,6 +148,7 @@
       if (value.includes('жакет') || value.includes('пидж')) return 'blazer';
       if (value.includes('рубаш')) return 'shirt';
       if (value.includes('толстов') || value.includes('худи')) return 'hoodie';
+      if (value.includes('водолаз') || value.includes('гольф') || value.includes('turtleneck') || value.includes('turtle neck') || value.includes('mock neck') || value.includes('high neck')) return 'turtleneck';
       if (value.includes('кофт') || value.includes('свитер') || value.includes('кардиган')) return 'sweater';
       if (value.includes('плать')) return 'dress';
       if (value.includes('пальто') || value.includes('куртк') || value.includes('плащ')) return 'outerwear';
@@ -145,6 +168,7 @@
     }
     if (value.includes('сум') || bagSubcategoryPattern.test(value)) return 'bag';
     if (value.includes('очк')) return 'glasses';
+    if (value.includes('закол') || value.includes('hair clip') || value.includes('hairclip') || value.includes('barrette') || value.includes('hairpin')) return 'hair-clips';
     if (value.includes('серьг') || value.includes('кольц') || value.includes('брас') || value.includes('цеп') || value.includes('украш')) return 'jewelry';
     return 'headwear';
   };

@@ -404,7 +404,7 @@ def _model_prompts(request: SegmentRequest) -> list[str]:
         ]
     prompts = {
         "outer": ["a jacket", "a coat", "a blazer", "outerwear"],
-        "top": ["a shirt", "a top", "a blouse", "a sweater", "a hoodie"],
+        "top": ["a shirt", "a top", "a blouse", "a sweater", "a turtleneck", "a hoodie"],
         "bottom": ["pants", "trousers", "jeans", "a skirt", "shorts"],
         "shoes": ["a shoe", "a sneaker", "a boot", "a heel", "sandals"],
         "accessory": [
@@ -414,6 +414,8 @@ def _model_prompts(request: SegmentRequest) -> list[str]:
             "a belt",
             "a watch",
             "jewelry",
+            "a hair clip",
+            "a barrette",
         ],
     }
     return prompts.get(request.category, ["clothing", "fashion item"])
@@ -438,6 +440,20 @@ def _primary_model_prompt(request: SegmentRequest) -> str:
         if "optical" in value or "eyeglass" in value:
             return "eyeglasses"
         return "glasses"
+    if request.category == "top" and request.subcategory in {
+        "turtleneck",
+        "turtlenecks",
+    }:
+        return "a turtleneck"
+    if request.category == "accessory" and request.subcategory in {
+        "hair-clip",
+        "hair-clips",
+        "hair_clip",
+        "hair_clips",
+        "barrette",
+        "barrettes",
+    }:
+        return "a hair clip"
     if request.category == "shoes" and request.subcategory in {
         "sneaker",
         "sneakers",
