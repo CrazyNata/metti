@@ -200,3 +200,18 @@ body.modal-open{overflow:hidden}
 .screen[data-screen-id="stylist"] .composer-media-button:focus-visible{outline:2px solid var(--rose);outline-offset:2px}
 .screen[data-screen-id="stylist"] .composer-media-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .screen[data-screen-id="stylist"] .composer-photo-status{display:block;max-width:calc(100% - 8px);margin:4px 0 0;color:var(--rose);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Optional front/back gallery for wardrobe items with a meaningful reverse side. */
+.item-detail-gallery{margin:10px 0 16px}
+.item-detail-gallery .item-detail-art{min-height:260px;margin:0;background-size:contain!important;background-position:center!important;cursor:pointer}
+.item-gallery-controls{display:grid;justify-items:center;gap:6px;margin-top:9px}
+.item-gallery-controls[hidden]{display:none}
+.item-gallery-nav{display:none}
+.item-gallery-nav:focus-visible,.item-gallery-dot:focus-visible{outline:2px solid var(--rose);outline-offset:2px}
+.item-gallery-status{display:grid;min-width:0;justify-items:center;gap:6px}
+.item-gallery-caption{color:var(--muted);font-size:10px}
+.item-gallery-dots{display:flex;align-items:center;gap:7px}
+.item-gallery-dot{width:7px;height:7px;padding:0;border:0;border-radius:50%;background:var(--line);cursor:pointer}
+.item-gallery-dot.selected{background:var(--rose);transform:scale(1.25)}
+#wardrobe-sheet .secondary-photo-upload-field::before{content:"Add a back photo"}
+html[lang="ru"] #wardrobe-sheet .secondary-photo-upload-field::before{content:"Добавьте фото спинки"}

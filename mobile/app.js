@@ -22,6 +22,7 @@
     outfits: [],
     activeItem: null,
     currentOutfit: null,
+    activeItemImageIndex: 0,
     stylistPhoto: null,
     activeLooksTab: 'recommended',
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
@@ -30,7 +31,22 @@
   const imageUrlCache = new Map();
   const imageUrlRequests = new Map();
   const IMAGE_URL_CACHE_TTL_MS = 50 * 60 * 1000;
-  const isEditorialImageReady = (item) => Boolean(item?.image_path);
+  const imageGalleryPaths = (item) => {
+    const raw = item?.metadata?.image_gallery ?? item?.image_gallery;
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.map((value) => typeof value === 'string' ? value : value?.path)
+      .map((path) => String(path || '').trim()).filter(Boolean))];
+  };
+  const itemImageEntries = (item) => {
+    const entries = [];
+    const add = (path, label) => {
+      const normalized = String(path || '').trim();
+      if (normalized && !entries.some((entry) => entry.path === normalized)) entries.push({ path: normalized, label });
+    };
+    add(item?.image_path, 'Фото спереди');
+    imageGalleryPaths(item).forEach((path) => add(path, 'Фото спинки'));
+    return entries;
+  };
   let lastDataSyncAt = 0;
   let toastTimer;
   let activeMettiSelect = null;
@@ -774,7 +790,7 @@
       imageUrlRequests.set(path, request);
     });
   };
-  const addImageBackground = async (node, path) => {
+  const addImageBackground = async (node, path, fit = 'cover') => {
     const key = String(path || '').trim();
     if (!node || !key) return false;
     node.dataset.imagePath = key;
@@ -792,7 +808,7 @@
     // signed private image with the same priority so uploaded photos win.
     node.style.setProperty('background-image', `url("${url.replace(/"/g, '\\"')}")`, 'important');
     node.style.setProperty('background-position', 'center', 'important');
-    node.style.setProperty('background-size', 'cover', 'important');
+    node.style.setProperty('background-size', fit === 'contain' ? 'contain' : 'cover', 'important');
     node.style.setProperty('background-repeat', 'no-repeat', 'important');
     node.style.setProperty('background-color', 'var(--wardrobe-card-background)', 'important');
     node.classList.remove('image-loading', 'image-failed');
@@ -858,24 +874,62 @@
       button.dataset.category = categoryForItem(item);
       button.dataset.subcategory = itemSubcategory(item);
       const art = document.createElement('div');
-      art.className = `item-art ${itemClass(item)}${isEditorialImageReady(item) ? ' has-uploaded-image' : ''}`;
+      const displayPath = item?.image_path || imageGalleryPaths(item)[0] || '';
+      art.className = `item-art ${itemClass(item)}${displayPath ? ' has-uploaded-image' : ''}`;
       const label = document.createElement('span');
       label.textContent = translate(item.name || 'Вещь');
       art.append(label); button.append(art); grid.append(button);
-      if (isEditorialImageReady(item)) void addImageBackground(art, item.image_path);
+      if (displayPath) void addImageBackground(art, displayPath);
     });
     renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); renderProfile();
+  };
+  const renderItemGallery = async (item, index = state.activeItemImageIndex) => {
+    const art = document.querySelector('.item-detail-art');
+    if (!art) return;
+    const entries = itemImageEntries(item);
+    const safeIndex = entries.length ? Math.min(Math.max(Number(index) || 0, 0), entries.length - 1) : 0;
+    state.activeItemImageIndex = safeIndex;
+    const entry = entries[safeIndex];
+    art.className = `item-detail-art placeholder ${itemClass(item)}${entry ? ' has-uploaded-image' : ''}`;
+    ['background-image', 'background-position', 'background-size', 'background-repeat', 'background-color'].forEach((property) => art.style.removeProperty(property));
+    art.classList.remove('has-image', 'image-loading', 'image-failed');
+    delete art.dataset.imagePath;
+    art.innerHTML = '';
+    const label = document.createElement('span');
+    label.textContent = translate(item?.name || 'Вещь');
+    art.append(label);
+    const controls = byId('item-gallery-controls');
+    if (controls) controls.hidden = entries.length < 2;
+    if (entries.length > 1) art.dataset.action = 'item-gallery-next';
+    else delete art.dataset.action;
+    const caption = byId('item-gallery-caption');
+    if (caption) caption.textContent = entry ? translate(entry.label) : '';
+    const dots = byId('item-gallery-dots');
+    if (dots) {
+      dots.innerHTML = '';
+      entries.forEach((galleryEntry, entryIndex) => {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = `item-gallery-dot${entryIndex === safeIndex ? ' selected' : ''}`;
+        dot.dataset.action = 'item-gallery-select';
+        dot.dataset.galleryIndex = String(entryIndex);
+        dot.setAttribute('aria-label', `${translate(galleryEntry.label)} ${entryIndex + 1}`);
+        dot.setAttribute('aria-current', entryIndex === safeIndex ? 'true' : 'false');
+        dots.append(dot);
+      });
+    }
+    if (entry) {
+      art.setAttribute('aria-label', translate(entry.label));
+      void addImageBackground(art, entry.path, 'contain');
+    } else {
+      art.removeAttribute('aria-label');
+    }
   };
   const renderDetail = async (item) => {
     if (!item) return;
     state.activeItem = item;
-    const art = document.querySelector('.item-detail-art');
-    if (art) {
-      art.className = `item-detail-art placeholder ${itemClass(item)}${isEditorialImageReady(item) ? ' has-uploaded-image' : ''}`;
-      art.innerHTML = '';
-      const label = document.createElement('span'); label.textContent = translate(item.name || 'Вещь'); art.append(label);
-      if (isEditorialImageReady(item)) void addImageBackground(art, item.image_path);
-    }
+    state.activeItemImageIndex = 0;
+    await renderItemGallery(item, 0);
     setText('.screen[data-screen-id="item"] .detail-title', item.name || 'Вещь');
     const matchTitle = document.querySelector('.screen[data-screen-id="item"] .match-note strong');
     if (matchTitle) matchTitle.textContent = translate(itemMatchCopy(item));
@@ -984,6 +1038,7 @@
     renderWardrobeFormSubcategories(category, item ? itemSubcategory(item) : '');
     syncMettiSelectPickers();
     if (form.elements.image) form.elements.image.value = '';
+    if (form.elements.image_back) form.elements.image_back.value = '';
     setFormStatus('wardrobe-form-status'); backdrop.hidden = false; document.body.classList.add('modal-open');
     setTimeout(() => form.elements.name?.focus(), 0);
   };
@@ -998,8 +1053,10 @@
     // new persisted item instead of trying to update the demo id.
     const existing = state.wardrobe.find((item) => item.id === form.dataset.itemId && !String(item.id).startsWith('demo-'));
     const file = form.elements.image.files?.[0];
+    const backFile = form.elements.image_back?.files?.[0];
     if (file && file.size > 5 * 1024 * 1024) return setFormStatus('wardrobe-form-status', 'Файл должен быть меньше 5 МБ.', 'error');
-    setBusy(form, true); setFormStatus('wardrobe-form-status', file ? 'Отправляю фото в Metti…' : 'Сохраняю…');
+    if (backFile && backFile.size > 5 * 1024 * 1024) return setFormStatus('wardrobe-form-status', 'Файл должен быть меньше 5 МБ.', 'error');
+    setBusy(form, true); setFormStatus('wardrobe-form-status', file || backFile ? 'Отправляю фото в Metti…' : 'Сохраняю…');
     try {
       const payload = { name, category, subcategory, color: form.elements.color.value.trim() || null, size: form.elements.size.value.trim() || null, season: form.elements.season.value.trim() || null, brand: form.elements.brand.value.trim() || null, notes: form.elements.notes.value.trim() || null };
       let saved;
@@ -1011,16 +1068,40 @@
         const metadata = existing?.metadata && typeof existing.metadata === 'object' ? { ...existing.metadata } : {};
         metadata.subcategory = subcategory;
         const { subcategory: _subcategory, ...rowPayload } = payload;
-        const directPayload = { ...rowPayload, image_path: existing?.image_path || null, metadata };
+        const directPayload = { ...rowPayload, user_id: existing?.user_id || state.user.id, image_path: existing?.image_path || null, metadata };
         saved = existing ? await supabase.data.updateWardrobeItem(existing.id, directPayload) : await supabase.data.saveWardrobeItem(directPayload);
       }
       if (!saved) throw new Error('Вещь не вернулась из Supabase.');
-      if (file) state.wardrobe = await supabase.data.listWardrobe();
+      if (backFile) {
+        let latest = saved;
+        if (!latest?.metadata || typeof latest.metadata !== 'object') {
+          const latestRows = await supabase.data.listWardrobe().catch(() => []);
+          latest = latestRows.find((item) => item.id === saved.id) || latest;
+        }
+        const previousGalleryPaths = imageGalleryPaths(latest).length ? imageGalleryPaths(latest) : imageGalleryPaths(existing);
+        const backPath = await supabase.data.uploadWardrobeImage(backFile, state.user.id, saved.id);
+        try {
+          const metadataSource = latest?.metadata && typeof latest.metadata === 'object' ? latest.metadata : existing?.metadata;
+          const metadata = metadataSource && typeof metadataSource === 'object' ? { ...metadataSource } : {};
+          metadata.subcategory = subcategory;
+          metadata.image_gallery = [backPath];
+          const updated = await supabase.data.updateWardrobeItem(saved.id, { metadata });
+          if (!updated) throw new Error('Вещь не вернулась из Supabase.');
+          saved = updated;
+        } catch (error) {
+          await supabase.data.removeWardrobeImage(backPath).catch(() => {});
+          throw error;
+        }
+        await Promise.all(previousGalleryPaths.filter((path) => path !== backPath).map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
+      }
+      if (file || backFile) state.wardrobe = await supabase.data.listWardrobe();
       else {
         const index = state.wardrobe.findIndex((item) => item.id === existing?.id);
         if (index >= 0) state.wardrobe[index] = saved; else state.wardrobe.unshift(saved);
       }
-      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile();
+      const refreshDetail = state.activeItem?.id === saved.id;
+      if (refreshDetail) state.activeItem = saved;
+      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile(); if (refreshDetail) await renderDetail(saved);
       const review = file && ['needs_review', 'failed'].includes(String(saved.imageStatus || saved.image_status || ''));
       showToast(review ? 'Вещь сохранена, фото оставлено как оригинал для проверки' : (existing ? 'Вещь обновлена' : 'Вещь добавлена'), review ? 'error' : 'success');
     } catch (error) {
@@ -1035,7 +1116,7 @@
     try {
       if (state.user && supabase?.data && !String(item.id).startsWith('demo-')) {
         await supabase.data.deleteWardrobeItem(item.id);
-        const imagePaths = [...new Set([item.image_path, item.original_image_path, item.processed_image_path].filter(Boolean))];
+        const imagePaths = [...new Set([item.image_path, item.original_image_path, item.processed_image_path, ...imageGalleryPaths(item)].filter(Boolean))];
         await Promise.all(imagePaths.map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
       }
       state.wardrobe = state.wardrobe.filter((value) => value.id !== item.id); state.activeItem = null;
@@ -1192,6 +1273,17 @@
     if (action === 'close-wardrobe-subcategory') { closeWardrobeSubcategorySheet(); return; }
     if (action === 'open-metti-select') { openMettiSelectSheet(byId(event.target.closest('[data-metti-select-target]')?.dataset.mettiSelectTarget)); return; }
     if (action === 'close-metti-select') { closeMettiSelectSheet(); return; }
+    if (action === 'item-gallery-prev' || action === 'item-gallery-next' || action === 'item-gallery-select') {
+      const entries = itemImageEntries(state.activeItem);
+      if (entries.length < 2) return;
+      const current = state.activeItemImageIndex || 0;
+      const next = action === 'item-gallery-select'
+        ? Number(event.target.closest('[data-gallery-index]')?.dataset.galleryIndex)
+        : current + (action === 'item-gallery-next' ? 1 : -1);
+      const normalized = (next + entries.length) % entries.length;
+      void renderItemGallery(state.activeItem, normalized);
+      return;
+    }
     if (action === 'wear') { event.target.textContent = translate('Образ надет ✓'); saveCurrentOutfit(true); }
     if (action === 'other') ask('Другой вариант образа');
     if (action === 'save') saveCurrentOutfit(false);
