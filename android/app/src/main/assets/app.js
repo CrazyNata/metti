@@ -22,6 +22,9 @@
     outfits: [],
     generatedOutfits: [],
     activeItem: null,
+    activeItemFromOutfit: false,
+    activeItemOutfitId: null,
+    activeItemOriginScreen: null,
     currentOutfit: null,
     activeGeneratedOutfitIndex: 0,
     restyleInstruction: 'Сменить обувь',
@@ -828,6 +831,8 @@
   const renderVisualNode = async (node, item, layoutClass, emptyLabel, keepEmpty = false) => {
     if (!node) return;
     node.hidden = !item && !keepEmpty;
+    if (item?.id) node.dataset.itemId = item.id;
+    else delete node.dataset.itemId;
     const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
     const imageReady = Boolean(item?.image_path);
     const visualClasses = ['collage-empty'];
@@ -980,9 +985,12 @@
       art.removeAttribute('aria-label');
     }
   };
-  const renderDetail = async (item) => {
+  const renderDetail = async (item, { fromOutfit = false, originScreen = null } = {}) => {
     if (!item) return;
     state.activeItem = item;
+    state.activeItemFromOutfit = Boolean(fromOutfit);
+    state.activeItemOutfitId = fromOutfit && state.currentOutfit?.id ? String(state.currentOutfit.id) : null;
+    state.activeItemOriginScreen = fromOutfit ? (originScreen || 'result') : null;
     state.activeItemImageIndex = 0;
     await renderItemGallery(item, 0);
     setText('.screen[data-screen-id="item"] .detail-title', item.name || 'Вещь');
@@ -997,6 +1005,13 @@
     if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
     const styleButton = document.querySelector('[data-action="style-item"]');
     if (styleButton) styleButton.textContent = translate('Собрать образ с этой вещью');
+    const deleteButton = document.querySelector('[data-action="delete-item"], [data-action="remove-from-outfit"]');
+    const canRemoveFromOutfit = state.activeItemFromOutfit
+      && outfitItemIds(state.currentOutfit).some((id) => String(id) === String(item.id));
+    if (deleteButton) {
+      deleteButton.dataset.action = canRemoveFromOutfit ? 'remove-from-outfit' : 'delete-item';
+      deleteButton.textContent = translate(canRemoveFromOutfit ? 'Убрать из образа' : 'Удалить вещь');
+    }
   };
   const renderOutfitCards = (outfits) => {
     const grid = document.querySelector('.looks-grid');
@@ -1158,7 +1173,7 @@
       }
       const refreshDetail = state.activeItem?.id === saved.id;
       if (refreshDetail) state.activeItem = saved;
-      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile(); if (refreshDetail) await renderDetail(saved);
+      closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile(); if (refreshDetail) await renderDetail(saved, { fromOutfit: state.activeItemFromOutfit, originScreen: state.activeItemOriginScreen });
       const review = file && ['needs_review', 'failed'].includes(String(saved.imageStatus || saved.image_status || ''));
       showToast(review ? 'Вещь сохранена, фото оставлено как оригинал для проверки' : (existing ? 'Вещь обновлена' : 'Вещь добавлена'), review ? 'error' : 'success');
     } catch (error) {
@@ -1176,9 +1191,72 @@
         const imagePaths = [...new Set([item.image_path, item.original_image_path, item.processed_image_path, ...imageGalleryPaths(item)].filter(Boolean))];
         await Promise.all(imagePaths.map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
       }
-      state.wardrobe = state.wardrobe.filter((value) => value.id !== item.id); state.activeItem = null;
+      state.wardrobe = state.wardrobe.filter((value) => value.id !== item.id); state.activeItem = null; state.activeItemFromOutfit = false; state.activeItemOutfitId = null; state.activeItemOriginScreen = null;
       await renderWardrobe(); await renderHomeCollage(); renderProfile(); go('wardrobe'); showToast('Вещь удалена', 'success');
     } catch (error) { showToast(error?.message || 'Не удалось удалить вещь', 'error'); }
+  };
+  const outfitForActiveItem = () => {
+    if (!state.activeItemFromOutfit || !state.activeItem) return null;
+    const itemId = String(state.activeItem.id);
+    const matchesItem = (outfit) => outfit && outfitItemIds(outfit).some((id) => String(id) === itemId);
+    if (state.activeItemOutfitId) {
+      const outfitId = state.activeItemOutfitId;
+      const current = String(state.currentOutfit?.id || '') === outfitId ? state.currentOutfit : null;
+      return current && matchesItem(current)
+        ? current
+        : state.outfits.find((outfit) => String(outfit.id) === outfitId && matchesItem(outfit)) || null;
+    }
+    return matchesItem(state.currentOutfit) ? state.currentOutfit : null;
+  };
+  const removeActiveItemFromOutfit = async () => {
+    const item = state.activeItem;
+    const outfit = outfitForActiveItem();
+    if (!item || !outfit) return showToast('Вещь уже не входит в этот образ', 'error');
+    const itemName = translate(item.name || 'эту вещь');
+    const removePrompt = state.language === 'en' ? `Remove “${itemName}” from this look?` : `Убрать «${itemName}» из образа?`;
+    if (!window.confirm(removePrompt)) return;
+    const nextItemIds = outfitItemIds(outfit).filter((id) => String(id) !== String(item.id));
+    try {
+      let saved = null;
+      const persisted = state.user && supabase?.data && outfit.id && !String(outfit.id).startsWith('demo-');
+      if (persisted) {
+        saved = await supabase.data.updateOutfit(outfit.id, { item_ids: nextItemIds });
+        if (!saved) throw new Error('Образ не вернулся из Supabase.');
+      }
+      const updated = { ...outfit, ...(saved || {}), item_ids: nextItemIds, itemIds: nextItemIds };
+      const sameCurrentOutfit = state.currentOutfit === outfit
+        || Boolean(state.currentOutfit?.id && outfit.id && String(state.currentOutfit.id) === String(outfit.id));
+      if (sameCurrentOutfit) {
+        state.currentOutfit = updated;
+      }
+      if (outfit.id) state.outfits = state.outfits.map((value) => String(value.id) === String(outfit.id) ? updated : value);
+      if (state.generatedOutfits.length) {
+        state.generatedOutfits = state.generatedOutfits.map((value, index) => index === state.activeGeneratedOutfitIndex
+          ? { ...value, item_ids: nextItemIds, itemIds: nextItemIds }
+          : value);
+      }
+      const destination = state.activeItemOriginScreen || 'result';
+      state.activeItem = null;
+      state.activeItemFromOutfit = false;
+      state.activeItemOutfitId = null;
+      state.activeItemOriginScreen = null;
+      if (destination === 'result') await renderResult(updated);
+      else await renderHomeCollage(updated);
+      renderLooks();
+      go(destination, 'smooth', { pushHistory: false });
+      showToast('Вещь убрана из образа', 'success');
+    } catch (error) {
+      showToast(error?.message || 'Не удалось убрать вещь из образа', 'error');
+    }
+  };
+  const itemDetailContext = (node, item) => {
+    const collage = node?.closest?.('.outfit-collage');
+    const currentOutfit = state.currentOutfit;
+    if (!collage || !currentOutfit || !outfitItemIds(currentOutfit).some((id) => String(id) === String(item?.id))) return {};
+    return {
+      fromOutfit: true,
+      originScreen: collage.closest('.screen')?.dataset.screenId || 'result'
+    };
   };
 
   const openProfileSheet = () => {
@@ -1427,8 +1505,8 @@
     const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
     const languageOption = event.target.closest('[data-language-option]'); if (languageOption) { setLanguage(languageOption.dataset.languageOption); closeLanguageSheet(); return; }
     const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.generatedOutfits = []; state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
-    const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } const isBottomNav = Boolean(screenButton.closest('.bottom-nav')); go(screenButton.dataset.screen, 'smooth', { pushHistory: !isBottomNav, resetHistory: isBottomNav }); return; }
-    const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item); go('item'); } return; }
+    const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item, itemDetailContext(screenButton, item)); go('item'); return; } } const isBottomNav = Boolean(screenButton.closest('.bottom-nav')); go(screenButton.dataset.screen, 'smooth', { pushHistory: !isBottomNav, resetHistory: isBottomNav }); return; }
+    const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item, itemDetailContext(itemButton, item)); go('item'); } return; }
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
     const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); state.wardrobeFilter = tab.dataset.filter || 'all'; state.wardrobeSubcategory = 'all'; renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); return; }
     const action = event.target.closest('[data-action]')?.dataset.action;
@@ -1483,6 +1561,7 @@
       openWardrobeSheet(item);
     }
     if (action === 'edit-item') openWardrobeSheet(state.activeItem);
+    if (action === 'remove-from-outfit') removeActiveItemFromOutfit();
     if (action === 'delete-item') deleteActiveItem();
     if (action === 'close-wardrobe-sheet') closeWardrobeSheet();
     if (action === 'profile-edit') openProfileSheet();
@@ -1514,7 +1593,7 @@
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
   document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) { closeWardrobeSubcategorySheet(); return; } closeVisibleModal(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
-  window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; state.generatedOutfits = []; state.currentOutfit = null; });
+  window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; state.generatedOutfits = []; state.currentOutfit = null; state.activeItem = null; state.activeItemFromOutfit = false; state.activeItemOutfitId = null; state.activeItemOriginScreen = null; });
   renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateGreeting(); updateWeather();
   if (demoMode) seedDemo();
   else if (supabase?.auth) {

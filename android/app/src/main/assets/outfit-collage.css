@@ -1,41 +1,26 @@
 /* Shared by the home card and the stylist result. */
 .outfit-collage {
-  display: grid;
-  grid-template-columns: minmax(0, 1.34fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 112px;
-  gap: 8px;
-  height: 390px;
+  /* The look is presented as one editorial flat-lay frame.  The individual
+     wardrobe photos are layered inside that frame by renderOutfitHero; the
+     slot markup remains available to the app but never becomes a second grid
+     of photo cards. */
+  display: block;
+  height: 430px;
 }
 .outfit-collage .placeholder { min-width: 0; min-height: 0; }
 .outfit-collage .placeholder[hidden] { display: none; }
-.collage-main { grid-column: 1; grid-row: 1 / span 2; }
+.collage-main { width: 100%; height: 100%; }
 .collage-side {
-  display: grid;
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
-  min-width: 0;
-  min-height: 0;
+  display: none !important;
 }
 .collage-bottom {
-  display: grid;
-  grid-column: 1 / span 2;
-  grid-row: 3;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  min-width: 0;
-  min-height: 0;
+  display: none !important;
 }
-.outfit-collage.side-count-1 .collage-side { grid-template-rows: minmax(0, 1fr); }
-.outfit-collage.side-count-0 .collage-side { display: none; }
-.outfit-collage.side-count-0 { grid-template-columns: 1fr; }
-.outfit-collage.side-count-0 .collage-main,
-.outfit-collage.side-count-0 .collage-bottom { grid-column: 1; }
-.outfit-collage.bottom-count-2 .collage-bottom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.outfit-collage.bottom-count-1 .collage-bottom { grid-template-columns: 1fr; }
-.screen .outfit-collage.bottom-count-0 { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
-.outfit-collage.bottom-count-0 .collage-bottom { display: none; }
+.outfit-collage.side-count-1 .collage-side,
+.outfit-collage.side-count-0 .collage-side,
+.outfit-collage.bottom-count-2 .collage-bottom,
+.outfit-collage.bottom-count-1 .collage-bottom,
+.outfit-collage.bottom-count-0 .collage-bottom { display: none !important; }
 
 /* Reserve a separate caption strip so neither photos nor names are cropped. */
 .outfit-collage .placeholder {
@@ -66,8 +51,11 @@
 }
 .screen .outfit-collage .outfit-flatlay {
   padding: 0;
-  background: #eee8df !important;
-  box-shadow: none;
+  border-radius: 22px;
+  /* Match the neutral background of the wardrobe photos so their edges read
+     as one photograph instead of separate rectangular tiles. */
+  background: #f8f7f5 !important;
+  box-shadow: inset 0 0 0 1px #fff9, 0 12px 26px #69564b1c;
   isolation: isolate;
 }
 .screen .outfit-collage .outfit-flatlay > span {
@@ -85,15 +73,15 @@
   mix-blend-mode: multiply;
   filter: brightness(1.035);
 }
-.flatlay-hero { left: 15%; top: 1%; width: 72%; height: 44%; }
-.flatlay-with-outer .flatlay-hero { left: 0; top: 0; width: 66%; height: 54%; transform: rotate(-7deg); }
-.flatlay-top { left: 47%; top: 9%; width: 51%; height: 34%; transform: rotate(6deg); }
-.flatlay-bottom { left: 37%; top: 40%; width: 62%; height: 58%; transform: rotate(6deg); }
-.flatlay-shoes { left: 1%; top: 66%; width: 43%; height: 32%; transform: rotate(-9deg); }
-.flatlay-bag { left: 0; top: 40%; width: 36%; height: 28%; transform: rotate(-6deg); }
-.flatlay-accent { left: 68%; top: 0; width: 29%; height: 15%; transform: rotate(9deg); }
+.flatlay-hero { left: 18%; top: 1%; width: 64%; height: 39%; }
+.flatlay-with-outer .flatlay-hero { left: 1%; top: 0; width: 58%; height: 53%; transform: rotate(-4deg); z-index: 1; }
+.flatlay-top { left: 49%; top: 8%; width: 46%; height: 35%; transform: rotate(2deg); z-index: 2; }
+.flatlay-bottom { left: 35%; top: 39%; width: 61%; height: 58%; transform: rotate(2deg); z-index: 1; }
+.flatlay-shoes { left: 2%; top: 67%; width: 38%; height: 31%; transform: rotate(-4deg); z-index: 3; }
+.flatlay-bag { left: 4%; top: 44%; width: 27%; height: 23%; transform: rotate(-3deg); z-index: 2; }
+.flatlay-accent { left: 72%; top: 1%; width: 24%; height: 13%; transform: rotate(3deg); z-index: 4; }
 .flatlay-with-dress .flatlay-hero { left: 23%; top: 3%; width: 70%; height: 84%; }
-.flatlay-with-dress .flatlay-shoes { left: 0; top: 69%; }
+.flatlay-with-dress .flatlay-shoes { left: 31%; top: 74%; }
 .flatlay-simple,
 .flatlay-has-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .flatlay-simple .flatlay-piece,
@@ -101,3 +89,7 @@
 .flatlay-simple .flatlay-piece:only-child { grid-column: 1 / -1; }
 .flatlay-missing,
 .flatlay-piece.image-failed { display: grid; place-items: center; padding: 5px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font: 10px/1.3 var(--sans); }
+
+@media (max-width: 360px) {
+  .outfit-collage { height: 370px; }
+}
