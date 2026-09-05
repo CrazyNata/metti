@@ -1,1 +1,103 @@
-.outfit-collage{display:grid;grid-template-columns:minmax(0,1.34fr) minmax(0,1fr);grid-template-rows:minmax(118px,1fr) minmax(118px,1fr) 76px;gap:7px;height:365px}.outfit-collage .placeholder{min-width:0;min-height:0}.outfit-collage .placeholder[hidden]{display:none}.collage-main{grid-column:1;grid-row:1 / span 2}.collage-side{display:grid;grid-column:2;grid-row:1 / span 2;grid-template-rows:1fr 1fr;gap:7px;min-width:0;min-height:0}.collage-bottom{display:grid;grid-column:1 / span 2;grid-row:3;grid-template-columns:repeat(3,1fr);gap:7px;min-width:0;min-height:0}.outfit-collage.side-count-1 .collage-side{grid-template-rows:1fr}.outfit-collage.side-count-0 .collage-side{display:none}.outfit-collage.side-count-0{grid-template-columns:1fr}.outfit-collage.side-count-0 .collage-main,.outfit-collage.side-count-0 .collage-bottom{grid-column:1}.outfit-collage.bottom-count-2 .collage-bottom{grid-template-columns:repeat(2,1fr)}.outfit-collage.bottom-count-1 .collage-bottom{grid-template-columns:1fr}.outfit-collage.bottom-count-0{grid-template-rows:minmax(118px,1fr) minmax(118px,1fr)}.outfit-collage.bottom-count-0 .collage-bottom{display:none}.collage-main span,.collage-side span,.collage-bottom span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Shared by the home card and the stylist result. */
+.outfit-collage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.34fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 112px;
+  gap: 8px;
+  height: 390px;
+}
+.outfit-collage .placeholder { min-width: 0; min-height: 0; }
+.outfit-collage .placeholder[hidden] { display: none; }
+.collage-main { grid-column: 1; grid-row: 1 / span 2; }
+.collage-side {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+.collage-bottom {
+  display: grid;
+  grid-column: 1 / span 2;
+  grid-row: 3;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+.outfit-collage.side-count-1 .collage-side { grid-template-rows: minmax(0, 1fr); }
+.outfit-collage.side-count-0 .collage-side { display: none; }
+.outfit-collage.side-count-0 { grid-template-columns: 1fr; }
+.outfit-collage.side-count-0 .collage-main,
+.outfit-collage.side-count-0 .collage-bottom { grid-column: 1; }
+.outfit-collage.bottom-count-2 .collage-bottom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.outfit-collage.bottom-count-1 .collage-bottom { grid-template-columns: 1fr; }
+.screen .outfit-collage.bottom-count-0 { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.outfit-collage.bottom-count-0 .collage-bottom { display: none; }
+
+/* Reserve a separate caption strip so neither photos nor names are cropped. */
+.outfit-collage .placeholder {
+  padding: 8px 8px 34px;
+  border-radius: 13px;
+  background-origin: content-box;
+  background-clip: border-box;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+  background-position: center !important;
+  background-color: #f8f5f0 !important;
+
+}
+.outfit-collage .placeholder::before,
+.outfit-collage .placeholder::after { display: none !important; }
+.screen .outfit-collage .placeholder > span {
+  left: 9px;
+  right: 9px;
+  bottom: 7px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: #796e60;
+  font: 10px/1.25 var(--sans);
+}
+.screen .outfit-collage .outfit-flatlay {
+  padding: 0;
+  background: #eee8df !important;
+  box-shadow: none;
+  isolation: isolate;
+}
+.screen .outfit-collage .outfit-flatlay > span {
+  color: #716454;
+  font-family: var(--mono);
+  font-size: 9px;
+}
+.flatlay-board { position: absolute; inset: 6px 5px 28px; }
+.flatlay-piece {
+  position: absolute;
+  min-width: 0;
+  min-height: 0;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  mix-blend-mode: multiply;
+  filter: brightness(1.035);
+}
+.flatlay-hero { left: 15%; top: 1%; width: 72%; height: 44%; }
+.flatlay-with-outer .flatlay-hero { left: 0; top: 0; width: 66%; height: 54%; transform: rotate(-7deg); }
+.flatlay-top { left: 47%; top: 9%; width: 51%; height: 34%; transform: rotate(6deg); }
+.flatlay-bottom { left: 37%; top: 40%; width: 62%; height: 58%; transform: rotate(6deg); }
+.flatlay-shoes { left: 1%; top: 66%; width: 43%; height: 32%; transform: rotate(-9deg); }
+.flatlay-bag { left: 0; top: 40%; width: 36%; height: 28%; transform: rotate(-6deg); }
+.flatlay-accent { left: 68%; top: 0; width: 29%; height: 15%; transform: rotate(9deg); }
+.flatlay-with-dress .flatlay-hero { left: 23%; top: 3%; width: 70%; height: 84%; }
+.flatlay-with-dress .flatlay-shoes { left: 0; top: 69%; }
+.flatlay-simple,
+.flatlay-has-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.flatlay-simple .flatlay-piece,
+.flatlay-has-extras .flatlay-piece { position: relative; inset: auto; width: auto; height: auto; transform: none; }
+.flatlay-simple .flatlay-piece:only-child { grid-column: 1 / -1; }
+.flatlay-missing,
+.flatlay-piece.image-failed { display: grid; place-items: center; padding: 5px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font: 10px/1.3 var(--sans); }

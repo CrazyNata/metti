@@ -20,8 +20,11 @@
     wardrobeFilter: 'all',
     wardrobeSubcategory: 'all',
     outfits: [],
+    generatedOutfits: [],
     activeItem: null,
     currentOutfit: null,
+    activeGeneratedOutfitIndex: 0,
+    restyleInstruction: 'Сменить обувь',
     activeItemImageIndex: 0,
     stylistPhoto: null,
     activeLooksTab: 'recommended',
@@ -188,6 +191,13 @@
     if (value.includes('серьг') || value.includes('кольц') || value.includes('брас') || value.includes('цеп') || value.includes('украш')) return 'jewelry';
     return 'headwear';
   };
+  const outerwearSubcategories = new Set(['outerwear', 'blazer', 'jacket', 'coat', 'trench', 'parka', 'bomber', 'vest', 'cardigan']);
+  const isOuterwearItem = (item) => {
+    const category = String(item?.category || '').trim().toLowerCase();
+    return category === 'outer' || outerwearSubcategories.has(itemSubcategory(item));
+  };
+  const isDressItem = (item) => itemSubcategory(item) === 'dress';
+  const isBaseTopItem = (item) => categoryForItem(item) === 'top' && !isOuterwearItem(item) && !isDressItem(item);
   const demoItems = [
     { id: 'demo-jacket', name: 'Бежевый верхний слой', category: 'top', subcategory: 'blazer', color: 'Бежевый', season: 'Осень / Весна', photoClass: 'photo-jacket' },
     { id: 'demo-shirt', name: 'Белый топ', category: 'top', subcategory: 'tshirt', color: 'Молочный', season: 'Круглый год', photoClass: 'photo-shirt' },
@@ -209,7 +219,7 @@
     if (subcategory === 'headwear') return value.includes('плат') || value.includes('scarf') ? 'photo-scarf' : 'item-neutral';
     if (subcategory === 'skirt') return 'photo-skirt';
     if (subcategory === 'sneakers') return 'photo-sneakers';
-    if (category === 'top' && ['blazer', 'outerwear'].includes(subcategory)) return 'item-jacket photo-jacket';
+    if (category === 'top' && isOuterwearItem(item)) return 'item-jacket photo-jacket';
     if (category === 'bottom' && subcategory === 'jeans') return 'item-jeans photo-jeans';
     if (category === 'shoes' && (value.includes('лофер') || value.includes('loafer'))) return 'item-loafers photo-loafers';
     if (category === 'top' && ['tshirt', 'shirt'].includes(subcategory)) return 'item-shirt photo-shirt';
@@ -224,8 +234,8 @@
       if (!item) return null;
       used.add(String(item.id)); selected.push(item); return item;
     };
-    const hero = take((item) => ['outerwear', 'blazer'].includes(itemSubcategory(item))) || take((item) => itemSubcategory(item) === 'dress') || take((item) => categoryForItem(item) === 'top');
-    if (hero && itemSubcategory(hero) !== 'dress') take((item) => categoryForItem(item) === 'top' && !['outerwear', 'blazer', 'dress'].includes(itemSubcategory(item)));
+    const hero = take(isOuterwearItem) || take(isDressItem) || take(isBaseTopItem);
+    if (hero && !isDressItem(hero)) take(isBaseTopItem);
     take((item) => categoryForItem(item) === 'bottom');
     take((item) => categoryForItem(item) === 'shoes');
     take((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) === 'bag');
@@ -249,8 +259,8 @@
       if (!item) return null;
       used.add(String(item.id)); return item;
     };
-    const hero = take((item) => ['outerwear', 'blazer'].includes(itemSubcategory(item))) || take((item) => itemSubcategory(item) === 'dress') || take((item) => categoryForItem(item) === 'top') || take((item) => categoryForItem(item) === 'bottom') || take((item) => categoryForItem(item) === 'shoes') || take((item) => categoryForItem(item) === 'accessory');
-    const top = itemSubcategory(hero) === 'dress' ? null : take((item) => categoryForItem(item) === 'top' && !['outerwear', 'blazer', 'dress'].includes(itemSubcategory(item)));
+    const hero = take(isOuterwearItem) || take(isDressItem) || take(isBaseTopItem) || take((item) => categoryForItem(item) === 'bottom') || take((item) => categoryForItem(item) === 'shoes') || take((item) => categoryForItem(item) === 'accessory');
+    const top = isDressItem(hero) ? null : (take(isBaseTopItem) || (isBaseTopItem(hero) ? hero : null));
     const bottom = take((item) => categoryForItem(item) === 'bottom');
     const shoes = take((item) => categoryForItem(item) === 'shoes');
     const bag = take((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) === 'bag');
@@ -819,31 +829,65 @@
     if (!node) return;
     node.hidden = !item && !keepEmpty;
     const classes = String(layoutClass || '').split(/\s+/).filter(Boolean);
-    const canUseDemoArt = item && String(item.id).startsWith('demo-');
-    const useDemoHeroPhoto = canUseDemoArt && item.id === 'demo-jacket' && node.dataset.collageSlot === 'hero';
     const imageReady = Boolean(item?.image_path);
-    const visualClasses = item && (imageReady || canUseDemoArt) ? (useDemoHeroPhoto ? ['photo-outfit'] : itemClass(item).split(/\s+/)) : ['collage-empty'];
+    const visualClasses = ['collage-empty'];
     if (imageReady) visualClasses.push('has-uploaded-image');
     node.className = [...classes, 'placeholder', ...visualClasses].join(' ');
     ['background-image', 'background-position', 'background-size', 'background-repeat', 'background-color'].forEach((property) => node.style.removeProperty(property));
     node.classList.remove('has-image');
+    delete node.dataset.imagePath;
     node.innerHTML = '';
     const label = document.createElement('span');
     label.textContent = translate(item?.name || emptyLabel || 'Вещь');
     node.append(label);
     node.setAttribute('aria-label', label.textContent);
-    if (imageReady) void addImageBackground(node, item.image_path);
+    if (imageReady) await addImageBackground(node, item.image_path, 'contain');
   };
-  const renderHomeCollage = async (outfit = state.currentOutfit) => {
-    const collage = document.querySelector('.screen[data-screen-id="home"] .outfit-collage');
+  const renderOutfitHero = async (node, items, slots) => {
+    if (!node) return;
+    node.className = 'collage-main placeholder outfit-flatlay';
+    node.removeAttribute('style');
+    delete node.dataset.imagePath;
+    node.replaceChildren();
+    node.hidden = false;
+    const label = document.createElement('span');
+    label.textContent = translate(items.length ? 'Полный образ' : 'Здесь будет ваш образ');
+    node.setAttribute('aria-label', translate('Полный образ'));
+    const board = document.createElement('div');
+    board.className = 'flatlay-board';
+    node.append(board, label);
+    const uniqueItems = [...new Map(items.map((item) => [String(item.id), item])).values()];
+    // Every selected garment belongs in the complete look, including extra accessories.
+    const roles = ['hero', 'top', 'bottom', 'shoes', 'bag', 'accent'];
+    const occupied = new Set();
+    board.classList.toggle('flatlay-simple', uniqueItems.length < 3);
+    const jobs = uniqueItems.map((item) => {
+      let role = roles.find((key) => slots[key]?.id === item.id && !occupied.has(key));
+      if (role) occupied.add(role);
+      const piece = document.createElement('div');
+      piece.className = `flatlay-piece flatlay-${role || 'extra'}`;
+      piece.dataset.itemId = item.id;
+      piece.setAttribute('role', 'img');
+      piece.setAttribute('aria-label', item.name || translate('Вещь'));
+      piece.title = item.name || translate('Вещь');
+      board.append(piece);
+      if (item.image_path) return addImageBackground(piece, item.image_path, 'contain').then((ready) => {
+        if (!ready && piece.isConnected) piece.textContent = item.name || translate('Вещь');
+      });
+      piece.classList.add('flatlay-missing'); piece.textContent = item.name || translate('Вещь');
+      return Promise.resolve();
+    });
+    board.classList.toggle('flatlay-with-outer', Boolean(slots.hero && isOuterwearItem(slots.hero)));
+    board.classList.toggle('flatlay-with-dress', Boolean(slots.hero && isDressItem(slots.hero)));
+    board.classList.toggle('flatlay-has-extras', uniqueItems.length > occupied.size);
+    await Promise.all(jobs);
+  };
+  const renderOutfitCollage = async (collage, outfit, keepEmpty = false) => {
     if (!collage) return;
     const selectedItems = selectedOutfitItems(outfit);
     const hasOutfit = selectedItems.length > 0;
-    document.querySelector('[data-action="wear"]')?.toggleAttribute('hidden', !hasOutfit);
-    document.querySelector('[data-action="other"]')?.toggleAttribute('hidden', !hasOutfit);
     const slots = collageSlots(selectedItems);
     const definitions = [
-      ['hero', '.collage-main', 'collage-main', 'Главная вещь'],
       ['top', '[data-collage-slot="top"]', 'pink', 'Верх'],
       ['bottom', '[data-collage-slot="bottom"]', '', 'Низ'],
       ['shoes', '[data-collage-slot="shoes"]', '', 'Обувь'],
@@ -854,8 +898,19 @@
     const bottomCount = [slots.shoes, slots.bag, slots.accent].filter(Boolean).length;
     collage.classList.remove('side-count-0', 'side-count-1', 'side-count-2', 'bottom-count-0', 'bottom-count-1', 'bottom-count-2', 'bottom-count-3');
     collage.classList.add(`side-count-${sideCount}`, `bottom-count-${bottomCount}`);
-    await Promise.all(definitions.map(([key, selector, layoutClass, emptyLabel]) => renderVisualNode(collage.querySelector(selector), slots[key], layoutClass, emptyLabel, !hasOutfit)));
+    await Promise.all([
+      renderOutfitHero(collage.querySelector('.collage-main'), selectedItems, slots),
+      ...definitions.map(([key, selector, layoutClass, emptyLabel]) => renderVisualNode(collage.querySelector(selector), slots[key], layoutClass, emptyLabel, !hasOutfit && keepEmpty))
+    ]);
     collage.setAttribute('aria-label', translate('Коллаж образа из вашего гардероба'));
+  };
+  const renderHomeCollage = async (outfit = state.currentOutfit) => {
+    const collage = document.querySelector('.screen[data-screen-id="home"] .outfit-collage');
+    if (!collage) return;
+    const hasOutfit = selectedOutfitItems(outfit).length > 0;
+    document.querySelector('[data-action="wear"]')?.toggleAttribute('hidden', !hasOutfit);
+    document.querySelector('[data-action="other"]')?.toggleAttribute('hidden', !hasOutfit);
+    await renderOutfitCollage(collage, outfit, true);
   };
   const renderWardrobe = async () => {
     const grid = byId('wardrobe-grid');
@@ -940,6 +995,8 @@
     }
     const addButton = document.querySelector('[data-action="add-item"]');
     if (addButton) addButton.textContent = translate(item.id && !String(item.id).startsWith('demo-') ? 'В гардеробе ✓' : 'Добавить в гардероб');
+    const styleButton = document.querySelector('[data-action="style-item"]');
+    if (styleButton) styleButton.textContent = translate('Собрать образ с этой вещью');
   };
   const renderOutfitCards = (outfits) => {
     const grid = document.querySelector('.looks-grid');
@@ -1221,38 +1278,144 @@
 
   const addMessage = (text, role) => { const log = byId('chat-log'); if (!log) return null; const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = translate(text); log.append(node); log.scrollTop = log.scrollHeight; return node; };
   const setThinking = (visible) => { const node = document.querySelector('.chat-log .thinking'); if (node) node.hidden = !visible; };
-  const fallbackOutfit = (prompt) => ({ title: prompt || 'Образ на сегодня', note: 'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.', item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id), temperature_c: state.weather.temperature_c, weather_code: state.weather.weather_code, message: 'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.' });
+  const fallbackOutfit = (prompt, options = {}) => {
+    const currentItemIds = Array.isArray(options.currentItemIds) ? options.currentItemIds : [];
+    const selectedItemId = options.selectedItemId ? String(options.selectedItemId) : '';
+    const itemIds = options.mode === 'restyle' && currentItemIds.length
+      ? [...new Set(currentItemIds.map(String))]
+      : [...new Set([selectedItemId, ...pickOutfitItems(state.wardrobe).map((item) => item.id)].filter(Boolean))].slice(0, 8);
+    return { title: prompt || 'Образ на сегодня', note: 'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.', item_ids: itemIds, temperature_c: state.weather.temperature_c, weather_code: state.weather.weather_code, message: 'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.' };
+  };
+  const normalizeStylistCandidate = (candidate, result, prompt) => {
+    const ids = outfitItemIds(candidate);
+    if (!ids.length) return null;
+    const metadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : {};
+    return {
+      ...result,
+      ...candidate,
+      title: candidate.name || candidate.title || result?.title || 'Образ на сегодня',
+      note: candidate.explanation || candidate.note || result?.note || 'Собрала этот образ с учётом погоды и вашего гардероба.',
+      itemIds: ids,
+      item_ids: ids,
+      prompt,
+      message: result?.message || 'Готово — образ собран из вашего гардероба.',
+      temperature_c: result?.temperature_c ?? state.weather.temperature_c,
+      weather_code: result?.weather_code ?? state.weather.weather_code,
+      metadata: {
+        ...metadata,
+        stylist_source: result?.source || 'ai',
+        stylist_provider: result?.provider || null,
+        prompt_version: result?.promptVersion || null,
+        stylist_score: candidate.score ?? null,
+        creativity: candidate.creativity || null,
+        style: candidate.style || [],
+        occasion: candidate.occasion || [],
+      },
+    };
+  };
+  const creativityLabel = (outfit) => {
+    const value = String(outfit?.creativity || outfit?.metadata?.creativity || '').toLowerCase();
+    const labels = state.language === 'en'
+      ? { safe: 'Safe', balanced: 'Balanced', bold: 'Bold' }
+      : { safe: 'Спокойный', balanced: 'Сбалансированный', bold: 'Смелый' };
+    return labels[value] ? `${state.language === 'en' ? 'Styling' : 'Стилизация'} · ${labels[value]}` : '';
+  };
+  const adoptStylistResult = (result, prompt) => {
+    const candidates = Array.isArray(result?.outfits) ? result.outfits : [];
+    state.generatedOutfits = candidates.map((candidate) => normalizeStylistCandidate(candidate, result, prompt)).filter(Boolean);
+    state.activeGeneratedOutfitIndex = 0;
+    return state.generatedOutfits[0] || (Array.isArray(result?.item_ids) && result.item_ids.length ? { ...result, prompt } : null);
+  };
+  const renderResultVariants = (outfit) => {
+    const container = byId('result-variants');
+    if (!container) return;
+    const variants = state.generatedOutfits.length > 1 ? state.generatedOutfits : [];
+    container.hidden = variants.length < 2;
+    container.innerHTML = '';
+    variants.forEach((variant, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.action = 'choose-outfit-variant';
+      button.dataset.variantIndex = String(index);
+      button.className = index === state.activeGeneratedOutfitIndex || variant.title === outfit?.title ? 'selected' : '';
+      button.textContent = `${index + 1}. ${variant.title || `Вариант ${index + 1}`}`;
+      container.append(button);
+    });
+  };
   const renderResult = async (outfit = state.currentOutfit) => {
     if (!outfit) return;
+    renderResultVariants(outfit);
+    const creativityNode = byId('result-creativity');
+    if (creativityNode) {
+      const label = creativityLabel(outfit);
+      creativityNode.textContent = label;
+      creativityNode.hidden = !label;
+    }
     setText('.screen[data-screen-id="result"] h1', outfit.title || 'Образ на сегодня'); setText('.screen[data-screen-id="result"] .result-note p', `«${outfit.note || 'Собрала этот образ с учётом погоды и вашего гардероба.'}»`);
-    const slots = collageSlots(selectedOutfitItems(outfit));
-    const hero = document.querySelector('.result-hero');
-    if (hero) await renderVisualNode(hero, slots.hero, 'result-hero tall', 'Главная вещь');
-    const grid = document.querySelector('.result-grid'); if (!grid) return;
-    grid.innerHTML = '';
-    const gridItems = [slots.top, slots.bottom, slots.shoes, slots.bag, slots.accent].filter(Boolean);
-    await Promise.all(gridItems.map(async (item) => { const node = document.createElement('div'); grid.append(node); await renderVisualNode(node, item, '', 'Вещь'); }));
+    await renderOutfitCollage(document.querySelector('.screen[data-screen-id="result"] .result-outfit-collage'), outfit);
     await renderHomeCollage(outfit);
   };
   const saveCurrentOutfit = async (worn = false) => {
     if (!state.currentOutfit) state.currentOutfit = fallbackOutfit('Образ на сегодня');
-    if (!state.user || !supabase?.data) return showToast('Войдите, чтобы сохранять образы', 'error');
-    const base = { user_id: state.user.id, title: state.currentOutfit.title || 'Образ на сегодня', note: state.currentOutfit.note || null, temperature_c: state.currentOutfit.temperature_c ?? state.weather.temperature_c, weather_code: state.currentOutfit.weather_code ?? state.weather.weather_code, item_ids: state.currentOutfit.item_ids || [], prompt: state.currentOutfit.prompt || null, is_worn: worn, worn_at: worn ? new Date().toISOString() : null, metadata: state.currentOutfit.metadata || {} };
+    if (!state.user || !supabase?.data) { showToast('Войдите, чтобы сохранять образы', 'error'); return null; }
+    const base = { user_id: state.user.id, title: state.currentOutfit.title || 'Образ на сегодня', note: state.currentOutfit.note || null, temperature_c: state.currentOutfit.temperature_c ?? state.weather.temperature_c, weather_code: state.currentOutfit.weather_code ?? state.weather.weather_code, item_ids: outfitItemIds(state.currentOutfit), prompt: state.currentOutfit.prompt || null, is_worn: worn, worn_at: worn ? new Date().toISOString() : null, metadata: { ...(state.currentOutfit.metadata || {}), creativity: state.currentOutfit.creativity || state.currentOutfit.metadata?.creativity || null } };
     try {
       const saved = state.currentOutfit.id ? await supabase.data.updateOutfit(state.currentOutfit.id, { is_worn: worn, worn_at: base.worn_at }) : await supabase.data.saveOutfit(base);
-      state.currentOutfit = { ...state.currentOutfit, ...saved }; const existing = state.outfits.findIndex((item) => item.id === saved?.id); if (existing >= 0) state.outfits[existing] = state.currentOutfit; else if (saved) state.outfits.unshift(state.currentOutfit); renderLooks(); showToast(worn ? 'Образ отмечен как надетый' : 'Образ сохранён', 'success');
-    } catch (error) { showToast(error?.message || 'Не удалось сохранить образ', 'error'); }
+      state.currentOutfit = { ...state.currentOutfit, ...saved, item_ids: outfitItemIds(saved || state.currentOutfit) }; const existing = state.outfits.findIndex((item) => item.id === saved?.id); if (existing >= 0) state.outfits[existing] = state.currentOutfit; else if (saved) state.outfits.unshift(state.currentOutfit); renderLooks(); showToast(worn ? 'Образ отмечен как надетый' : 'Образ сохранён', 'success'); return state.currentOutfit;
+    } catch (error) { showToast(error?.message || 'Не удалось сохранить образ', 'error'); return null; }
   };
-  const ask = async (prompt) => {
+  const rateCurrentOutfit = async (reaction) => {
+    if (!state.user || !supabase?.data?.rateOutfit) return showToast('Войдите, чтобы сохранять обратную связь', 'error');
+    if (!state.currentOutfit) return showToast('Сначала соберите образ', 'error');
+    if (!state.currentOutfit.id) {
+      const saved = await saveCurrentOutfit(false);
+      if (!saved?.id) return;
+    }
+    try {
+      await supabase.data.rateOutfit(state.currentOutfit.id, reaction);
+      document.querySelectorAll('.result-feedback [data-action]').forEach((button) => button.classList.toggle('selected', button.dataset.action === `rate-${reaction}`));
+      showToast(reaction === 'like' ? 'Запомнила — этот образ вам понравился' : 'Запомнила — учту это в следующих образах', 'success');
+    } catch (error) { showToast(error?.message || 'Не удалось сохранить реакцию', 'error'); }
+  };
+  const lockedIdsForRestyle = (itemIds, instruction) => {
+    const value = String(instruction || '').toLocaleLowerCase();
+    const target = value.includes('обув') || value.includes('shoe') ? 'shoes'
+      : value.includes('сум') || value.includes('bag') ? 'bag'
+      : value.includes('низ') || value.includes('bottom') ? 'bottom'
+      : value.includes('верх') || value.includes('top') ? 'top'
+      : null;
+    if (!target) return [];
+    return itemIds.filter((id) => {
+      const item = state.wardrobe.find((value) => String(value.id) === String(id));
+      if (!item) return false;
+      const category = categoryForItem(item);
+      const subcategory = itemSubcategory(item);
+      return target === 'bag' ? subcategory !== 'bag' : category !== target;
+    });
+  };
+  const restyleCurrentOutfit = async () => {
+    const currentItemIds = outfitItemIds(state.currentOutfit);
+    if (!currentItemIds.length) return showToast('Сначала соберите образ', 'error');
+    const instruction = state.restyleInstruction || 'Сменить обувь';
+    const lockedItemIds = lockedIdsForRestyle(currentItemIds, instruction);
+    byId('edit-sheet').hidden = true;
+    await ask(`Измени образ: ${instruction}`, { mode: 'restyle', currentItemIds, lockedItemIds, instruction });
+  };
+  const ask = async (prompt, options = {}) => {
     const clean = String(prompt || '').trim(); if (!clean) return;
     const promptForStylist = state.language === 'en' ? translate(clean) : clean;
     go('chat'); addMessage(promptForStylist, 'user'); setThinking(true); const requestId = ++state.requestNumber; showToast('Metti собирает образ…');
     try {
       let result;
-      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, wardrobe: state.wardrobe.map((item) => ({ id: item.id, name: item.name, category: categoryForItem(item), subcategory: itemSubcategory(item), color: item.color, size: item.size, season: item.season, brand: item.brand, notes: item.notes })), profile: state.profile });
-      else result = fallbackOutfit(promptForStylist);
+      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, mode: options.mode || 'today', selectedItemId: options.selectedItemId, currentItemIds: options.currentItemIds, lockedItemIds: options.lockedItemIds, instruction: options.instruction });
+      else result = fallbackOutfit(promptForStylist, options);
       if (requestId !== state.requestNumber) return;
-      state.currentOutfit = { ...result, prompt: promptForStylist }; setThinking(false); addMessage(result.message || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
+      const outfit = result?.outfits ? adoptStylistResult(result, promptForStylist) : result;
+      if (!outfit || !outfitItemIds(outfit).length) {
+        state.generatedOutfits = [];
+        setThinking(false); addMessage(result?.message || 'В гардеробе пока не нашлось подходящего сочетания.', 'assistant'); showToast('Не нашла подходящий образ', 'error'); return;
+      }
+      state.currentOutfit = { ...outfit, prompt: promptForStylist }; setThinking(false); addMessage(result?.message || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
     } catch (error) {
       setThinking(false); addMessage('Не получилось связаться со стилистом. Проверьте подключение и попробуйте ещё раз.', 'assistant'); showToast(error?.message || 'AI-стилист временно недоступен', 'error');
     }
@@ -1263,7 +1426,7 @@
     const subcategoryOption = event.target.closest('[data-subcategory-option]'); if (subcategoryOption) { chooseWardrobeSubcategory(subcategoryOption.dataset.subcategoryOption); return; }
     const looksTab = event.target.closest('[data-look-tab]'); if (looksTab) { state.activeLooksTab = looksTab.dataset.lookTab || 'recommended'; renderLooks(); return; }
     const languageOption = event.target.closest('[data-language-option]'); if (languageOption) { setLanguage(languageOption.dataset.languageOption); closeLanguageSheet(); return; }
-    const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
+    const outfitButton = event.target.closest('[data-outfit-id]'); if (outfitButton) { const outfit = state.outfits.find((value) => value.id === outfitButton.dataset.outfitId); if (outfit) { state.generatedOutfits = []; state.currentOutfit = outfit; renderResult(outfit); go('result'); } return; }
     const screenButton = event.target.closest('[data-screen]'); if (screenButton) { const id = screenButton.dataset.itemId || screenButton.closest('[data-item-id]')?.dataset.itemId; if (id) { const item = state.wardrobe.find((value) => value.id === id); if (item) { renderDetail(item); go('item'); return; } } const isBottomNav = Boolean(screenButton.closest('.bottom-nav')); go(screenButton.dataset.screen, 'smooth', { pushHistory: !isBottomNav, resetHistory: isBottomNav }); return; }
     const itemButton = event.target.closest('[data-item-id]'); if (itemButton) { const item = state.wardrobe.find((value) => value.id === itemButton.dataset.itemId); if (item) { renderDetail(item); go('item'); } return; }
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
@@ -1287,9 +1450,31 @@
     if (action === 'wear') { event.target.textContent = translate('Образ надет ✓'); saveCurrentOutfit(true); }
     if (action === 'other') ask('Другой вариант образа');
     if (action === 'save') saveCurrentOutfit(false);
+    if (action === 'rate-like') rateCurrentOutfit('like');
+    if (action === 'rate-dislike') rateCurrentOutfit('dislike');
+    if (action === 'choose-outfit-variant') {
+      const index = Number(event.target.closest('[data-variant-index]')?.dataset.variantIndex);
+      const variant = Number.isInteger(index) ? state.generatedOutfits[index] : null;
+      if (!variant) return;
+      state.activeGeneratedOutfitIndex = index;
+      state.currentOutfit = { ...variant, prompt: state.currentOutfit?.prompt || variant.prompt };
+      void renderResult(state.currentOutfit);
+      return;
+    }
     if (action === 'edit') byId('edit-sheet').hidden = false;
     if (action === 'close-sheet') byId('edit-sheet').hidden = true;
-    if (action === 'apply-edit') { byId('edit-sheet').hidden = true; showToast('Новый вариант готов'); }
+    if (action === 'choose-restyle') {
+      const button = event.target.closest('[data-restyle-instruction]');
+      if (!button) return;
+      state.restyleInstruction = button.dataset.restyleInstruction || 'Сменить обувь';
+      byId('edit-sheet')?.querySelectorAll('[data-restyle-instruction]').forEach((option) => option.classList.toggle('selected', option === button));
+      return;
+    }
+    if (action === 'apply-edit') restyleCurrentOutfit();
+    if (action === 'style-item') {
+      const item = state.activeItem;
+      if (item?.id) ask(`Собери образ с вещью «${item.name || 'этой вещью'}»`, { mode: 'selected_item', selectedItemId: String(item.id) });
+    }
     if (action === 'open-add-item') openWardrobeSheet();
     if (action === 'add-item') {
       const item = state.activeItem;
@@ -1329,7 +1514,7 @@
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
   document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) { closeWardrobeSubcategorySheet(); return; } closeVisibleModal(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
-  window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; });
+  window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; state.generatedOutfits = []; state.currentOutfit = null; });
   renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateGreeting(); updateWeather();
   if (demoMode) seedDemo();
   else if (supabase?.auth) {

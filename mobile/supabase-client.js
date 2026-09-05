@@ -361,7 +361,8 @@
       const result = await request('/rest/v1/profiles?on_conflict=id', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify(profile) });
       return Array.isArray(result) ? result[0] : result;
     },
-    invokeStylist: (payload) => request('/functions/v1/metti-stylist', { method: 'POST', headers: { 'x-client-info': 'metti-web' }, body: JSON.stringify(payload) })
+    invokeStylist: (payload) => request('/functions/v1/metti-stylist', { method: 'POST', headers: { 'x-client-info': 'metti-web' }, body: JSON.stringify(payload) }),
+    rateOutfit: (outfitId, reaction, reason = null) => request('/functions/v1/metti-stylist', { method: 'POST', headers: { 'x-client-info': 'metti-web' }, body: JSON.stringify({ action: 'feedback', outfitId, reaction, reason }) })
   };
 
   window.MettiSupabase = Object.freeze({ config, request, auth: Object.freeze(auth), data: Object.freeze(data), currentUser });

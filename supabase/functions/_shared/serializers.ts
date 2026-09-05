@@ -45,6 +45,7 @@ function firstString(...values: unknown[]): string | null {
 }
 
 function numberValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -106,6 +107,12 @@ export function wardrobeItemFromRow(
   const occasions = stringList(metadata.occasions ?? metadata.occasion);
   const tags = stringList(metadata.tags);
   const styles = stringList(metadata.styles);
+  const secondaryColors = stringList(
+    metadata.secondaryColors ?? metadata.secondary_colors,
+  );
+  const waterproof = typeof metadata.waterproof === "boolean"
+    ? metadata.waterproof
+    : null;
 
   return {
     id: row.id,
@@ -116,15 +123,25 @@ export function wardrobeItemFromRow(
     brand: asString(row.brand),
     color,
     colors,
+    secondaryColors,
     size: asString(row.size),
     season,
     seasons,
     material: asString(metadata.material),
     pattern: asString(metadata.pattern),
     fit: asString(metadata.fit),
+    silhouette: asString(metadata.silhouette),
     length: asString(metadata.length),
     styles,
     occasions,
+    formality: numberValue(metadata.formality),
+    warmth: numberValue(metadata.warmth),
+    waterproof,
+    statementLevel: numberValue(
+      metadata.statementLevel ?? metadata.statement_level,
+    ),
+    wearCount: numberValue(metadata.wearCount ?? metadata.wear_count),
+    lastWornAt: firstString(metadata.lastWornAt, metadata.last_worn_at),
     tags,
     notes: asString(row.notes),
     favorite: boolValue(metadata.favorite),

@@ -215,3 +215,18 @@ body.modal-open{overflow:hidden}
 .item-gallery-dot.selected{background:var(--rose);transform:scale(1.25)}
 #wardrobe-sheet .secondary-photo-upload-field::before{content:"Add a back photo"}
 html[lang="ru"] #wardrobe-sheet .secondary-photo-upload-field::before{content:"Добавьте фото спинки"}
+
+/* Stylist feedback and item-level generation actions. */
+.result-feedback{display:flex;gap:8px;margin-top:9px}
+.result-feedback button{display:flex;flex:1;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:8px 10px;border:1px solid #E1D8C8;border-radius:13px;background:transparent;color:var(--muted);font:12px var(--sans);cursor:pointer}
+.result-feedback button span{color:var(--rose);font-size:17px;line-height:1}
+.result-feedback button.selected{border-color:var(--rose);background:var(--soft);color:var(--rose)}
+.item-detail-actions{flex-wrap:wrap}
+.item-detail-actions button[data-action="style-item"]{flex:1 1 100%}
+.result-variants{display:flex;gap:7px;margin-top:10px;overflow:auto;padding-bottom:2px;scrollbar-width:none}
+.result-creativity{display:inline-flex;margin-top:7px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;color:var(--rose);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.result-creativity[hidden]{display:none}
+.result-variants[hidden]{display:none}
+.result-variants::-webkit-scrollbar{display:none}
+.result-variants button{flex:none;max-width:190px;padding:8px 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font:11px var(--sans);white-space:nowrap;cursor:pointer}
+.result-variants button.selected{border-color:var(--rose);background:var(--soft);color:var(--rose);font-weight:600}

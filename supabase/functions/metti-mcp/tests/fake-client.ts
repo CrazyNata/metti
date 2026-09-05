@@ -1,6 +1,7 @@
 import type { UserDataClient } from "../../_shared/supabase-client.ts";
 import type {
   JsonObject,
+  OutfitFeedbackRow,
   ProfileRow,
   SavedOutfitRow,
   WardrobeItemRow,
@@ -102,6 +103,7 @@ function compareValues(left: unknown, right: unknown): number {
 export class MemoryDataClient implements UserDataClient {
   private wardrobeItems: WardrobeItemRow[] = [];
   private outfits: SavedOutfitRow[] = [];
+  private feedbackRows: OutfitFeedbackRow[] = [];
   private profiles: ProfileRow[] = [];
   private sequence = 1;
 
@@ -134,6 +136,10 @@ export class MemoryDataClient implements UserDataClient {
 
   outfit(id: string): SavedOutfitRow | undefined {
     return this.outfits.find((row) => row.id === id);
+  }
+
+  feedback(outfitId: string): OutfitFeedbackRow | undefined {
+    return this.feedbackRows.find((row) => row.outfit_id === outfitId);
   }
 
   profile(): ProfileRow | undefined {
@@ -207,6 +213,20 @@ export class MemoryDataClient implements UserDataClient {
       this.outfits.push(row);
       return row as T;
     }
+    if (table === "outfit_feedback") {
+      const row: OutfitFeedbackRow = {
+        id: `feedback-${this.sequence}`,
+        user_id: this.ownerId,
+        outfit_id: String(input.outfit_id ?? ""),
+        reaction: input.reaction as OutfitFeedbackRow["reaction"],
+        reason: (input.reason as OutfitFeedbackRow["reason"]) ?? null,
+        comment: (input.comment as OutfitFeedbackRow["comment"]) ?? null,
+        created_at: now,
+        updated_at: now,
+      };
+      this.feedbackRows.push(row);
+      return row as T;
+    }
     throw new Error(`Unsupported insert table: ${table}`);
   }
 
@@ -247,10 +267,36 @@ export class MemoryDataClient implements UserDataClient {
     _query: URLSearchParams,
     payload: unknown,
   ): Promise<T> {
+    const input = objectValue(payload);
+    if (table === "outfit_feedback") {
+      const now = new Date(Date.UTC(2026, 0, 1, 0, 0, this.sequence++))
+        .toISOString();
+      const outfitId = String(input.outfit_id ?? "");
+      const current = this.feedbackRows.find((row) =>
+        row.user_id === this.ownerId && row.outfit_id === outfitId
+      );
+      if (current) {
+        Object.assign(current, input, {
+          updated_at: now,
+        });
+        return current as T;
+      }
+      const row: OutfitFeedbackRow = {
+        id: `feedback-${this.sequence}`,
+        user_id: this.ownerId,
+        outfit_id: outfitId,
+        reaction: input.reaction as OutfitFeedbackRow["reaction"],
+        reason: (input.reason as OutfitFeedbackRow["reason"]) ?? null,
+        comment: (input.comment as OutfitFeedbackRow["comment"]) ?? null,
+        created_at: now,
+        updated_at: now,
+      };
+      this.feedbackRows.push(row);
+      return row as T;
+    }
     if (table !== "profiles") {
       throw new Error(`Unsupported upsert table: ${table}`);
     }
-    const input = objectValue(payload);
     const current = this.profile();
     if (current) {
       Object.assign(current, input, {
@@ -319,6 +365,9 @@ export class MemoryDataClient implements UserDataClient {
     }
     if (table === "profiles") {
       return this.profiles as unknown as Array<Record<string, unknown>>;
+    }
+    if (table === "outfit_feedback") {
+      return this.feedbackRows as unknown as Array<Record<string, unknown>>;
     }
     throw new Error(`Unsupported table: ${table}`);
   }

@@ -143,15 +143,23 @@ export interface WardrobeItemDto {
   brand: string | null;
   color: string | null;
   colors: string[];
+  secondaryColors: string[];
   size: string | null;
   season: string | null;
   seasons: string[];
   material: string | null;
   pattern: string | null;
   fit: string | null;
+  silhouette: string | null;
   length: string | null;
   styles: string[];
   occasions: string[];
+  formality: number | null;
+  warmth: number | null;
+  waterproof: boolean | null;
+  statementLevel: number | null;
+  wearCount: number | null;
+  lastWornAt: string | null;
   tags: string[];
   notes: string | null;
   favorite: boolean;
@@ -330,4 +338,45 @@ export interface OutfitUpdateInput {
   tags?: string[];
   favorite?: boolean;
   prompt?: string | null;
+}
+
+export type OutfitFeedbackReaction = "like" | "dislike";
+export type OutfitFeedbackReason =
+  | "too_formal"
+  | "too_casual"
+  | "too_boring"
+  | "too_bright"
+  | "too_dark"
+  | "not_my_style"
+  | "bad_proportions"
+  | "wrong_shoes"
+  | "too_many_layers"
+  | "other";
+
+export interface OutfitFeedbackRow {
+  id: string;
+  user_id: string;
+  outfit_id: string;
+  reaction: OutfitFeedbackReaction;
+  reason: OutfitFeedbackReason | null;
+  comment?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface OutfitFeedbackDto {
+  id: string;
+  outfitId: string;
+  reaction: OutfitFeedbackReaction;
+  reason: OutfitFeedbackReason | null;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface SaveOutfitFeedbackInput {
+  outfitId: string;
+  reaction: OutfitFeedbackReaction;
+  reason?: OutfitFeedbackReason | null;
+  comment?: string | null;
 }

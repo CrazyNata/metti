@@ -130,7 +130,7 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assertEquals(listed.response.status, 200);
   const tools = listed.payload.result.tools as Array<Record<string, any>>;
   const names = tools.map((tool) => tool.name);
-  assertEquals(names.length, 22);
+  assertEquals(names.length, 29);
   for (const tool of tools) {
     assert(
       typeof tool.description === "string" && tool.description.length > 20,
@@ -146,6 +146,13 @@ Deno.test("authenticated MCP initializes and exposes strict tool schemas", async
   assert(names.includes("replace_wardrobe_item_image"));
   assert(names.includes("remove_wardrobe_item_image"));
   assert(names.includes("save_outfit"));
+  assert(names.includes("generate_outfits"));
+  assert(names.includes("generate_outfits_for_item"));
+  assert(names.includes("restyle_outfit"));
+  assert(names.includes("analyze_wardrobe"));
+  assert(names.includes("analyze_purchase"));
+  assert(names.includes("learn_style_profile"));
+  assert(names.includes("rate_outfit"));
   assert(!names.includes("ask_ai_stylist"));
 
   const createTool = tools.find((tool) => tool.name === "create_wardrobe_item");
@@ -321,6 +328,48 @@ Deno.test("authenticated read and write tool calls use shared data and return st
     ["a-jeans"],
   );
 
+  const generated = await mcpRequest(db, {
+    jsonrpc: "2.0",
+    id: 40,
+    method: "tools/call",
+    params: {
+      name: "generate_outfits",
+      arguments: { mode: "today", prompt: "casual city outfit", count: 2 },
+    },
+  });
+  assertEquals(generated.response.status, 200);
+  assertEquals(generated.payload.result.structuredContent.source, "local-fallback");
+  assert(generated.payload.result.structuredContent.outfits[0].itemIds.every(
+    (id: string) => ["a-jacket", "a-jeans"].includes(id),
+  ));
+
+  const aroundItem = await mcpRequest(db, {
+    jsonrpc: "2.0",
+    id: 41,
+    method: "tools/call",
+    params: {
+      name: "generate_outfits_for_item",
+      arguments: { selectedItemId: "a-jacket", count: 1 },
+    },
+  });
+  assertEquals(aroundItem.payload.result.structuredContent.outfits[0].itemIds.includes("a-jacket"), true);
+
+  const restyled = await mcpRequest(db, {
+    jsonrpc: "2.0",
+    id: 42,
+    method: "tools/call",
+    params: {
+      name: "restyle_outfit",
+      arguments: {
+        currentItemIds: ["a-jacket", "a-jeans"],
+        lockedItemIds: ["a-jacket"],
+        instruction: "Сделай проще",
+        count: 1,
+      },
+    },
+  });
+  assertEquals(restyled.payload.result.structuredContent.outfits[0].itemIds.includes("a-jacket"), true);
+
   const created = await mcpRequest(db, {
     jsonrpc: "2.0",
     id: 45,
@@ -393,6 +442,18 @@ Deno.test("authenticated read and write tool calls use shared data and return st
   const savedId = saved.payload.result.structuredContent.id as string;
   assert(savedId.length > 0);
   assertEquals(db.outfit(savedId)?.user_id, userA.id);
+
+  const rated = await mcpRequest(db, {
+    jsonrpc: "2.0",
+    id: 43,
+    method: "tools/call",
+    params: {
+      name: "rate_outfit",
+      arguments: { outfitId: savedId, reaction: "dislike", reason: "wrong_shoes" },
+    },
+  });
+  assertEquals(rated.payload.result.structuredContent.reaction, "dislike");
+  assertEquals(db.feedback(savedId)?.reason, "wrong_shoes");
 
   const favorited = await mcpRequest(db, {
     jsonrpc: "2.0",

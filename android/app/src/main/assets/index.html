@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./extended.css" />
     <link rel="stylesheet" href="./header-fix.css" />
-    <link rel="stylesheet" href="./outfit-collage.css" />
     <link rel="stylesheet" href="./navigation-fix.css" />
     <link rel="stylesheet" href="./stylist-composer-fix.css" />
     <link rel="stylesheet" href="./reference-theme.css" />
@@ -28,6 +27,8 @@
     <link rel="stylesheet" href="./photo-assets.css" />
     <link rel="stylesheet" href="./data-app.css?v=5" />
     <link rel="stylesheet" href="./legal.css" />
+    <link rel="stylesheet" href="./outfit-collage.css?v=2" />
+    <link rel="stylesheet" href="./result-collage.css?v=2" />
   </head>
   <body>
     <main class="phone" aria-label="Metti">
@@ -107,7 +108,7 @@
         <div class="weather-card"><span class="weather-icon">☁</span><div><strong>Prague · 18°C</strong><small>Облачно · теплее к полудню</small></div></div>
         <div class="section-label"><span>ОБРАЗ НА СЕГОДНЯ</span><span>Собрано AI</span></div>
         <article class="outfit-card">
-          <div class="outfit-collage" aria-label="Коллаж образа"><div class="collage-main placeholder photo-outfit" data-collage-slot="hero"><span>бежевый верхний слой</span></div><div class="collage-side"><div class="placeholder pink photo-shirt" data-collage-slot="top"><span>белый топ</span></div><div class="placeholder photo-jeans" data-collage-slot="bottom"><span>прямые джинсы</span></div></div><div class="collage-bottom"><div class="placeholder photo-loafers" data-collage-slot="shoes"><span>лоферы</span></div><div class="placeholder pink photo-bag" data-collage-slot="bag"><span>сумка-тоут</span></div><div class="placeholder photo-earrings" data-collage-slot="accent"><span>золотые серьги</span></div></div></div>
+          <div class="outfit-collage" aria-label="Коллаж полного образа"><div class="collage-main placeholder" data-collage-slot="hero"><span>Полный образ</span></div><div class="collage-side"><div class="placeholder" data-collage-slot="top"><span>Верх</span></div><div class="placeholder" data-collage-slot="bottom"><span>Низ</span></div></div><div class="collage-bottom"><div class="placeholder" data-collage-slot="shoes"><span>Обувь</span></div><div class="placeholder" data-collage-slot="bag" hidden><span>Сумка</span></div><div class="placeholder" data-collage-slot="accent"><span>Аксессуары</span></div></div></div>
           <button class="primary" data-action="wear">Надеть этот образ</button>
           <div class="button-row"><button class="outline" data-action="other">Другой вариант</button><button class="outline rose" data-screen="stylist">Спросить стилиста</button></div>
         </article>
@@ -130,10 +131,12 @@
       <section class="screen" data-screen-id="result">
         <div class="eyebrow">ЭЛЕГАНТНО · 17°C · ВЕЧЕР</div>
         <h1>Ужин в Праге</h1>
-        <div class="result-hero placeholder tall photo-outfit"><span>структурный верхний слой</span></div>
-        <div class="result-grid"><div class="placeholder photo-shirt"><span>кремовый топ</span></div><div class="placeholder photo-jeans"><span>чёрные брюки</span></div><div class="placeholder photo-loafers"><span>лоферы</span></div><div class="placeholder pink photo-bag"><span>сумка</span></div></div>
+        <span class="result-creativity" id="result-creativity" hidden></span>
+        <div class="result-variants" id="result-variants" hidden aria-label="Варианты образа"></div>
+        <div class="outfit-collage result-outfit-collage" aria-label="Коллаж полного образа"><div class="collage-main placeholder" data-collage-slot="hero"><span>Полный образ</span></div><div class="collage-side"><div class="placeholder" data-collage-slot="top"><span>Верх</span></div><div class="placeholder" data-collage-slot="bottom"><span>Низ</span></div></div><div class="collage-bottom"><div class="placeholder" data-collage-slot="shoes"><span>Обувь</span></div><div class="placeholder" data-collage-slot="bag" hidden><span>Сумка</span></div><div class="placeholder" data-collage-slot="accent"><span>Аксессуары</span></div></div></div>
         <div class="result-note"><span class="result-note-icon">✦</span><p>«Кремовый топ смягчает чёрные брюки, а структурный верхний слой делает образ уместным для ужина.»</p></div>
         <div class="result-actions"><button data-action="save"><span>♡</span><small>Сохранить</small></button><button data-screen="stylist"><span>⟳</span><small>Другой</small></button><button data-action="edit"><span>╱</span><small>Изменить</small></button></div>
+        <div class="result-feedback" aria-label="Оценить образ"><button type="button" data-action="rate-like"><span>♥</span><small>Нравится</small></button><button type="button" data-action="rate-dislike"><span>♡</span><small>Не моё</small></button></div>
         <button class="primary result-wear" data-action="wear">Надеть этот образ</button>
       </section>
 
@@ -159,7 +162,7 @@
         <div class="eyebrow">AI ОПРЕДЕЛИЛ</div>
         <h1 class="detail-title">Бежевый верхний слой<br />оверсайз</h1>
         <div class="detail-chips"><span>Верхний слой</span><span>Бежевый</span><span>Оверсайз</span><span>Осень / Весна</span></div>
-        <div class="item-detail-actions"><button class="primary" data-action="add-item">Добавить в гардероб</button><button class="outline" data-action="edit-item">Изменить</button></div>
+        <div class="item-detail-actions"><button class="primary" data-action="add-item">Добавить в гардероб</button><button class="outline" data-action="style-item">Собрать образ с этой вещью</button><button class="outline" data-action="edit-item">Изменить</button></div>
         <button class="outline full-button" data-action="delete-item">Удалить вещь</button>
         <div class="match-note"><strong>Эта вещь сочетается с 8 вещами</strong><span>из вашего гардероба.</span><button data-screen="looks">Посмотреть образы →</button></div>
       </section>
@@ -195,12 +198,12 @@
     <div id="language-sheet" class="sheet-backdrop" hidden><div class="data-sheet language-data-sheet" role="dialog" aria-modal="true" aria-labelledby="language-sheet-title"><button class="data-sheet-close" type="button" data-action="close-language-sheet" aria-label="Закрыть">×</button><h2 id="language-sheet-title">Язык приложения</h2><p>Выберите язык, на котором будет работать Metti.</p><div class="language-options" role="radiogroup" aria-label="Язык приложения"><button class="language-option" type="button" data-language-option="ru" role="radio" aria-checked="true"><span class="language-option-code">RU</span><span class="language-option-name">Русский</span><span class="language-option-check" aria-hidden="true">✓</span></button><button class="language-option" type="button" data-language-option="en" role="radio" aria-checked="false"><span class="language-option-code">EN</span><span class="language-option-name">English</span><span class="language-option-check" aria-hidden="true">✓</span></button></div></div></div>
     <div id="delete-account-sheet" class="sheet-backdrop" hidden><div class="data-sheet account-delete-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><button class="data-sheet-close" type="button" data-action="close-delete-account" aria-label="Закрыть">×</button><h2 id="delete-account-title">Удалить аккаунт?</h2><p>Профиль, гардероб и сохранённые образы будут удалены без возможности восстановления.</p><div class="form-actions"><button class="outline" type="button" data-action="close-delete-account">Отмена</button><button class="primary danger-confirm-button" type="button" data-action="confirm-delete-account">Удалить аккаунт</button></div><p class="auth-status" id="delete-account-status" role="status" aria-live="polite"></p></div></div>
     <div id="style-sheet" class="sheet-backdrop" hidden><form id="style-form" class="data-sheet data-form" novalidate><button class="data-sheet-close" type="button" data-action="close-style-sheet" aria-label="Закрыть">×</button><h2>Настройки стилиста</h2><p>Настройте параметры, чтобы образы точнее подходили вам.</p><label>Твой стиль<input name="style_tags" placeholder="Спокойный, элегантный" /></label><label>Любимые цвета<input name="favorite_colors" placeholder="Молочный, бежевый, чёрный" /></label><div class="form-two"><label>Посадка<select name="fit"><option value="">Не указано</option><option value="relaxed">Свободная</option><option value="regular">Классическая</option><option value="slim">По фигуре</option></select></label><label>Размер<input name="size" placeholder="M" /></label></div><label>Предпочтения<textarea name="preferences" placeholder="Для работы, города, встреч…"></textarea></label><div class="form-actions"><button class="outline" type="button" data-action="close-style-sheet">Отмена</button><button class="primary" type="submit">Сохранить</button></div><p class="auth-status" id="style-form-status" role="status" aria-live="polite"></p></form></div>
-    <div id="edit-sheet" class="sheet" hidden><div class="sheet-inner"><div class="sheet-handle"></div><button class="sheet-close" data-action="close-sheet">×</button><h3>Что хотите изменить?</h3><p>Заменю только эту вещь, остальное оставлю.</p><div class="edit-options"><button>Сменить верх</button><button>Сменить низ</button><button class="selected">Сменить обувь ✓</button><button>Сменить сумку</button></div><div class="edit-moods"><button>Теплее</button><button>Проще</button><button>Элегантнее</button><button>Другие цвета</button></div><div class="shoe-label">НОВАЯ ОБУВЬ ИЗ ГАРДЕРОБА</div><div class="shoe-row"><button class="shoe-card selected"></button><button class="shoe-card"></button><button class="shoe-card pink"></button></div><button class="primary" data-action="apply-edit">Отлично · Надеть</button></div></div>
+    <div id="edit-sheet" class="sheet" hidden><div class="sheet-inner"><div class="sheet-handle"></div><button class="sheet-close" data-action="close-sheet">×</button><h3>Что хотите изменить?</h3><p>Заменю только эту вещь, остальное оставлю.</p><div class="edit-options"><button type="button" data-action="choose-restyle" data-restyle-instruction="Сменить верх">Сменить верх</button><button type="button" data-action="choose-restyle" data-restyle-instruction="Сменить низ">Сменить низ</button><button type="button" class="selected" data-action="choose-restyle" data-restyle-instruction="Сменить обувь">Сменить обувь</button><button type="button" data-action="choose-restyle" data-restyle-instruction="Сменить сумку">Сменить сумку</button></div><div class="edit-moods"><button type="button" data-action="choose-restyle" data-restyle-instruction="Сделать образ теплее">Теплее</button><button type="button" data-action="choose-restyle" data-restyle-instruction="Сделать образ проще">Проще</button><button type="button" data-action="choose-restyle" data-restyle-instruction="Сделать образ элегантнее">Элегантнее</button><button type="button" data-action="choose-restyle" data-restyle-instruction="Добавить другие цвета">Другие цвета</button></div><div class="shoe-label">НОВАЯ ОБУВЬ ИЗ ГАРДЕРОБА</div><div class="shoe-row"><button class="shoe-card selected"></button><button class="shoe-card"></button><button class="shoe-card pink"></button></div><button class="primary" data-action="apply-edit">Отлично · Надеть</button></div></div>
     <script src="./supabase-config.js"></script>
     <script src="./supabase-client.js"></script>
     <script src="./i18n.js"></script>
     <script src="./loading-app.js"></script>
     <script src="./auth-app.js"></script>
-    <script src="./app.js?v=photos-solid-v2"></script>
+    <script src="./app.js?v=stylist-mvp-v1"></script>
   </body>
 </html>

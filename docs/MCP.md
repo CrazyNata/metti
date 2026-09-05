@@ -4,7 +4,9 @@ Metti MCP is an additional data-and-actions interface for the existing Online
 Stylist application. It lives in this repository and uses the existing Supabase
 Auth, PostgREST tables, RLS policies and private `wardrobe` Storage bucket. It
 does not create a second database, a second wardrobe, a second image store or a
-second business-logic layer, and it never calls an LLM.
+second business-logic layer. Outfit generation is delegated to the same shared
+`StylistService` used by the `metti-stylist` Edge Function; MCP does not have a
+separate prompt, filtering or validation implementation.
 
 ## Repository architecture
 
@@ -15,9 +17,10 @@ Supabase, plus Supabase Edge Functions. The relevant paths are:
 - `supabase/functions/metti-mcp/server.ts` — authenticated Streamable HTTP
   handler and tool registration.
 - `supabase/functions/_shared/` — auth, validation, serializers, data client,
-  `WardrobeService`, `ImageService`, `ProfileService` and `OutfitService`.
-- `supabase/functions/metti-stylist/` — the existing stylist function using
-  the same shared services for its data context.
+  `WardrobeService`, `ImageService`, `ProfileService`, `OutfitService`,
+  `FeedbackService` and the shared `StylistService`.
+- `supabase/functions/metti-stylist/` — the app-facing stylist function using
+  the shared services and provider abstraction.
 - `cloudflare/mcp-edge/` — optional thin Cloudflare Worker proxy. It stores no
   user data and does not register MCP tools.
 - `mobile/supabase-client.js` and
@@ -84,7 +87,7 @@ the same token for RLS; it is not a bypass.
 
 ## Tools
 
-The server advertises 21 tools. The V1 data contract is:
+The server advertises 29 tools. The current data contract is:
 
 ### Profile
 
@@ -115,10 +118,34 @@ The server advertises 21 tools. The V1 data contract is:
 - `save_outfit`
 - `update_outfit`
 - `archive_outfit`
+- `favorite_outfit`
+- `get_wear_history`
+- `mark_as_worn`
+- `rate_outfit`
 
-The repository also keeps the existing outfit convenience tools
-`favorite_outfit`, `get_wear_history` and `mark_as_worn` available through
-MCP.
+### AI stylist
+
+- `generate_outfits` — `today`, `selected_item`, `restyle`, `packing` and
+  `shopping_recommendation` modes.
+- `generate_outfits_for_item` — requires the selected wardrobe item in every
+  returned candidate.
+- `restyle_outfit` — accepts an existing outfit or current item IDs and keeps
+  locked items.
+- `analyze_wardrobe` — audits the authenticated wardrobe for strengths,
+  duplicates, underused items, gaps and next recommendations.
+- `analyze_purchase` — evaluates a proposed item (metadata or photo) against
+  the real wardrobe and returns `buy`, `only_if` or `skip`; every
+  `matchingItemIds` value is validated against the user’s wardrobe.
+- `learn_style_profile` — periodically applies only stable implicit patterns
+  from feedback, saved outfits and wear history while preserving explicit
+  profile settings.
+
+These tools load the authenticated wardrobe, profile and wear history on the
+server, apply a soft relevance filter, call the configured provider through
+`StylistLLM`, validate every returned item ID, perform at most one corrective
+retry for invalid structured output, run the optional critic pass and remove
+near-duplicate candidates. The database remains the source of truth; the model
+cannot add a wardrobe item by inventing an ID.
 
 All list/search tools use pagination: default `limit=40`, maximum `limit=100`.
 Successful tools return MCP `structuredContent` plus compact JSON text. Domain
@@ -261,7 +288,8 @@ validates confidence, thin-detail preservation, halo, truncation and retained
 background, and only then links the processed object. If processing is not
 configured or the result is unsafe, the original remains visible and the row
 is returned as `imageStatus=needs_review`; client-side background removal is
-not used. MCP still does not call an LLM or an image-generation API.
+not used. This image workflow does not call an image-generation API; the
+separate AI stylist tools may call the configured text/vision provider.
 
 The accepted inline image formats are JPEG, PNG, WebP, HEIC and HEIF, with a
 default maximum of 5 MiB. A remote `resource_link` is fetched only when its

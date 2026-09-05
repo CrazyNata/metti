@@ -1,0 +1,14 @@
+/* Comfortable image and caption areas on both screens, including narrow phones. */
+.screen[data-screen-id="home"] .outfit-collage,
+.screen[data-screen-id="result"] .result-outfit-collage {
+  height: 390px;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 112px;
+}
+.screen[data-screen-id="home"] .outfit-collage { margin-top: 6px; }
+.screen[data-screen-id="result"] .result-outfit-collage { height: 420px; margin: 16px 0 0; }
+.screen .outfit-collage.bottom-count-0 { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 360px) {
+  .screen[data-screen-id="home"] .outfit-collage,
+  .screen[data-screen-id="result"] .result-outfit-collage { height: 360px; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 106px; }
+  .screen .outfit-collage.bottom-count-0 { grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+}

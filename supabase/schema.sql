@@ -52,13 +52,32 @@ create table if not exists public.saved_outfits (
   archived_at timestamptz
 );
 
+create table if not exists public.outfit_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  outfit_id uuid not null references public.saved_outfits(id) on delete cascade,
+  reaction text not null check (reaction in ('like', 'dislike')),
+  reason text check (
+    reason is null or reason in (
+      'too_formal', 'too_casual', 'too_boring', 'too_bright', 'too_dark',
+      'not_my_style', 'bad_proportions', 'wrong_shoes', 'too_many_layers', 'other'
+    )
+  ),
+  comment text check (comment is null or char_length(comment) <= 1000),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (user_id, outfit_id)
+);
+
 alter table public.profiles enable row level security;
 alter table public.wardrobe_items enable row level security;
 alter table public.saved_outfits enable row level security;
+alter table public.outfit_feedback enable row level security;
 
 grant select, insert, update, delete on public.profiles to authenticated;
 grant select, insert, update, delete on public.wardrobe_items to authenticated;
 grant select, insert, update, delete on public.saved_outfits to authenticated;
+grant select, insert, update, delete on public.outfit_feedback to authenticated;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles for select to authenticated
@@ -96,6 +115,26 @@ drop policy if exists "outfits_delete_own" on public.saved_outfits;
 create policy "outfits_delete_own" on public.saved_outfits for delete to authenticated
   using ((select auth.uid()) = user_id);
 
+drop policy if exists "outfit_feedback_select_own" on public.outfit_feedback;
+create policy "outfit_feedback_select_own" on public.outfit_feedback for select to authenticated
+  using ((select auth.uid()) = user_id);
+drop policy if exists "outfit_feedback_insert_own" on public.outfit_feedback;
+create policy "outfit_feedback_insert_own" on public.outfit_feedback for insert to authenticated
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from public.saved_outfits
+      where saved_outfits.id = outfit_feedback.outfit_id
+        and saved_outfits.user_id = (select auth.uid())
+    )
+  );
+drop policy if exists "outfit_feedback_update_own" on public.outfit_feedback;
+create policy "outfit_feedback_update_own" on public.outfit_feedback for update to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists "outfit_feedback_delete_own" on public.outfit_feedback;
+create policy "outfit_feedback_delete_own" on public.outfit_feedback for delete to authenticated
+  using ((select auth.uid()) = user_id);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -115,6 +154,9 @@ create trigger wardrobe_items_set_updated_at before update on public.wardrobe_it
 for each row execute function public.set_updated_at();
 drop trigger if exists saved_outfits_set_updated_at on public.saved_outfits;
 create trigger saved_outfits_set_updated_at before update on public.saved_outfits
+for each row execute function public.set_updated_at();
+drop trigger if exists outfit_feedback_set_updated_at on public.outfit_feedback;
+create trigger outfit_feedback_set_updated_at before update on public.outfit_feedback
 for each row execute function public.set_updated_at();
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -140,3 +182,5 @@ create index if not exists saved_outfits_user_created_idx on public.saved_outfit
 create index if not exists saved_outfits_user_worn_idx on public.saved_outfits (user_id, is_worn, worn_at desc);
 create index if not exists wardrobe_items_user_archived_created_idx on public.wardrobe_items (user_id, archived_at, created_at desc);
 create index if not exists saved_outfits_user_archived_created_idx on public.saved_outfits (user_id, archived_at, created_at desc);
+create index if not exists outfit_feedback_user_created_idx on public.outfit_feedback (user_id, created_at desc);
+create index if not exists outfit_feedback_outfit_id_idx on public.outfit_feedback (outfit_id);

@@ -1,5 +1,6 @@
 import type { AuthenticatedUser } from "./types.ts";
 import type { UserDataClient } from "./supabase-client.ts";
+import { FeedbackService } from "./feedback-service.ts";
 import { ImageService, type ImageServiceOptions } from "./image-service.ts";
 import { OutfitService } from "./outfit-service.ts";
 import { ProfileService } from "./profile-service.ts";
@@ -13,6 +14,7 @@ export interface ApplicationServices {
   images: ImageService;
   profile: ProfileService;
   outfits: OutfitService;
+  feedback: FeedbackService;
 }
 
 export interface ApplicationServiceOptions {
@@ -27,10 +29,12 @@ export function createApplicationServices(
 ): ApplicationServices {
   const images = new ImageService(client, user, options.image);
   const wardrobe = new WardrobeService(client, user, images, options.wardrobe);
+  const outfits = new OutfitService(client, user, wardrobe);
   return {
     wardrobe,
     images,
     profile: new ProfileService(client, user),
-    outfits: new OutfitService(client, user, wardrobe),
+    outfits,
+    feedback: new FeedbackService(client, user, outfits),
   };
 }

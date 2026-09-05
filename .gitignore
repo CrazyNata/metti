@@ -9,6 +9,26 @@ android/.gradle/
 android/build/
 android/app/build/
 artifacts/
+/processed-*/
+/preview-*.html
+/preview-server.mjs
+supabase/.temp/
+
+# Local visual experiments are intentionally kept out of the product bundle.
+/mobile/assets/outfit-hero-plaid.png
+/mobile/assets/outfit-hero-sneakers.png
+/mobile/assets/wardrobe-crater-tshirt.png
+/mobile/assets/wardrobe-fendi-sunglasses.png
+/mobile/assets/wardrobe-light-wide-jeans.png
+/mobile/assets/wardrobe-patterned-sneakers.png
+/mobile/assets/wardrobe-plaid-jacket.png
+/android/app/src/main/assets/assets/outfit-hero-plaid.png
+/android/app/src/main/assets/assets/outfit-hero-sneakers.png
+/android/app/src/main/assets/assets/wardrobe-crater-tshirt.png
+/android/app/src/main/assets/assets/wardrobe-fendi-sunglasses.png
+/android/app/src/main/assets/assets/wardrobe-light-wide-jeans.png
+/android/app/src/main/assets/assets/wardrobe-patterned-sneakers.png
+/android/app/src/main/assets/assets/wardrobe-plaid-jacket.png
 .env
 .env.*
 !.env.example

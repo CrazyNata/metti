@@ -14,24 +14,47 @@ import {
 import { createApplicationServices } from "../_shared/services.ts";
 import { SupabaseRestClient } from "../_shared/supabase-client.ts";
 import type { ApplicationServices } from "../_shared/services.ts";
+import { createStylistLLM } from "../_shared/stylist/llm.ts";
+import {
+  PurchaseAdvisorService,
+  type PurchaseAdvisorRequest,
+} from "../_shared/stylist/purchase-advisor.ts";
+import { StyleProfileLearnerService } from "../_shared/stylist/profile-learner.ts";
+import { StylistService } from "../_shared/stylist/service.ts";
+import { WardrobeAuditService } from "../_shared/stylist/wardrobe-auditor.ts";
 import type {
   AuthContext,
   AuthenticatedUser,
   JsonObject,
+  OpenAiFileInput,
+  OutfitFeedbackReason,
   OutfitListOptions,
   SupabaseConfig,
   WardrobeItemInput,
+  WardrobeImageInput,
   WardrobeItemUpdate,
   WardrobeListOptions,
 } from "../_shared/types.ts";
+import type { StylistContext, StylistMode } from "../_shared/stylist/types.ts";
 
-export const MCP_VERSION = "1.3.1";
+export const MCP_VERSION = "1.5.0";
 
 const MCP_INSTRUCTIONS =
-  "When the user attaches a photo and asks to add or update a wardrobe item, use the photo-capable wardrobe tool and pass the attachment in its top-level file argument. Do not create a metadata-only item for an attached photo. The backend downloads the temporary file immediately, stores the original separately, processes the card, and only reports imageAttached=true after the Storage links are ready. If the file argument is missing, ask the user to attach the photo again.";
+  "When the user attaches a photo and asks to add or update a wardrobe item, use the photo-capable wardrobe tool and pass the attachment in its top-level file argument. Do not create a metadata-only item for an attached photo. The backend downloads the temporary file immediately, stores the original separately, processes the card, and only reports imageAttached=true after the Storage links are ready. If the file argument is missing, ask the user to attach the photo again. For outfit recommendations use generate_outfits or generate_outfits_for_item; the stylist service filters the authenticated wardrobe and validates every returned itemId. Use analyze_wardrobe for a whole-wardrobe audit and analyze_purchase for a store item; matchingItemIds must remain real wardrobe IDs.";
 
 type FetchLike = typeof fetch;
 type McpHttpHandler = ReturnType<typeof createMcpHandler>;
+
+function dataUrlFromImage(bytes: Uint8Array, contentType: string): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)),
+    );
+  }
+  return `data:${contentType};base64,${btoa(binary)}`;
+}
 
 const corsMethods = "GET, POST, DELETE, OPTIONS";
 const corsHeaders =
@@ -266,6 +289,92 @@ const markAsWornSchema = z.object({
   wornAt: z.string().trim().max(80).optional(),
 }).strict();
 
+const stylistModeSchema = z.enum([
+  "today",
+  "selected_item",
+  "restyle",
+  "packing",
+  "shopping_recommendation",
+]);
+const creativitySchema = z.enum(["safe", "balanced", "bold"]);
+const stylistContextSchema = z.record(z.string(), z.unknown()).optional();
+const generateOutfitsSchema = z.object({
+  mode: stylistModeSchema.optional().default("today"),
+  prompt: z.string().trim().max(1000).optional().default(""),
+  count: z.number().int().min(1).max(5).optional().default(3),
+  selectedItemId: idSchema.optional(),
+  currentItemIds: z.array(idSchema).max(20).optional(),
+  lockedItemIds: z.array(idSchema).max(20).optional(),
+  instruction: z.string().trim().max(1000).optional(),
+  preferredCreativity: creativitySchema.optional(),
+  context: stylistContextSchema,
+}).strict();
+const generateOutfitsForItemSchema = z.object({
+  selectedItemId: idSchema,
+  prompt: z.string().trim().max(1000).optional().default(""),
+  count: z.number().int().min(1).max(5).optional().default(3),
+  context: stylistContextSchema,
+}).strict();
+const restyleOutfitSchema = z.object({
+  outfitId: idSchema.optional(),
+  currentItemIds: z.array(idSchema).max(20).optional(),
+  lockedItemIds: z.array(idSchema).max(20).optional(),
+  instruction: z.string().trim().min(1).max(1000),
+  prompt: z.string().trim().max(1000).optional().default(""),
+  count: z.number().int().min(1).max(5).optional().default(3),
+  context: stylistContextSchema,
+}).strict();
+const analyzeWardrobeSchema = z.object({
+  language: z.enum(["ru", "en"]).optional().default("ru"),
+}).strict();
+const learnStyleProfileSchema = z.object({
+  language: z.enum(["ru", "en"]).optional().default("ru"),
+}).strict();
+const purchaseCandidateSchema = z.object({
+  name: z.string().trim().max(160).nullable().optional(),
+  category: z.string().trim().max(80).nullable().optional(),
+  subcategory: z.string().trim().max(80).nullable().optional(),
+  colors: stringListSchema(12, 50).optional(),
+  secondaryColors: stringListSchema(12, 50).optional(),
+  material: z.string().trim().max(80).nullable().optional(),
+  pattern: z.string().trim().max(80).nullable().optional(),
+  season: stringListSchema(8, 40).optional(),
+  styles: stringListSchema(12, 60).optional(),
+  occasions: stringListSchema(12, 60).optional(),
+  formality: z.number().finite().min(1).max(5).nullable().optional(),
+  fit: z.string().trim().max(80).nullable().optional(),
+  silhouette: z.string().trim().max(80).nullable().optional(),
+  length: z.string().trim().max(80).nullable().optional(),
+  warmth: z.number().finite().min(1).max(5).nullable().optional(),
+  waterproof: z.boolean().nullable().optional(),
+  statementLevel: z.number().finite().min(1).max(5).nullable().optional(),
+  image: imageInputSchema.optional(),
+  file: openAiFileSchema.optional(),
+}).strict();
+const analyzePurchaseSchema = z.object({
+  candidate: purchaseCandidateSchema,
+  context: stylistContextSchema,
+  language: z.enum(["ru", "en"]).optional().default("ru"),
+}).strict();
+const feedbackReasonSchema = z.enum([
+  "too_formal",
+  "too_casual",
+  "too_boring",
+  "too_bright",
+  "too_dark",
+  "not_my_style",
+  "bad_proportions",
+  "wrong_shoes",
+  "too_many_layers",
+  "other",
+]);
+const rateOutfitSchema = z.object({
+  outfitId: idSchema,
+  reaction: z.enum(["like", "dislike"]),
+  reason: feedbackReasonSchema.nullable().optional(),
+  comment: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+
 const servicesFor = (
   config: SupabaseConfig,
   context: AuthContext,
@@ -421,7 +530,125 @@ const writeAnnotations = {
 export function registerTools(
   server: McpServer,
   services: ApplicationServices,
+  stylist: StylistService = new StylistService(services, createStylistLLM()),
 ): McpServer {
+  const wardrobeAudit = new WardrobeAuditService(services);
+  const purchaseAdvisor = new PurchaseAdvisorService(services, createStylistLLM());
+  server.registerTool("generate_outfits", {
+    description:
+      "Generate ranked outfit suggestions from the authenticated user’s real wardrobe. The backend softly filters the wardrobe before calling the shared AI stylist, validates every itemId, removes near-duplicate looks and optionally uses a critic pass. Supports today, selected_item, restyle, packing and shopping_recommendation modes.",
+    inputSchema: generateOutfitsSchema,
+    annotations: readAnnotations,
+  }, (args) => runTool(() => stylist.generate({
+    mode: args.mode as StylistMode,
+    prompt: args.prompt,
+    count: args.count,
+    selectedItemId: args.selectedItemId,
+    currentItemIds: args.currentItemIds,
+    lockedItemIds: args.lockedItemIds,
+    instruction: args.instruction,
+    preferredCreativity: args.preferredCreativity,
+    context: args.context as StylistContext | undefined,
+  })));
+
+  server.registerTool("generate_outfits_for_item", {
+    description:
+      "Generate several materially different outfits around one wardrobe item. The selected item is mandatory in every returned outfit and the backend verifies it belongs to the authenticated user.",
+    inputSchema: generateOutfitsForItemSchema,
+    annotations: readAnnotations,
+  }, (args) => runTool(() => stylist.generate({
+    mode: "selected_item",
+    prompt: args.prompt,
+    count: args.count,
+    selectedItemId: args.selectedItemId,
+    context: args.context as StylistContext | undefined,
+  })));
+
+  server.registerTool("restyle_outfit", {
+    description:
+      "Restyle an existing outfit while changing the minimum necessary number of wardrobe items. Pass outfitId or currentItemIds; lockedItemIds must remain in every returned variant and all replacements come from the authenticated wardrobe.",
+    inputSchema: restyleOutfitSchema,
+    annotations: readAnnotations,
+  }, (args) => runTool(async () => {
+    let currentItemIds = args.currentItemIds;
+    if (!currentItemIds?.length && args.outfitId) {
+      currentItemIds = (await services.outfits.get(args.outfitId)).itemIds;
+    }
+    return stylist.generate({
+      mode: "restyle",
+      prompt: args.prompt,
+      count: args.count,
+      currentItemIds,
+      lockedItemIds: args.lockedItemIds,
+      instruction: args.instruction,
+      context: args.context as StylistContext | undefined,
+    });
+  }));
+
+  server.registerTool("analyze_wardrobe", {
+    description:
+      "Analyze the authenticated user’s active wardrobe for strengths, repeated items, underused real itemIds, useful gaps and practical recommendations. It never labels a wardrobe item as bad and never invents itemIds.",
+    inputSchema: analyzeWardrobeSchema,
+    annotations: readAnnotations,
+  }, (args) => runTool(() => wardrobeAudit.analyze(args.language)));
+
+  server.registerTool("analyze_purchase", {
+    description:
+      "Evaluate a potential purchase against the authenticated user’s real wardrobe. Returns buy, only_if or skip, compatibility, duplicate risk and the real matching itemIds. Use candidate.image or candidate.file when a store photo is available; do not treat the new item as an existing wardrobe item.",
+    inputSchema: analyzePurchaseSchema,
+    _meta: { "openai/fileParams": ["candidate.file"] },
+    annotations: readAnnotations,
+  }, (args) => runTool(async () => {
+    const candidate = { ...args.candidate } as Record<string, unknown>;
+    const image = candidate.image;
+    const file = candidate.file;
+    delete candidate.image;
+    delete candidate.file;
+    let imageDataUrl: string | null = null;
+    if (file) {
+      const resolved = await services.images.resolveOpenAiFile(file as OpenAiFileInput);
+      if (!resolved.file) {
+        throw new AppError("data_access_error", "Не удалось получить фото покупки.", 502);
+      }
+      imageDataUrl = dataUrlFromImage(resolved.file.bytes, resolved.file.contentType);
+    } else if (image) {
+      const resolved = await services.images.resolve(image as WardrobeImageInput);
+      if (resolved.file) {
+        imageDataUrl = dataUrlFromImage(resolved.file.bytes, resolved.file.contentType);
+      }
+    }
+    return purchaseAdvisor.analyze({
+      candidate: {
+        ...candidate,
+        imageDataUrl,
+      } as PurchaseAdvisorRequest["candidate"],
+      context: args.context as StylistContext | undefined,
+      language: args.language,
+    });
+  }));
+
+  server.registerTool("learn_style_profile", {
+    description:
+      "Periodically learn stable style preferences from the authenticated user’s explicit profile, feedback, saved outfits and wear history. Explicit settings are never overwritten by implicit behavior; one isolated click is not enough to create a rule.",
+    inputSchema: learnStyleProfileSchema,
+    annotations: writeAnnotations,
+  }, (args) => runTool(() => new StyleProfileLearnerService(
+    services,
+    createStylistLLM(),
+  ).learn(args.language)));
+
+  server.registerTool("rate_outfit", {
+    description:
+      "Save the authenticated user’s like or dislike for a saved outfit. An optional dislike reason is stored for later style learning; this changes user data.",
+    inputSchema: rateOutfitSchema,
+    annotations: writeAnnotations,
+  }, (args) => runTool(() => services.feedback.save({
+    outfitId: args.outfitId,
+    reaction: args.reaction,
+    reason: args.reason as OutfitFeedbackReason | null | undefined,
+    comment: args.comment,
+  })));
+
   server.registerTool("get_profile", {
     description:
       "Retrieve the authenticated user profile relevant to personal styling. Use this before making recommendations when fit, sizes, colors or style context matter. This reads only the current user profile.",
