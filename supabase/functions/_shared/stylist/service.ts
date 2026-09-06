@@ -11,6 +11,7 @@ import {
   rankOutfits,
 } from "./ranking.ts";
 import { colorHarmonyForOutfit } from "./color-harmony.ts";
+import { applyCompositionQuality } from "./composition.ts";
 import { WardrobeAuditService } from "./wardrobe-auditor.ts";
 import { withStylistVoice } from "./stylist-voice.ts";
 import type {
@@ -387,8 +388,12 @@ export class StylistService {
       return {
         outfits: rankOutfits(
           addStylistVoice(
-            applyColorHarmony(
-              applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+            applyCompositionQuality(
+              applyColorHarmony(
+                applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+                generationInput,
+                language,
+              ),
               generationInput,
               language,
             ),
@@ -442,8 +447,12 @@ export class StylistService {
       return {
         outfits: rankOutfits(
           addStylistVoice(
-            applyColorHarmony(
-              applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+            applyCompositionQuality(
+              applyColorHarmony(
+                applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+                generationInput,
+                language,
+              ),
               generationInput,
               language,
             ),
@@ -586,6 +595,7 @@ export class StylistService {
     );
     candidateOutfits = addStylistVoice(candidateOutfits, generationInput, language);
     candidateOutfits = applyColorHarmony(candidateOutfits, generationInput, language);
+    candidateOutfits = applyCompositionQuality(candidateOutfits, generationInput, language);
     if (mode === "packing" && !capsuleItemIds.length) {
       capsuleItemIds = unionIds(...candidateOutfits.map((outfit) => outfit.itemIds));
     }

@@ -15,6 +15,9 @@ import { StylistService } from "../../_shared/stylist/service.ts";
 import { WardrobeAuditService } from "../../_shared/stylist/wardrobe-auditor.ts";
 import { withStylistVoice } from "../../_shared/stylist/stylist-voice.ts";
 import { colorHarmonyForOutfit } from "../../_shared/stylist/color-harmony.ts";
+import {
+  compositionQualityForOutfit,
+} from "../../_shared/stylist/composition.ts";
 import { canonicalVocabularyValue } from "../../_shared/stylist/vocabulary.ts";
 import type {
   GenerateOutfitsInput,
@@ -168,6 +171,104 @@ Deno.test("color wheel favors a deliberate palette over a mixed clash", () => {
   );
   assert(deliberate.score > mixed.score);
   assertEquals(deliberate.relation, "complementary");
+});
+
+Deno.test("composition quality rejects a busy stack of focal pieces", () => {
+  const available = [
+    item("jacket", "outer", {
+      name: "Клетчатая куртка",
+      pattern: "plaid",
+      statementLevel: 4,
+    }),
+    item("graphic-tee", "top", {
+      name: "Футболка с графикой",
+      pattern: "graphic",
+      statementLevel: 3,
+    }),
+    item("plain-tee", "top", {
+      name: "Белая однотонная футболка",
+      pattern: "solid",
+    }),
+    item("wide-jeans", "bottom", {
+      name: "Широкие джинсы",
+      fit: "wide",
+    }),
+    item("cow-shoes", "shoes", {
+      name: "adidas Tokyo Cow Print",
+      pattern: "cow print",
+      statementLevel: 4,
+    }),
+    item("plain-shoes", "shoes", {
+      name: "Белые кеды",
+      pattern: "solid",
+    }),
+  ];
+  const profileInput = input(available, {
+    prompt: "повседневный городской образ",
+  });
+  const busy = compositionQualityForOutfit(
+    outfit(["jacket", "graphic-tee", "wide-jeans", "cow-shoes"], 96),
+    available,
+    profileInput,
+  );
+  const calm = compositionQualityForOutfit(
+    outfit(["plain-tee", "wide-jeans", "cow-shoes"], 96),
+    available,
+    profileInput,
+  );
+  assert(busy.score < calm.score);
+  assert(busy.activeAccentCount >= 3);
+  assert(busy.patternedItemCount >= 3);
+  assert(busy.warnings.some((value) => value.includes("акцент")));
+});
+
+Deno.test("composition quality rewards a deliberate answer to a wide bottom", () => {
+  const available = [
+    item("wide-top", "top", { name: "Объёмная рубашка", fit: "oversized" }),
+    item("fitted-top", "top", { name: "Приталенный топ", fit: "fitted" }),
+    item("wide-bottom", "bottom", { name: "Широкие брюки", fit: "wide" }),
+    item("shoes", "shoes", { name: "Минималистичные кеды", pattern: "solid" }),
+  ];
+  const profileInput = input(available, { prompt: "городской образ" });
+  const oversized = compositionQualityForOutfit(
+    outfit(["wide-top", "wide-bottom", "shoes"]),
+    available,
+    profileInput,
+  );
+  const balanced = compositionQualityForOutfit(
+    outfit(["fitted-top", "wide-bottom", "shoes"]),
+    available,
+    profileInput,
+  );
+  assert(balanced.score > oversized.score);
+  assert(oversized.warnings.some((value) => value.includes("Объёмный")));
+});
+
+Deno.test("composition quality catches an occasion mismatch", () => {
+  const available = [
+    item("hoodie", "top", { name: "Худи", formality: 1 }),
+    item("jeans", "bottom", { name: "Джинсы", formality: 2 }),
+    item("sneakers", "shoes", { name: "Кроссовки", formality: 2 }),
+    item("blazer", "top", { name: "Структурный жакет", formality: 4 }),
+    item("trousers", "bottom", { name: "Брюки", formality: 4 }),
+    item("loafers", "shoes", { name: "Лоферы", formality: 4 }),
+  ];
+  const formalInput = input(available, {
+    prompt: "ужин",
+    context: { occasion: "formal dinner", temperature: 18 },
+  });
+  const casual = compositionQualityForOutfit(
+    outfit(["hoodie", "jeans", "sneakers"]),
+    available,
+    formalInput,
+  );
+  const polished = compositionQualityForOutfit(
+    outfit(["blazer", "trousers", "loafers"]),
+    available,
+    formalInput,
+  );
+  assert(polished.score > casual.score);
+  assert(casual.warnings.some((value) => value.includes("повседневным")));
 });
 
 Deno.test("today prompt carries an existing outfit as restyle context", () => {
