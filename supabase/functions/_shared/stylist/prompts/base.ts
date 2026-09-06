@@ -1,4 +1,4 @@
-export const METTI_STYLIST_PROMPT_VERSION = "2.2";
+export const METTI_STYLIST_PROMPT_VERSION = "2.3";
 
 export const METTI_STYLIST_SYSTEM_PROMPT = `Ты персональный fashion-стилист приложения Metti.
 

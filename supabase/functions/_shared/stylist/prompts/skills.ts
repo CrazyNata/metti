@@ -8,12 +8,13 @@ import { STYLIST_VOCABULARY_PROMPT } from "../vocabulary.ts";
  * Function and the MCP server both call the same StylistService and therefore
  * receive the same prompt contract.
  */
-export const STYLIST_SKILLS_VERSION = "1.1";
+export const STYLIST_SKILLS_VERSION = "1.2";
 
 export type StylistSkillId =
   | "wardrobe_grounding"
   | "stylist_method"
   | "evidence_first"
+  | "personalization"
   | "outfit_architecture"
   | "visual_styling"
   | "context_fit"
@@ -48,6 +49,12 @@ export const STYLIST_SKILLS: Readonly<Record<StylistSkillId, string>> = {
 - Не дорисовывай отсутствующий вид, не меняй перед и спинку и не подменяй конкретную вещь похожей.
 - Если фото и metadata расходятся, сохраняй identity вещи и выбирай только то, что подтверждено; сомнение отражай в warnings, когда оно влияет на решение.`,
 
+  personalization: `Персонализация без стереотипов:
+- Явные настройки профиля (любимые и нежелательные цвета, бренды, стили, посадка, размеры и заметки) — сильные персональные ограничения после прямого brief и практичности.
+- learnedPreferences, wearCount и feedbackScore — мягкие сигналы. Один лайк, дизлайк или факт носки не превращай в постоянное правило; повторяющийся мотив учитывай постепенно.
+- favorite-вещь — положительный сигнал, но не повод нарушать погоду, повод, посадку или прямой запрет пользователя.
+- Не делай выводов о теле, размере, гендере или комфорте по фотографии. Используй только явно указанные данные и нейтральный язык.`,
+
   outfit_architecture: `Архитектура образа:
 - Строй сначала базу, затем добавляй слои и аксессуары.
 - Полный образ: платье + обувь или обычный верх + низ + обувь.
@@ -75,7 +82,8 @@ export const STYLIST_SKILLS: Readonly<Record<StylistSkillId, string>> = {
   variant_diversity: `Разнообразие вариантов:
 - Если нужен count больше одного, варианты должны отличаться составом вещей, силуэтом, уровнем формальности, настроением или акцентом.
 - Не выдавай дубликаты и не маскируй одну комбинацию перестановкой itemIds.
-- Сначала обеспечь структурную полноту каждого варианта, затем разнообразие и оригинальность.`,
+- Сначала обеспечь структурную полноту каждого варианта, затем разнообразие и оригинальность.
+- Для трёх вариантов дай понятную градацию safe → balanced → bold, меняя ограниченное число решений; не превращай bold в случайный набор вещей.`,
 
   selected_anchor: `Выбранная вещь:
 - selectedItemId обязателен в каждом варианте и является якорем.
@@ -117,6 +125,7 @@ const commonSkillIds = [
   "wardrobe_grounding",
   "stylist_method",
   "evidence_first",
+  "personalization",
   "outfit_architecture",
   "visual_styling",
   "context_fit",
