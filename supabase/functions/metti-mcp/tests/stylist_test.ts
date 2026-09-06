@@ -133,6 +133,7 @@ Deno.test("shared stylist skills enforce complete anchored outfits and diversity
   assert(prompt.includes("stylist_method"));
   assert(prompt.includes("evidence_first"));
   assert(prompt.includes("personalization"));
+  assert(prompt.includes("stylist_role"));
   assert(prompt.includes("полный образ"));
   assert(prompt.includes("itemId"));
   assert(prompt.includes("дубликаты"));

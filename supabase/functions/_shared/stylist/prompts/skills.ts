@@ -8,13 +8,14 @@ import { STYLIST_VOCABULARY_PROMPT } from "../vocabulary.ts";
  * Function and the MCP server both call the same StylistService and therefore
  * receive the same prompt contract.
  */
-export const STYLIST_SKILLS_VERSION = "1.2";
+export const STYLIST_SKILLS_VERSION = "1.3";
 
 export type StylistSkillId =
   | "wardrobe_grounding"
   | "stylist_method"
   | "evidence_first"
   | "personalization"
+  | "stylist_role"
   | "outfit_architecture"
   | "visual_styling"
   | "context_fit"
@@ -54,6 +55,12 @@ export const STYLIST_SKILLS: Readonly<Record<StylistSkillId, string>> = {
 - learnedPreferences, wearCount и feedbackScore — мягкие сигналы. Один лайк, дизлайк или факт носки не превращай в постоянное правило; повторяющийся мотив учитывай постепенно.
 - favorite-вещь — положительный сигнал, но не повод нарушать погоду, повод, посадку или прямой запрет пользователя.
 - Не делай выводов о теле, размере, гендере или комфорте по фотографии. Используй только явно указанные данные и нейтральный язык.`,
+
+  stylist_role: `Позиция персонального стилиста:
+- Сначала выбери один главный образ и поставь его первым; остальные варианты должны иметь ясную причину существования.
+- Не выдавай длинный каталог равноправных сочетаний. Прими решение и объясни его простыми словами.
+- Связывай выбор с задачей пользователя: поводом, настроением, погодой, комфортом и тем, как комплект будут носить в реальной жизни.
+- Оригинальность и трендовость используй дозированно, когда они помогают запросу; не жертвуй носибельностью ради эффекта.`,
 
   outfit_architecture: `Архитектура образа:
 - Строй сначала базу, затем добавляй слои и аксессуары.
@@ -126,6 +133,7 @@ const commonSkillIds = [
   "stylist_method",
   "evidence_first",
   "personalization",
+  "stylist_role",
   "outfit_architecture",
   "visual_styling",
   "context_fit",
