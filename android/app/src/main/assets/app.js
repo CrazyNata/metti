@@ -31,6 +31,8 @@
     activeItemImageIndex: 0,
     stylistPhoto: null,
     activeLooksTab: 'recommended',
+    purchaseRecommendations: null,
+    purchaseLoading: false,
     weather: { temperature_c: 18, weather_code: 3, city: 'Prague' },
     requestNumber: 0
   };
@@ -1033,12 +1035,164 @@
       art.append(badge); button.append(art, title); grid.append(button);
     });
   };
+  const purchaseCategoryLabel = (value) => {
+    const key = String(value || '').normalize('NFKC').toLocaleLowerCase().trim();
+    const labels = {
+      outer: 'Верхняя одежда', outerwear: 'Верхняя одежда', 'верхняя одежда': 'Верхняя одежда',
+      top: 'Верх', tops: 'Верхи', верх: 'Верх', верхи: 'Верхи',
+      bottom: 'Низ', bottoms: 'Низы', низ: 'Низ', низы: 'Низы',
+      shoes: 'Обувь', обувь: 'Обувь', accessory: 'Аксессуары', accessories: 'Аксессуары', аксессуары: 'Аксессуары',
+      dress: 'Платье', dresses: 'Платья', платье: 'Платье', платья: 'Платья'
+    };
+    return translate(labels[key] || value || 'Новая вещь');
+  };
+  const renderPurchaseSpotlightCopy = () => {
+    const kicker = byId('purchase-kicker');
+    const title = byId('purchase-title');
+    const intro = byId('purchase-intro');
+    const button = byId('analyze-shopping-button');
+    if (!kicker || !title || !intro || !button) return;
+    const copy = state.language === 'en'
+      ? {
+          kicker: 'STYLIST · WARDROBE',
+          firstLine: 'What to buy,',
+          secondLine: 'to complete your looks?',
+          intro: 'I’ll find 1–3 pieces that close the gaps and create new combinations with what you already own.',
+          analyze: state.purchaseRecommendations ? 'Refresh recommendations' : 'Find my next purchases',
+          loading: 'Reading your wardrobe…',
+        }
+      : {
+          kicker: 'СТИЛИСТ · ГАРДЕРОБ',
+          firstLine: 'Что докупить,',
+          secondLine: 'чтобы образы стали полнее?',
+          intro: 'Найду 1–3 вещи, которые закроют пробелы и добавят новые сочетания с тем, что уже есть.',
+          analyze: state.purchaseRecommendations ? 'Обновить рекомендации' : 'Подобрать покупки',
+          loading: 'Изучаю ваш гардероб…',
+        };
+    kicker.textContent = copy.kicker;
+    title.innerHTML = `${copy.firstLine}<br />${copy.secondLine}`;
+    intro.textContent = copy.intro;
+    button.textContent = state.purchaseLoading ? copy.loading : copy.analyze;
+  };
+  const renderPurchaseRecommendations = (result = state.purchaseRecommendations) => {
+    const spotlight = byId('purchase-spotlight');
+    const container = byId('purchase-recommendations');
+    const status = byId('purchase-status');
+    if (!spotlight || !container || !status) return;
+    renderPurchaseSpotlightCopy();
+    const pieces = Array.isArray(result?.missingPieces) ? result.missingPieces.slice(0, 3) : [];
+    container.replaceChildren();
+    container.hidden = pieces.length === 0;
+    if (!pieces.length) {
+      status.textContent = result
+        ? (state.language === 'en'
+          ? 'Your main wardrobe gaps are covered. Ask your stylist about one focused upgrade.'
+          : 'Основные пробелы гардероба уже закрыты. Спросите стилиста о точечном обновлении.')
+        : '';
+      return;
+    }
+    const paletteLabel = state.language === 'en' ? 'Palette' : 'Палитра';
+    const askLabel = state.language === 'en' ? 'Ask your stylist →' : 'Спросить стилиста →';
+    const priorityLabel = state.language === 'en' ? 'PRIORITY' : 'ПРИОРИТЕТ';
+    pieces.forEach((piece, index) => {
+      const article = document.createElement('article');
+      article.className = 'purchase-recommendation';
+      const header = document.createElement('div');
+      header.className = 'purchase-recommendation-top';
+      const rank = document.createElement('span');
+      rank.className = 'purchase-rank';
+      rank.textContent = String(index + 1).padStart(2, '0');
+      const heading = document.createElement('div');
+      const priority = Number(piece?.priority);
+      const safePriority = Number.isFinite(priority) ? Math.max(0, Math.min(100, Math.round(priority))) : null;
+      const label = document.createElement('span');
+      label.className = 'purchase-recommendation-label';
+      label.textContent = safePriority === null ? priorityLabel : `${priorityLabel} ${safePriority}/100`;
+      const title = document.createElement('h3');
+      title.textContent = purchaseCategoryLabel(piece?.category);
+      heading.append(label, title);
+      header.append(rank, heading);
+      const reason = document.createElement('p');
+      reason.className = 'purchase-recommendation-reason';
+      reason.textContent = piece?.reason || (state.language === 'en'
+        ? 'This piece should add more complete and versatile combinations to your wardrobe.'
+        : 'Эта вещь поможет собрать больше полноценных и универсальных сочетаний.');
+      const tags = document.createElement('div');
+      tags.className = 'purchase-tags';
+      const colors = Array.isArray(piece?.preferredColors)
+        ? [...new Set(piece.preferredColors.map((color) => String(color || '').trim()).filter(Boolean))].slice(0, 3)
+        : [];
+      if (colors.length) {
+        const palette = document.createElement('span');
+        palette.textContent = `${paletteLabel}: ${colors.join(' · ')}`;
+        tags.append(palette);
+      }
+      const gap = document.createElement('span');
+      gap.textContent = state.language === 'en' ? 'fills a wardrobe gap' : 'закрывает пробел гардероба';
+      tags.append(gap);
+      const askButton = document.createElement('button');
+      askButton.className = 'purchase-ask-button';
+      askButton.type = 'button';
+      askButton.dataset.action = 'ask-purchase-stylist';
+      askButton.dataset.purchaseCategory = String(piece?.category || '');
+      askButton.dataset.purchaseReason = String(piece?.reason || '');
+      askButton.textContent = askLabel;
+      article.append(header, reason, tags, askButton);
+      container.append(article);
+    });
+    const summary = state.language === 'en'
+      ? `${pieces.length} purchase ${pieces.length === 1 ? 'priority' : 'priorities'} based on your active wardrobe.`
+      : `${pieces.length} ${pieces.length === 1 ? 'приоритетная покупка' : 'приоритета для покупки'} по вашему активному гардеробу.`;
+    status.textContent = summary;
+  };
+  const analyzeShoppingRecommendations = async () => {
+    if (state.purchaseLoading) return;
+    const button = byId('analyze-shopping-button');
+    const status = byId('purchase-status');
+    if (!state.user || !supabase?.data?.invokeStylist) {
+      const message = state.language === 'en'
+        ? 'Sign in so I can check your actual wardrobe before recommending a purchase.'
+        : 'Войдите, чтобы я проверила ваш настоящий гардероб перед рекомендацией покупки.';
+      if (status) status.textContent = message;
+      showToast(state.language === 'en' ? 'Sign in to get wardrobe recommendations' : 'Войдите, чтобы получить рекомендации', 'error');
+      return;
+    }
+    state.purchaseLoading = true;
+    renderPurchaseSpotlightCopy();
+    if (button) button.disabled = true;
+    if (status) status.textContent = state.language === 'en' ? 'Comparing gaps, colors, and outfit potential…' : 'Сравниваю пробелы, цвета и возможности сочетаний…';
+    try {
+      const result = await supabase.data.invokeStylist({
+        mode: 'shopping_recommendation',
+        count: 3,
+        language: state.language,
+        weather: state.weather,
+        prompt: state.language === 'en'
+          ? 'Which three things should I buy to make my existing looks more complete, modern, and versatile? Rank the biggest wardrobe gaps and explain how each purchase will work with the exact items I already own.'
+          : 'Какие три вещи мне стоит докупить, чтобы существующие образы стали полнее, современнее и универсальнее? Расставь приоритеты по самым важным пробелам и объясни, как каждая покупка будет работать с конкретными вещами, которые уже есть в моём гардеробе.'
+      });
+      state.purchaseRecommendations = result || { missingPieces: [] };
+      renderPurchaseRecommendations(state.purchaseRecommendations);
+    } catch (error) {
+      if (status) status.textContent = state.language === 'en'
+        ? 'I could not read your wardrobe right now. Try again in a moment.'
+        : 'Сейчас не получилось изучить гардероб. Попробуйте ещё раз через минуту.';
+      showToast(error?.message || (state.language === 'en' ? 'Stylist is temporarily unavailable' : 'Стилист временно недоступен'), 'error');
+    } finally {
+      state.purchaseLoading = false;
+      if (button) button.disabled = false;
+      renderPurchaseSpotlightCopy();
+    }
+  };
   const renderLooks = () => {
     const note = byId('looks-data-note');
     const grid = document.querySelector('.looks-grid');
     if (!note || !grid) return;
     const tab = state.activeLooksTab || 'recommended';
     document.querySelectorAll('.look-tabs [data-look-tab]').forEach((button) => button.classList.toggle('selected', button.dataset.lookTab === tab));
+    const spotlight = byId('purchase-spotlight');
+    if (spotlight) spotlight.hidden = tab !== 'recommended';
+    renderPurchaseRecommendations(state.purchaseRecommendations);
     if (tab === 'recommended') {
       grid.innerHTML = defaultLooksMarkup;
       grid.hidden = false;
@@ -1078,7 +1232,7 @@
     if (!state.currentOutfit) state.currentOutfit = state.outfits[0] || null;
     renderProfile(); await renderWardrobe(); renderLooks(); await renderHomeCollage(); updateWeather();
   };
-  const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; state.currentOutfit = { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) }; renderProfile(); renderWardrobe(); renderLooks(); renderHomeCollage(); };
+  const seedDemo = () => { state.wardrobe = [...demoItems]; state.profile = { display_name: state.language === 'en' ? 'Natalia' : 'Наталия', city: 'Prague', style_tags: ['Спокойный', 'Элегантный'] }; state.outfits = []; state.purchaseRecommendations = null; state.currentOutfit = { item_ids: pickOutfitItems(state.wardrobe).map((item) => item.id) }; renderProfile(); renderWardrobe(); renderLooks(); renderHomeCollage(); };
 
   const renderWardrobeFormSubcategories = (category, selected = '') => {
     const select = byId('wardrobe-form')?.elements.subcategory;
@@ -1171,6 +1325,7 @@
         const index = state.wardrobe.findIndex((item) => item.id === existing?.id);
         if (index >= 0) state.wardrobe[index] = saved; else state.wardrobe.unshift(saved);
       }
+      state.purchaseRecommendations = null;
       const refreshDetail = state.activeItem?.id === saved.id;
       if (refreshDetail) state.activeItem = saved;
       closeWardrobeSheet(); await renderWardrobe(); await renderHomeCollage(); renderProfile(); if (refreshDetail) await renderDetail(saved, { fromOutfit: state.activeItemFromOutfit, originScreen: state.activeItemOriginScreen });
@@ -1192,6 +1347,7 @@
         await Promise.all(imagePaths.map((path) => supabase.data.removeWardrobeImage(path).catch(() => {})));
       }
       state.wardrobe = state.wardrobe.filter((value) => value.id !== item.id); state.activeItem = null; state.activeItemFromOutfit = false; state.activeItemOutfitId = null; state.activeItemOriginScreen = null;
+      state.purchaseRecommendations = null;
       await renderWardrobe(); await renderHomeCollage(); renderProfile(); go('wardrobe'); showToast('Вещь удалена', 'success');
     } catch (error) { showToast(error?.message || 'Не удалось удалить вещь', 'error'); }
   };
@@ -1519,6 +1675,20 @@
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
     const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); state.wardrobeFilter = tab.dataset.filter || 'all'; state.wardrobeSubcategory = 'all'; renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); return; }
     const action = event.target.closest('[data-action]')?.dataset.action;
+    if (action === 'analyze-shopping') { void analyzeShoppingRecommendations(); return; }
+    if (action === 'ask-purchase-stylist') {
+      const button = event.target.closest('[data-action="ask-purchase-stylist"]');
+      const category = purchaseCategoryLabel(button?.dataset.purchaseCategory || 'новую вещь');
+      const reason = String(button?.dataset.purchaseReason || '').trim();
+      const prompt = state.language === 'en'
+        ? `Help me choose a ${category.toLocaleLowerCase()} to buy. ${reason}`
+        : `Помоги выбрать, какую вещь купить в категории «${category}». ${reason}`;
+      const input = byId('prompt-input');
+      if (input) input.value = prompt;
+      go('stylist');
+      setTimeout(() => input?.focus(), 0);
+      return;
+    }
     if (action === 'open-wardrobe-subcategory') { openWardrobeSubcategorySheet(); return; }
     if (action === 'close-wardrobe-subcategory') { closeWardrobeSubcategorySheet(); return; }
     if (action === 'open-metti-select') { openMettiSelectSheet(byId(event.target.closest('[data-metti-select-target]')?.dataset.mettiSelectTarget)); return; }
@@ -1616,7 +1786,7 @@
   document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
   document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) { closeWardrobeSubcategorySheet(); return; } closeVisibleModal(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
-  window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; state.generatedOutfits = []; state.currentOutfit = null; state.activeItem = null; state.activeItemFromOutfit = false; state.activeItemOutfitId = null; state.activeItemOriginScreen = null; });
+  window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; state.generatedOutfits = []; state.purchaseRecommendations = null; state.purchaseLoading = false; state.currentOutfit = null; state.activeItem = null; state.activeItemFromOutfit = false; state.activeItemOutfitId = null; state.activeItemOriginScreen = null; renderLooks(); });
   renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); syncLanguageControls(); updateDate(); updateGreeting(); updateWeather();
   if (demoMode) seedDemo();
   else if (supabase?.auth) {

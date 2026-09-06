@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="./legal.css" />
     <link rel="stylesheet" href="./outfit-collage.css?v=2" />
     <link rel="stylesheet" href="./result-collage.css?v=2" />
+    <link rel="stylesheet" href="./purchase-recommendations.css?v=1" />
   </head>
   <body>
     <main class="phone" aria-label="Metti">
@@ -172,6 +173,19 @@
         <h1>Образы</h1>
         <div class="look-tabs"><button class="selected" type="button" data-look-tab="recommended">Для вас</button><button type="button" data-look-tab="saved">Сохранённые</button><button type="button" data-look-tab="worn">Надетые</button></div>
         <div class="looks-data-note" id="looks-data-note"></div>
+        <section class="purchase-spotlight" id="purchase-spotlight" aria-labelledby="purchase-title">
+          <div class="purchase-spotlight-head">
+            <div>
+              <div class="purchase-kicker" id="purchase-kicker">СТИЛИСТ · ГАРДЕРОБ</div>
+              <h2 id="purchase-title">Что докупить,<br />чтобы образы стали полнее?</h2>
+              <p id="purchase-intro">Найду 1–3 вещи, которые закроют пробелы и добавят новые сочетания с тем, что уже есть.</p>
+            </div>
+            <span class="purchase-spark" aria-hidden="true">✦</span>
+          </div>
+          <button class="primary purchase-analyze-button" id="analyze-shopping-button" type="button" data-action="analyze-shopping">Подобрать покупки</button>
+          <p class="purchase-status" id="purchase-status" role="status" aria-live="polite"></p>
+          <div class="purchase-recommendations" id="purchase-recommendations" hidden></div>
+        </section>
         <div class="looks-grid"><button class="look-item" data-screen="result"><div class="look-art look-evening"><span>Работа</span></div><strong>Офис в понедельник</strong></button><button class="look-item offset"><div class="look-art look-office"><span>Свидание</span></div><strong>Ужин в Праге</strong></button><button class="look-item"><div class="look-art look-walk"><span>Weekend</span></div><strong>Воскресная прогулка</strong></button><button class="look-item offset"><div class="look-art look-trip"><span>Поездка</span></div><strong>Капсула для Рима</strong></button></div>
       </section>
 
