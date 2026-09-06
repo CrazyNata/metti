@@ -112,8 +112,8 @@ function legacyResponse(
     title: first?.name ?? (language === "en" ? "No suitable outfit" : "Подходящий образ не найден"),
     note: first?.explanation ?? noResult,
     message: first
-      ? (language === "en" ? "Done — the outfit uses only your wardrobe items." : "Готово — образ собран только из вещей вашего гардероба.")
-      : noResult,
+      ? first.explanation
+      : (language === "en" ? "Done — the outfit uses only your wardrobe items." : "Готово — образ собран только из вещей вашего гардероба."),
     item_ids: first?.itemIds ?? [],
     prompt,
     temperature_c: numberValue(context.temperature),

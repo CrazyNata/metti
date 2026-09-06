@@ -13,6 +13,7 @@ import {
 } from "../../_shared/stylist/ranking.ts";
 import { StylistService } from "../../_shared/stylist/service.ts";
 import { WardrobeAuditService } from "../../_shared/stylist/wardrobe-auditor.ts";
+import { withStylistVoice } from "../../_shared/stylist/stylist-voice.ts";
 import { canonicalVocabularyValue } from "../../_shared/stylist/vocabulary.ts";
 import type {
   GenerateOutfitsInput,
@@ -125,6 +126,27 @@ Deno.test("stylist prompt keeps the selected item and real wardrobe contract", (
   assert(prompt.includes("itemId"));
   assert(prompt.includes("Белая футболка"));
   assert(prompt.includes("Протокол решения"));
+});
+
+Deno.test("stylist voice states a concrete focal point and grounding", () => {
+  const available = [
+    item("top-1", "top", {
+      name: "Белая рубашка",
+      colors: ["white"],
+      silhouette: "structured",
+    }),
+    item("bottom-1", "bottom", { name: "Чёрные брюки", colors: ["black"] }),
+    item("shoes-1", "shoes", { name: "adidas Tokyo Cow Print", statementLevel: 4 }),
+  ];
+  const styled = withStylistVoice(
+    outfit(["top-1", "bottom-1", "shoes-1"]),
+    available,
+    input(available, { prompt: "городской образ", context: { temperature: 18, occasion: "прогулка" } }),
+    "ru",
+  );
+  assert(styled.explanation.includes("Мой выбор"));
+  assert(styled.explanation.includes("adidas Tokyo Cow Print"));
+  assert(styled.explanation.includes("заземляет"));
 });
 
 Deno.test("today prompt carries an existing outfit as restyle context", () => {

@@ -11,6 +11,7 @@ import {
   rankOutfits,
 } from "./ranking.ts";
 import { WardrobeAuditService } from "./wardrobe-auditor.ts";
+import { withStylistVoice } from "./stylist-voice.ts";
 import type {
   CriticResult,
   GenerateOutfitsInput,
@@ -214,6 +215,19 @@ function fallbackCandidates(
   }, language, count);
 }
 
+function addStylistVoice(
+  outfits: OutfitSuggestion[],
+  input: GenerateOutfitsInput,
+  language: "ru" | "en",
+): OutfitSuggestion[] {
+  return outfits.map((outfit) => withStylistVoice(
+    outfit,
+    input.availableItems,
+    input,
+    language,
+  ));
+}
+
 export class StylistService {
   constructor(
     private readonly services: ApplicationServices,
@@ -348,7 +362,11 @@ export class StylistService {
       );
       return {
         outfits: rankOutfits(
-          applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+          addStylistVoice(
+            applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+            generationInput,
+            language,
+          ),
           [],
           count,
         ).map(({ stylistScore: _stylist, criticScore: _critic, finalScore: _final, ...outfit }) => outfit),
@@ -395,7 +413,11 @@ export class StylistService {
       );
       return {
         outfits: rankOutfits(
-          applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+          addStylistVoice(
+            applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+            generationInput,
+            language,
+          ),
           [],
           count,
         ).map(({ stylistScore: _stylist, criticScore: _critic, finalScore: _final, ...outfit }) => outfit),
@@ -530,6 +552,7 @@ export class StylistService {
       requestedVariants,
       input.preferredCreativity,
     );
+    candidateOutfits = addStylistVoice(candidateOutfits, generationInput, language);
     if (mode === "packing" && !capsuleItemIds.length) {
       capsuleItemIds = unionIds(...candidateOutfits.map((outfit) => outfit.itemIds));
     }
