@@ -11,6 +11,30 @@ const lower = (value: unknown): string => String(value ?? "").toLocaleLowerCase(
 const list = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
 
+/**
+ * Profile tags are user-facing labels, while wardrobe enrichment often uses
+ * English style vocabulary (or no style array at all). Keep the user's
+ * meaning when ranking the shortlist instead of silently dropping tags such
+ * as «спокойный» and «элегантный».
+ */
+const STYLE_PROFILE_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  "спокойный": ["minimal", "classic", "clean", "лаконич", "базов", "однотон"],
+  "спокойная": ["minimal", "classic", "clean", "лаконич", "базов", "однотон"],
+  "минималистичный": ["minimal", "classic", "clean", "лаконич", "базов"],
+  "элегантный": ["classic", "smart casual", "smart_casual", "business", "evening", "структур", "пидж", "лофер", "туфл"],
+  "элегантная": ["classic", "smart casual", "smart_casual", "business", "evening", "структур", "пидж", "лофер", "туфл"],
+  "классический": ["classic", "smart casual", "smart_casual", "business"],
+  "романтичный": ["romantic", "soft", "цветоч", "рюш", "юбк", "плать"],
+  "спортивный": ["sporty", "sport", "sneaker", "кроссов", "худи", "толстов"],
+  "уличный": ["streetwear", "edgy", "sneaker", "кроссов", "джинс"],
+  "бохо": ["boho", "fringe", "этник", "замш", "лен"],
+};
+
+function profileStyleTerms(style: unknown): string[] {
+  const value = lower(style).replace(/[_-]+/g, " ").trim();
+  return [...new Set([value, ...(STYLE_PROFILE_ALIASES[value] ?? [])].filter(Boolean))];
+}
+
 function containsAny(value: unknown, terms: string[]): boolean {
   const text = lower(value);
   return terms.some((term) => text.includes(term));
@@ -101,8 +125,12 @@ function styleScore(item: StylistItem, input: GenerateOutfitsInput): number {
   const text = allItemText(item);
   const profile = input.styleProfile;
   let score = 0;
-  if (profile.preferredStyles.some((style) => text.includes(lower(style)))) score += 8;
-  if (profile.dislikedStyles.some((style) => text.includes(lower(style)))) score -= 12;
+  if (profile.preferredStyles.some((style) =>
+    profileStyleTerms(style).some((term) => text.includes(term))
+  )) score += 8;
+  if (profile.dislikedStyles.some((style) =>
+    profileStyleTerms(style).some((term) => text.includes(term))
+  )) score -= 12;
   if (profile.favoriteColors.some((color) =>
     item.colors.some((candidate) => lower(candidate).includes(lower(color)))
   )) score += 7;

@@ -1479,21 +1479,30 @@
     byId('edit-sheet').hidden = true;
     await ask(`Измени образ: ${instruction}`, { mode: 'restyle', currentItemIds, lockedItemIds, instruction });
   };
+  const stylistAdjustmentPattern = /(этот\s+образ|образ|сделай|измени|замени|оставь|добавь|убери|проще|теплее|элегантнее|смелее|спокойнее|другую\s+обувь|другая\s+обувь|другую\s+сумку|другая\s+сумка|верх|низ|this\s+outfit|make\s+it|change|swap|keep|add|remove|simpler|warmer|elegant|bolder|shoes|bag|top|bottom)/i;
   const ask = async (prompt, options = {}) => {
     const clean = String(prompt || '').trim(); if (!clean) return;
     const promptForStylist = state.language === 'en' ? translate(clean) : clean;
+    const currentItemIds = Array.isArray(options.currentItemIds) ? options.currentItemIds : [];
+    const existingOutfitIds = outfitItemIds(state.currentOutfit);
+    const isFollowUp = !options.mode && !currentItemIds.length && existingOutfitIds.length > 1
+      && stylistAdjustmentPattern.test(promptForStylist)
+      && !/друг(?:ой|ой вариант)|another option|new outfit/i.test(promptForStylist);
+    const stylistOptions = isFollowUp
+      ? { ...options, mode: 'restyle', currentItemIds: existingOutfitIds, lockedItemIds: [], instruction: promptForStylist }
+      : options;
     go('chat'); addMessage(promptForStylist, 'user'); setThinking(true); const requestId = ++state.requestNumber; showToast('Metti собирает образ…');
     try {
       let result;
-      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, mode: options.mode || 'today', selectedItemId: options.selectedItemId, currentItemIds: options.currentItemIds, lockedItemIds: options.lockedItemIds, instruction: options.instruction });
-      else result = fallbackOutfit(promptForStylist, options);
+      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, mode: stylistOptions.mode || 'today', selectedItemId: stylistOptions.selectedItemId, currentItemIds: stylistOptions.currentItemIds, lockedItemIds: stylistOptions.lockedItemIds, instruction: stylistOptions.instruction });
+      else result = fallbackOutfit(promptForStylist, stylistOptions);
       if (requestId !== state.requestNumber) return;
       const outfit = result?.outfits ? adoptStylistResult(result, promptForStylist) : result;
       if (!outfit || !outfitItemIds(outfit).length) {
         state.generatedOutfits = [];
         setThinking(false); addMessage(result?.message || 'В гардеробе пока не нашлось подходящего сочетания.', 'assistant'); showToast('Не нашла подходящий образ', 'error'); return;
       }
-      state.currentOutfit = { ...outfit, prompt: promptForStylist }; setThinking(false); addMessage(result?.message || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
+      state.currentOutfit = { ...outfit, prompt: promptForStylist }; setThinking(false); addMessage(result?.message || outfit?.note || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
     } catch (error) {
       setThinking(false); addMessage('Не получилось связаться со стилистом. Проверьте подключение и попробуйте ещё раз.', 'assistant'); showToast(error?.message || 'AI-стилист временно недоступен', 'error');
     }

@@ -37,6 +37,13 @@ function creativityInstruction(input: GenerateOutfitsInput): string {
     : "Выбирай уровень стилизации по контексту и запросу пользователя.";
 }
 
+function currentOutfitContext(input: GenerateOutfitsInput): string {
+  if (!input.currentItemIds.length) return "";
+  return `Контекст текущего образа (используй только эти реальные itemIds):
+${json(input.currentItemIds)}
+Если пользователь просит изменить, смягчить, усилить или продолжить этот образ, используй его как исходный комплект и меняй только то, что помогает запросу. Если пользователь явно просит новый сценарий, этот список — лишь контекст, а не обязательные вещи.`;
+}
+
 export function buildStylistUserPrompt(input: GenerateOutfitsInput): string {
   const context = commonContext(input);
   switch (input.mode) {
@@ -124,6 +131,8 @@ ${creativityInstruction(input)}`;
       return `Собери лучшие образы на сегодня. Создай ${input.count} разных образа.
 
 Каждый вариант должен быть полноценным: платье + обувь или обычный верх + низ + обувь, если эти категории доступны. Верхняя одежда и обувь сами по себе не являются полным образом.
+
+${currentOutfitContext(input)}
 
 ${decisionProtocol(input)}
 

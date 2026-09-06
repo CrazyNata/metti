@@ -39,6 +39,11 @@ const MAX_VISION_ITEMS = 24;
 const MAX_GEMINI_IMAGE_BYTES = 900_000;
 const MAX_GEMINI_TOTAL_BYTES = 10_000_000;
 const VISION_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+
+function isGemini3Model(model: string): boolean {
+  return /^gemini-3(?:\.\d+)?-/i.test(model.trim());
+}
 
 type EnvReader = { get(name: string): string | undefined };
 
@@ -268,7 +273,10 @@ export class RemoteStylistLLM implements StylistLLM {
           responseMimeType: "application/json",
           responseSchema: schema,
           maxOutputTokens,
-          temperature: 0.6,
+          // Gemini 3 models tune sampling around their reasoning defaults;
+          // temperature is intentionally omitted for those models. Keep the
+          // legacy temperature only for explicitly configured older models.
+          ...(isGemini3Model(this.geminiModel) ? {} : { temperature: 0.6 }),
         },
       }),
     });
@@ -556,7 +564,7 @@ export function createStylistLLM(
   return new RemoteStylistLLM(
     geminiKey,
     openAiKey,
-    String(env.get("GEMINI_MODEL") ?? "gemini-3.5-flash-lite"),
+    String(env.get("GEMINI_MODEL") ?? DEFAULT_GEMINI_MODEL),
     String(env.get("OPENAI_MODEL") ?? "gpt-4.1-mini"),
   );
 }

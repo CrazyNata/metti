@@ -127,6 +127,16 @@ Deno.test("stylist prompt keeps the selected item and real wardrobe contract", (
   assert(prompt.includes("Протокол решения"));
 });
 
+Deno.test("today prompt carries an existing outfit as restyle context", () => {
+  const prompt = buildStylistUserPrompt(input([
+    item("top-1", "top"),
+    item("bottom-1", "bottom"),
+    item("shoes-1", "shoes"),
+  ], { currentItemIds: ["top-1", "bottom-1", "shoes-1"] }));
+  assert(prompt.includes("Контекст текущего образа"));
+  assert(prompt.includes("top-1"));
+});
+
 Deno.test("shared stylist skills enforce complete anchored outfits and diversity", () => {
   const prompt = buildStylistSkillPrompt("selected_item");
   assert(prompt.includes("selected_anchor"));
@@ -137,6 +147,8 @@ Deno.test("shared stylist skills enforce complete anchored outfits and diversity
   assert(prompt.includes("полный образ"));
   assert(prompt.includes("itemId"));
   assert(prompt.includes("дубликаты"));
+  assert(prompt.includes("brief и повод 30"));
+  assert(prompt.includes("focal point"));
 });
 
 Deno.test("stylist item payload preserves the exact wardrobe identity", () => {
@@ -268,6 +280,26 @@ Deno.test("formal context penalizes obvious gym pieces when better pieces exist"
   ];
   const formal = input(available, { prompt: "formal dinner", context: { occasion: "formal dinner", temperature: 18 } });
   assert(scoreStylistItem(available[0], formal) > scoreStylistItem(available[1], formal));
+});
+
+Deno.test("Russian profile style labels influence the shortlist", () => {
+  const available = [
+    item("basic", "top", {
+      description: "Лаконичная базовая однотонная футболка.",
+      colors: ["cream"],
+    }),
+    item("loud", "top", {
+      description: "Яркий спортивный топ с активным принтом.",
+      colors: ["orange"],
+    }),
+  ];
+  const profileInput = input(available, {
+    styleProfile: {
+      ...input(available).styleProfile,
+      preferredStyles: ["Спокойный", "Элегантный"],
+    },
+  });
+  assert(scoreStylistItem(available[0], profileInput) > scoreStylistItem(available[1], profileInput));
 });
 
 Deno.test("ranking removes near-duplicate outfits and prefers the critic score", () => {
