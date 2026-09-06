@@ -18,6 +18,8 @@ function containsAny(value: unknown, terms: string[]): boolean {
 
 function allItemText(item: StylistItem): string {
   return [
+    item.name,
+    item.description,
     item.category,
     item.subcategory,
     ...item.colors,
@@ -53,6 +55,8 @@ export function toStylistItem(
     : [];
   return {
     itemId: String(item.id),
+    name: item.name,
+    description: item.description ?? null,
     category: item.category,
     subcategory: item.subcategory ?? null,
     colors: [...new Set(colors.map(String))],

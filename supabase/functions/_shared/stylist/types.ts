@@ -33,6 +33,9 @@ export interface StylistContext {
 
 export interface StylistItem {
   itemId: string;
+  /** Human-readable identity used to ground the model in the exact wardrobe item. */
+  name: string;
+  description: string | null;
   category: string;
   subcategory: string | null;
   colors: string[];
@@ -95,6 +98,10 @@ export interface StylistRepairInput {
 }
 
 export interface CritiqueInput {
+  mode?: StylistMode;
+  prompt?: string;
+  selectedItemId?: string;
+  lockedItemIds?: string[];
   context: StylistContext;
   styleProfile: StyleProfileContext;
   outfits: OutfitSuggestion[];

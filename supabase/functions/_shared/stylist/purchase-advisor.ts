@@ -87,6 +87,8 @@ function categoryFor(candidate: PurchaseCandidateInput): string {
 function candidateItem(input: PurchaseCandidateInput): StylistItem {
   return {
     itemId: "purchase-candidate",
+    name: input.name ?? "potential purchase",
+    description: null,
     category: categoryFor(input),
     subcategory: input.subcategory ?? null,
     colors: list(input.colors),
@@ -116,6 +118,8 @@ function candidateItem(input: PurchaseCandidateInput): StylistItem {
 function wardrobeItem(item: WardrobeItemDto): StylistItem {
   return {
     itemId: item.id,
+    name: item.name,
+    description: item.description,
     category: item.category,
     subcategory: item.subcategory,
     colors: item.colors.length ? item.colors : item.color ? [item.color] : [],

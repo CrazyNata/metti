@@ -1,5 +1,5 @@
 import { createApplicationServices } from "../../_shared/services.ts";
-import { filterWardrobe, scoreStylistItem } from "../../_shared/stylist/filters.ts";
+import { filterWardrobe, scoreStylistItem, toStylistItem } from "../../_shared/stylist/filters.ts";
 import { PurchaseAdvisorService } from "../../_shared/stylist/purchase-advisor.ts";
 import { StyleProfileLearnerService } from "../../_shared/stylist/profile-learner.ts";
 import { buildStylistUserPrompt } from "../../_shared/stylist/prompts/modes.ts";
@@ -17,6 +17,7 @@ import { canonicalVocabularyValue } from "../../_shared/stylist/vocabulary.ts";
 import type {
   GenerateOutfitsInput,
   OutfitSuggestion,
+  CritiqueInput,
   StylistItem,
   StylistLLM,
 } from "../../_shared/stylist/types.ts";
@@ -34,6 +35,8 @@ function item(
 ): StylistItem {
   return {
     itemId,
+    name: itemId,
+    description: null,
     category,
     subcategory: null,
     colors: [],
@@ -114,20 +117,36 @@ function outfit(itemIds: string[], score = 80): OutfitSuggestion {
 
 Deno.test("stylist prompt keeps the selected item and real wardrobe contract", () => {
   const prompt = buildStylistUserPrompt(input([
-    item("top-1", "top", { colors: ["white"] }),
+    item("top-1", "top", { name: "Белая футболка", colors: ["white"] }),
     item("bag-1", "accessory", { subcategory: "bag", statementLevel: 4 }),
   ], { mode: "selected_item", selectedItemId: "bag-1" }));
   assert(prompt.includes("selectedItemId: bag-1"));
   assert(prompt.includes("availableItems"));
   assert(prompt.includes("itemId"));
+  assert(prompt.includes("Белая футболка"));
+  assert(prompt.includes("Протокол решения"));
 });
 
 Deno.test("shared stylist skills enforce complete anchored outfits and diversity", () => {
   const prompt = buildStylistSkillPrompt("selected_item");
   assert(prompt.includes("selected_anchor"));
+  assert(prompt.includes("stylist_method"));
+  assert(prompt.includes("evidence_first"));
   assert(prompt.includes("полный образ"));
   assert(prompt.includes("itemId"));
   assert(prompt.includes("дубликаты"));
+});
+
+Deno.test("stylist item payload preserves the exact wardrobe identity", () => {
+  const mapped = toStylistItem({
+    ...wardrobeFixture("tokyo-1", "shoes"),
+    name: "adidas Tokyo Cow Print",
+    description: "Коричнево-белая пара с cow print.",
+    brand: "adidas",
+  });
+  assertEquals(mapped.name, "adidas Tokyo Cow Print");
+  assertEquals(mapped.description, "Коричнево-белая пара с cow print.");
+  assertEquals(mapped.brand, "adidas");
 });
 
 Deno.test("specialized roles keep critic and learner responsibilities separate", () => {
@@ -283,6 +302,7 @@ Deno.test("shared StylistService validates provider output before ranking it", a
     wardrobeFixture("shoes-1", "shoes"),
   );
   const services = createApplicationServices(db, userA);
+  let critiqueBrief: CritiqueInput | null = null;
   const llm: StylistLLM = {
     provider: "test",
     generateOutfits: async () => ({
@@ -293,12 +313,15 @@ Deno.test("shared StylistService validates provider output before ranking it", a
       ],
       reason: "",
     }),
-    critiqueOutfits: async () => ({
-      results: [
-        { outfitIndex: 0, criticScore: 98, issues: [] },
-        { outfitIndex: 1, criticScore: 20, issues: ["Слишком формально"] },
-      ],
-    }),
+    critiqueOutfits: async (critique) => {
+      critiqueBrief = critique;
+      return {
+        results: [
+          { outfitIndex: 0, criticScore: 98, issues: [] },
+          { outfitIndex: 1, criticScore: 20, issues: ["Слишком формально"] },
+        ],
+      };
+    },
   };
   const service = new StylistService(services, llm, { get: () => undefined });
   const result = await service.generate({ mode: "today", count: 2, prompt: "city" });
@@ -306,6 +329,10 @@ Deno.test("shared StylistService validates provider output before ranking it", a
   assertEquals(result.outfits[0].itemIds, ["top-1", "bottom-1", "shoes-1"]);
   assert(result.validationErrors?.includes("2:unknown_item_id"));
   assertEquals(result.outfits.length, 2);
+  const observedCritique = critiqueBrief as CritiqueInput | null;
+  assert(observedCritique);
+  assertEquals(observedCritique.mode, "today");
+  assertEquals(observedCritique.prompt, "city");
 });
 
 Deno.test("one corrective retry repairs invalid provider output and never loops", async () => {
@@ -466,10 +493,35 @@ function wardrobeFixture(id: string, category: "top" | "bottom" | "shoes") {
     name: id,
     description: null,
     category,
+    subcategory: null,
+    brand: null,
     color: null,
+    colors: [],
+    secondaryColors: [],
     size: null,
     season: null,
-    brand: null,
+    seasons: [],
+    material: null,
+    pattern: null,
+    fit: null,
+    silhouette: null,
+    length: null,
+    styles: [],
+    occasions: [],
+    formality: null,
+    warmth: null,
+    waterproof: null,
+    statementLevel: null,
+    wearCount: 0,
+    lastWornAt: null,
+    tags: [],
+    favorite: false,
+    status: "active" as const,
+    imageUrl: null,
+    originalImageUrl: null,
+    processedImageUrl: null,
+    imageStatus: "none" as const,
+    createdAt: "2026-01-01T00:00:00.000Z",
     notes: null,
     image_path: null,
     original_image_path: null,

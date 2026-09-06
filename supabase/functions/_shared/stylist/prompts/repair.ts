@@ -1,6 +1,6 @@
 import type { StylistRepairInput } from "../types.ts";
 
-export const STYLIST_REPAIR_PROMPT_VERSION = "1.0";
+export const STYLIST_REPAIR_PROMPT_VERSION = "1.1";
 
 function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
@@ -21,6 +21,6 @@ ${json(input.generation.availableItems.map((item) => item.itemId))}
 ${json(input.previousResponse)}
 
 Исправь только ошибки, сохрани хорошие валидные варианты и не создавай новые варианты без необходимости.
-Не выдумывай itemId и не заменяй отсутствующую вещь похожей.
+При исправлении соблюдай исходный brief, выбранные и locked-вещи, полноту базы и точную identity каждой вещи. Не выдумывай itemId, не меняй itemId на похожую вещь и не удаляй обязательный якорь ради прохождения проверки.
 Верни только валидный structured JSON в исходной схеме. Язык ответа: ${input.generation.context.language ?? "ru"}.`;
 }

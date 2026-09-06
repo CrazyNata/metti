@@ -538,6 +538,10 @@ export class StylistService {
     if (criticEnabled && candidateOutfits.length > 1) {
       try {
         critics = normalizeCriticResults(await this.llm.critiqueOutfits({
+          mode,
+          prompt,
+          selectedItemId: input.selectedItemId,
+          lockedItemIds,
           context,
           styleProfile,
           outfits: candidateOutfits,
