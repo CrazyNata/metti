@@ -7,3 +7,15 @@
 @media(max-width:500px){.phone{width:100%;height:100vh;min-height:100vh;border:0;border-radius:0;box-shadow:none}.phone:before{top:16px}}
 /* Keep the bottom sheet above Android's system navigation area. */
 .sheet{padding-bottom:max(env(safe-area-inset-bottom,0px),var(--metti-native-bottom-inset,0px))}
+
+/* A ready look stays editable: the user can send a natural-language change
+   without leaving the result screen or losing the current item ids. */
+.result-stylist-form{margin:14px 0 0;padding:13px 14px;border:1px solid var(--line);border-radius:17px;background:var(--surface)}
+.result-stylist-form label{display:flex;flex-direction:column;gap:4px;margin-bottom:9px}
+.result-stylist-form label span{color:var(--rose);font:10px var(--mono);letter-spacing:1.3px}
+.result-stylist-form label small{color:var(--muted);font-size:12px}
+.result-stylist-field{display:flex;align-items:center;gap:8px}
+.result-stylist-field input{min-width:0;flex:1;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:13px;background:var(--bg);color:var(--ink);font:13px var(--sans);outline:0}
+.result-stylist-field input:focus{border-color:var(--rose);box-shadow:0 0 0 3px #8b4e7020}
+.result-stylist-field button{display:grid;place-items:center;width:40px;height:40px;border:0;border-radius:13px;background:var(--ink);color:#fff8f4;font-size:18px;cursor:pointer}
+.result-stylist-field button:active{transform:translateY(1px)}

@@ -1595,6 +1595,20 @@
   byId('wardrobe-sheet')?.querySelectorAll('[data-action="close-wardrobe-sheet"]').forEach((button) => button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); closeWardrobeSheet(); }));
   byId('profile-form')?.addEventListener('submit', saveProfileForm);
   byId('style-form')?.addEventListener('submit', saveStyleForm);
+  byId('result-stylist-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const input = byId('result-stylist-input');
+    const value = input?.value.trim();
+    const currentItemIds = outfitItemIds(state.currentOutfit);
+    if (!value || !currentItemIds.length) return;
+    if (input) input.value = '';
+    ask(value, {
+      mode: 'restyle',
+      currentItemIds,
+      lockedItemIds: lockedIdsForRestyle(currentItemIds, value),
+      instruction: value,
+    });
+  });
   document.querySelector('.search-box input')?.addEventListener('input', applyWardrobeFilters);
   ensureWardrobeSubcategoryPicker();
   ensureMettiSelectPickers();
