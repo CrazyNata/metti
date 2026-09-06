@@ -3,6 +3,7 @@ import type {
   OutfitSuggestion,
   StylistItem,
 } from "./types.ts";
+import { colorHarmonyForOutfit, colorHarmonyLabel } from "./color-harmony.ts";
 
 function lower(value: unknown): string {
   return String(value ?? "").toLocaleLowerCase();
@@ -154,6 +155,8 @@ export function withStylistVoice(
 
   const details = itemDetails(focal);
   const style = stylePhrase(input.styleProfile.preferredStyles, language);
+  const harmony = colorHarmonyForOutfit(outfit, items);
+  const palette = colorHarmonyLabel(harmony, language);
   const occasion = occasionPhrase(input, language);
   const temperature = temperaturePhrase(input, language);
   let thesis: string;
@@ -162,13 +165,13 @@ export function withStylistVoice(
     if (support) thesis += ` ${support.name} supports the line`;
     if (shoes) thesis += `${support ? "," : ""} while ${shoes.name} grounds the look`;
     thesis += ".";
-    thesis += ` The overall direction is ${style}${occasion ? ` ${occasion}` : ""}${temperature}.`;
+    thesis += ` The overall direction is ${style}${occasion ? ` ${occasion}` : ""}${temperature}. Palette: ${palette}.`;
   } else {
     thesis = `Мой выбор — ${focal.name} как главный акцент${details ? ` (${details})` : ""}.`;
     if (support) thesis += ` ${support.name} поддерживает линию`;
     if (shoes) thesis += `${support ? ", а" : " А"} ${shoes.name} заземляет комплект`;
     thesis += ".";
-    thesis += ` Общее направление — ${style}${occasion ? ` ${occasion}` : ""}${temperature}.`;
+    thesis += ` Общее направление — ${style}${occasion ? ` ${occasion}` : ""}${temperature}. Палитра — ${palette}.`;
   }
 
   const raw = String(outfit.explanation ?? "").trim();

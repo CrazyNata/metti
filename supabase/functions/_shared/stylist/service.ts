@@ -10,6 +10,7 @@ import {
   fallbackOutfitSuggestions,
   rankOutfits,
 } from "./ranking.ts";
+import { colorHarmonyForOutfit } from "./color-harmony.ts";
 import { WardrobeAuditService } from "./wardrobe-auditor.ts";
 import { withStylistVoice } from "./stylist-voice.ts";
 import type {
@@ -228,6 +229,29 @@ function addStylistVoice(
   ));
 }
 
+function applyColorHarmony(
+  outfits: OutfitSuggestion[],
+  input: GenerateOutfitsInput,
+  language: "ru" | "en",
+): OutfitSuggestion[] {
+  return outfits.map((outfit) => {
+    const harmony = colorHarmonyForOutfit(outfit, input.availableItems);
+    const weightedScore = Math.round(outfit.score * 0.7 + harmony.score * 0.3);
+    const colorWarning = harmony.score < 62
+      ? language === "en"
+        ? "The palette needs a calmer base or a clearer color-wheel relationship."
+        : "Палитре нужна более спокойная база или ясная связь по цветовому кругу."
+      : null;
+    return {
+      ...outfit,
+      score: weightedScore,
+      warnings: colorWarning
+        ? [...new Set([...outfit.warnings, colorWarning])].slice(0, 8)
+        : outfit.warnings,
+    };
+  });
+}
+
 export class StylistService {
   constructor(
     private readonly services: ApplicationServices,
@@ -363,7 +387,11 @@ export class StylistService {
       return {
         outfits: rankOutfits(
           addStylistVoice(
-            applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+            applyColorHarmony(
+              applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+              generationInput,
+              language,
+            ),
             generationInput,
             language,
           ),
@@ -414,7 +442,11 @@ export class StylistService {
       return {
         outfits: rankOutfits(
           addStylistVoice(
-            applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+            applyColorHarmony(
+              applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
+              generationInput,
+              language,
+            ),
             generationInput,
             language,
           ),
@@ -553,6 +585,7 @@ export class StylistService {
       input.preferredCreativity,
     );
     candidateOutfits = addStylistVoice(candidateOutfits, generationInput, language);
+    candidateOutfits = applyColorHarmony(candidateOutfits, generationInput, language);
     if (mode === "packing" && !capsuleItemIds.length) {
       capsuleItemIds = unionIds(...candidateOutfits.map((outfit) => outfit.itemIds));
     }

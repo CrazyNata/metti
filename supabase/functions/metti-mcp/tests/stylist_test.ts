@@ -14,6 +14,7 @@ import {
 import { StylistService } from "../../_shared/stylist/service.ts";
 import { WardrobeAuditService } from "../../_shared/stylist/wardrobe-auditor.ts";
 import { withStylistVoice } from "../../_shared/stylist/stylist-voice.ts";
+import { colorHarmonyForOutfit } from "../../_shared/stylist/color-harmony.ts";
 import { canonicalVocabularyValue } from "../../_shared/stylist/vocabulary.ts";
 import type {
   GenerateOutfitsInput,
@@ -147,6 +148,26 @@ Deno.test("stylist voice states a concrete focal point and grounding", () => {
   assert(styled.explanation.includes("Мой выбор"));
   assert(styled.explanation.includes("adidas Tokyo Cow Print"));
   assert(styled.explanation.includes("заземляет"));
+});
+
+Deno.test("color wheel favors a deliberate palette over a mixed clash", () => {
+  const available = [
+    item("top-1", "top", { name: "Красный топ", colors: ["red"] }),
+    item("bottom-1", "bottom", { name: "Синие брюки", colors: ["blue"] }),
+    item("shoes-1", "shoes", { name: "Чёрные туфли", colors: ["black"] }),
+    item("bottom-2", "bottom", { name: "Зелёные брюки", colors: ["green"] }),
+    item("shoes-2", "shoes", { name: "Фиолетовые ботинки", colors: ["purple"] }),
+  ];
+  const deliberate = colorHarmonyForOutfit(
+    outfit(["top-1", "bottom-1", "shoes-1"]),
+    available,
+  );
+  const mixed = colorHarmonyForOutfit(
+    outfit(["top-1", "bottom-2", "shoes-2"]),
+    available,
+  );
+  assert(deliberate.score > mixed.score);
+  assertEquals(deliberate.relation, "complementary");
 });
 
 Deno.test("today prompt carries an existing outfit as restyle context", () => {
