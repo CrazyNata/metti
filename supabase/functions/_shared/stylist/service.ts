@@ -3,6 +3,7 @@ import { asJsonObject, stringList } from "../serializers.ts";
 import type { ApplicationServices } from "../services.ts";
 import type { WardrobeItemDto } from "../types.ts";
 import { filterWardrobe, toStylistItem } from "./filters.ts";
+import { buildCuratedShortlist } from "./curation.ts";
 import {
   METTI_STYLIST_PROMPT_VERSION,
 } from "./prompts/index.ts";
@@ -156,9 +157,41 @@ function historyByItem(
 function feedbackByItem(
   feedback: Awaited<ReturnType<ApplicationServices["feedback"]["list"]>>,
   outfits: Awaited<ReturnType<ApplicationServices["outfits"]["list"]>>["items"],
+  wardrobe: WardrobeItemDto[],
 ): Map<string, number> {
   const outfitById = new Map(outfits.map((outfit) => [outfit.id, outfit]));
+  const itemById = new Map(wardrobe.map((item) => [item.id, item]));
   const scores = new Map<string, number>();
+  const categoryFor = (item: WardrobeItemDto | undefined): string => item?.category ?? "";
+  const feedbackWeight = (
+    reason: string | null,
+    item: WardrobeItemDto | undefined,
+  ): number => {
+    if (!reason || !item) return 1;
+    const category = categoryFor(item);
+    switch (reason) {
+      case "wrong_shoes":
+        return category === "shoes" ? 1 : 0;
+      case "too_many_layers":
+        return category === "outer" || category === "accessory" ? 1 : 0.15;
+      case "bad_proportions":
+        return category === "shoes" || category === "accessory" ? 0.25 : 1;
+      case "too_formal":
+      case "too_casual":
+        return item.formality === null || item.formality === undefined ? 0.35 : 1;
+      case "too_bright":
+      case "too_dark":
+        return item.colors?.length || item.color ? 1 : 0.25;
+      case "too_boring":
+        return item.statementLevel !== null && item.statementLevel !== undefined
+          ? item.statementLevel >= 3 ? 0.15 : 0.75
+          : 0.5;
+      case "not_my_style":
+        return 0.75;
+      default:
+        return 0.4;
+    }
+  };
   feedback.forEach((entry) => {
     const outfit = outfitById.get(entry.outfitId);
     if (!outfit) return;
@@ -166,10 +199,44 @@ function feedbackByItem(
     // explicit preference. Repeated reactions accumulate across outfits.
     const delta = entry.reaction === "like" ? 1 : -2;
     outfit.itemIds.forEach((itemId) => {
-      scores.set(itemId, (scores.get(itemId) ?? 0) + delta);
+      const weight = feedbackWeight(entry.reason, itemById.get(itemId));
+      if (!weight) return;
+      scores.set(itemId, (scores.get(itemId) ?? 0) + delta * weight);
     });
   });
   return scores;
+}
+
+function feedbackGuidance(
+  feedback: Awaited<ReturnType<ApplicationServices["feedback"]["list"]>>,
+  language: "ru" | "en",
+): string[] {
+  const labels: Record<string, [string, string]> = {
+    too_formal: ["не делать образ слишком формальным", "avoid making the look too formal"],
+    too_casual: ["не делать образ слишком расслабленным", "avoid making the look too casual"],
+    too_boring: ["добавить один выразительный, но контролируемый акцент", "add one expressive but controlled accent"],
+    too_bright: ["сдержать яркость палитры", "keep the palette calmer"],
+    too_dark: ["добавить светлый или более живой элемент", "add a lighter or livelier element"],
+    not_my_style: ["строже свериться с личным стилем", "check the personal style more strictly"],
+    bad_proportions: ["перепроверить пропорции и объёмы", "recheck proportions and volume"],
+    wrong_shoes: ["перепроверить обувь как часть силуэта и повода", "recheck the shoes against the silhouette and occasion"],
+    too_many_layers: ["ограничить количество слоёв", "limit the number of layers"],
+    other: ["не повторять спорное решение без дополнительной проверки", "recheck any disputed choice before repeating it"],
+  };
+  const counts = new Map<string, number>();
+  feedback.forEach((entry) => {
+    if (entry.reaction !== "dislike" || !entry.reason) return;
+    counts.set(entry.reason, (counts.get(entry.reason) ?? 0) + 1);
+  });
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 6)
+    .flatMap(([reason, count]) => {
+      const label = labels[reason];
+      if (!label) return [];
+      const text = language === "en" ? label[1] : label[0];
+      return [`${text}${count > 1 ? ` (${count} reactions)` : ""}`];
+    });
 }
 
 function normalizeContext(
@@ -206,7 +273,22 @@ function fallbackCandidates(
   count: number,
   variantOffset: number,
 ): OutfitSuggestion[] {
-  return fallbackOutfitSuggestions(items, {
+  const curated = buildCuratedShortlist(input, Math.max(8, Math.min(12, count * 3)))
+    .map((candidate, index): OutfitSuggestion => ({
+      name: language === "en"
+        ? `Curated wardrobe look ${index + 1}`
+        : `Собранный образ ${index + 1}`,
+      itemIds: candidate.itemIds,
+      creativity: creativityForIndex(index, input.preferredCreativity),
+      style: [],
+      occasion: [],
+      score: candidate.score,
+      explanation: language === "en"
+        ? `A complete base with ${candidate.formula}; ${candidate.notes.join(" and ")}.`
+        : `Полная основа по формуле «${candidate.formula}»; ${candidate.notes.join(" и ")}.`,
+      warnings: [],
+    }));
+  const fallback = fallbackOutfitSuggestions(items, {
     mode: input.mode,
     prompt: input.prompt,
     selectedItemId: input.selectedItemId,
@@ -215,6 +297,13 @@ function fallbackCandidates(
     preferredCreativity: input.preferredCreativity,
     variantOffset,
   }, language, count);
+  const seen = new Set<string>();
+  return [...curated, ...fallback].filter((outfit) => {
+    const key = [...outfit.itemIds].sort().join("|");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function addStylistVoice(
@@ -315,9 +404,10 @@ export class StylistService {
       this.services.outfits.list({ page: 1, limit: 100, status: "all" }),
     ]);
     const history = historyByItem(wearHistory.entries);
-    const feedbackScores = feedbackByItem(feedback, savedOutfits.items);
+    const feedbackScores = feedbackByItem(feedback, savedOutfits.items, allWardrobe);
     const context = normalizeContext(input.context, profile.city, language);
     const styleProfile = styleProfileFrom(profile, profileRow);
+    styleProfile.recentFeedback = feedbackGuidance(feedback, language);
     const favoriteOutfitItemIds = savedOutfits.items
       .filter((outfit) => outfit.favorite)
       .flatMap((outfit) => outfit.itemIds)

@@ -15,6 +15,7 @@ import { StylistService } from "../../_shared/stylist/service.ts";
 import { WardrobeAuditService } from "../../_shared/stylist/wardrobe-auditor.ts";
 import { withStylistVoice } from "../../_shared/stylist/stylist-voice.ts";
 import { colorHarmonyForOutfit } from "../../_shared/stylist/color-harmony.ts";
+import { buildCuratedShortlist } from "../../_shared/stylist/curation.ts";
 import {
   compositionQualityForOutfit,
 } from "../../_shared/stylist/composition.ts";
@@ -130,6 +131,26 @@ Deno.test("stylist prompt keeps the selected item and real wardrobe contract", (
   assert(prompt.includes("itemId"));
   assert(prompt.includes("Белая футболка"));
   assert(prompt.includes("Протокол решения"));
+});
+
+Deno.test("curated shortlist keeps an exact anchor inside complete style bases", () => {
+  const available = [
+    item("dress-1", "dress", { name: "Чёрное платье", colors: ["black"], formality: 3 }),
+    item("top-1", "top", { name: "Белая рубашка", colors: ["white"], formality: 3 }),
+    item("bottom-1", "bottom", { name: "Синие джинсы", colors: ["blue"], formality: 2 }),
+    item("shoes-1", "shoes", { name: "Белые кеды", colors: ["white"], formality: 2 }),
+    item("shoes-2", "shoes", { name: "adidas Tokyo Cow Print", colors: ["brown", "white"], statementLevel: 4, formality: 2 }),
+  ];
+  const shortlist = buildCuratedShortlist(input(available, {
+    mode: "selected_item",
+    selectedItemId: "shoes-2",
+  }));
+  assert(shortlist.length > 0);
+  assert(shortlist.every((candidate) => candidate.itemIds.includes("shoes-2")));
+  assert(shortlist.some((candidate) =>
+    candidate.itemIds.includes("top-1") && candidate.itemIds.includes("bottom-1")
+  ));
+  assert(shortlist.some((candidate) => candidate.itemIds.includes("dress-1")));
 });
 
 Deno.test("stylist voice states a concrete focal point and grounding", () => {

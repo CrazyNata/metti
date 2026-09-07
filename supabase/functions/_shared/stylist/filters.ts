@@ -20,9 +20,12 @@ const list = (value: unknown): string[] =>
 const STYLE_PROFILE_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "спокойный": ["minimal", "classic", "clean", "лаконич", "базов", "однотон"],
   "спокойная": ["minimal", "classic", "clean", "лаконич", "базов", "однотон"],
+  "calm": ["minimal", "classic", "clean", "лаконич", "базов", "однотон"],
+  "quiet": ["minimal", "classic", "clean", "лаконич", "базов", "однотон"],
   "минималистичный": ["minimal", "classic", "clean", "лаконич", "базов"],
   "элегантный": ["classic", "smart casual", "smart_casual", "business", "evening", "структур", "пидж", "лофер", "туфл"],
   "элегантная": ["classic", "smart casual", "smart_casual", "business", "evening", "структур", "пидж", "лофер", "туфл"],
+  "elegant": ["classic", "smart casual", "smart_casual", "business", "evening", "структур", "пидж", "лофер", "туфл"],
   "классический": ["classic", "smart casual", "smart_casual", "business"],
   "романтичный": ["romantic", "soft", "цветоч", "рюш", "юбк", "плать"],
   "спортивный": ["sporty", "sport", "sneaker", "кроссов", "худи", "толстов"],

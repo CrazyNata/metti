@@ -1,6 +1,6 @@
 import { COLOR_WHEEL_PROMPT } from "../color-harmony.ts";
 
-export const OUTFIT_CRITIC_PROMPT_VERSION = "1.5";
+export const OUTFIT_CRITIC_PROMPT_VERSION = "2.0";
 
 export const OUTFIT_CRITIC_SYSTEM_PROMPT = `Ты fashion-editor приложения Metti.
 

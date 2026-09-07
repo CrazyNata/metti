@@ -1,4 +1,5 @@
 import type { GenerateOutfitsInput, StylistMode } from "../types.ts";
+import { curatedShortlistPrompt } from "../curation.ts";
 
 function json(value: unknown): string {
   return JSON.stringify(value, null, 2) ?? "null";
@@ -44,6 +45,11 @@ ${json(input.currentItemIds)}
 Если пользователь просит изменить, смягчить, усилить или продолжить этот образ, используй его как исходный комплект и меняй только то, что помогает запросу. Если пользователь явно просит новый сценарий, этот список — лишь контекст, а не обязательные вещи.`;
 }
 
+function curatedContext(input: GenerateOutfitsInput): string {
+  if (input.mode === "shopping_recommendation" || input.mode === "packing") return "";
+  return curatedShortlistPrompt(input);
+}
+
 export function buildStylistUserPrompt(input: GenerateOutfitsInput): string {
   const context = commonContext(input);
   switch (input.mode) {
@@ -65,6 +71,8 @@ ${requestText(input.prompt, "Собери лучшие повседневные 
 ${context}
 
 ${creativityInstruction(input)}
+
+${curatedContext(input)}
 
 Сделай варианты действительно разными.`;
 
@@ -90,7 +98,9 @@ ${json(input.context)}
 
 ${context}
 
-${creativityInstruction(input)}`;
+${creativityInstruction(input)}
+
+${curatedContext(input)}`;
 
     case "packing":
       return `Собери капсулу для поездки и ${input.count} разных образа из неё.
@@ -107,7 +117,9 @@ ${requestText(input.prompt, "Собери практичную капсулу д
 
 ${context}
 
-${creativityInstruction(input)}`;
+${creativityInstruction(input)}
+
+${curatedContext(input)}`;
 
     case "shopping_recommendation":
       return `Проанализируй дыры гардероба пользователя и подготовь ${input.count} приоритетных рекомендаций, которые увеличат число хороших сочетаний.
@@ -124,7 +136,9 @@ ${requestText(input.prompt, "Каких вещей не хватает гард�
 
 ${context}
 
-${creativityInstruction(input)}`;
+${creativityInstruction(input)}
+
+${curatedContext(input)}`;
 
     case "today":
     default:
@@ -144,7 +158,9 @@ ${requestText(input.prompt, "Что надеть сегодня?")}
 
 ${context}
 
-${creativityInstruction(input)}`;
+${creativityInstruction(input)}
+
+${curatedContext(input)}`;
   }
 }
 

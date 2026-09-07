@@ -73,6 +73,8 @@ export interface StyleProfileContext {
   favoriteItems: string[];
   avoidRules: string[];
   learnedPreferences: string[];
+  /** Recent outfit reactions are short-lived guidance, not permanent rules. */
+  recentFeedback?: string[];
   confidence: number | null;
   explicit: Record<string, unknown>;
 }
