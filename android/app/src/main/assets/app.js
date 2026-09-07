@@ -870,6 +870,7 @@
     board.className = 'flatlay-board';
     node.append(board, label);
     const uniqueItems = [...new Map(items.map((item) => [String(item.id), item])).values()];
+    board.parentElement.classList.toggle('has-items', uniqueItems.length > 0);
     // Every selected garment belongs in the complete look, including extra accessories.
     const roles = ['hero', 'top', 'bottom', 'shoes', 'bag', 'accent'];
     const occupied = new Set();
