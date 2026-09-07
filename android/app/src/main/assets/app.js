@@ -45,6 +45,12 @@
     return [...new Set(raw.map((value) => typeof value === 'string' ? value : value?.path)
       .map((path) => String(path || '').trim()).filter(Boolean))];
   };
+  // A collage should use the processed front card whenever the backend has
+  // one. Legacy rows still fall back to their display/original path without
+  // inventing a replacement image.
+  const collageImagePath = (item) => String(
+    item?.processed_image_path || item?.image_path || item?.original_image_path || ''
+  ).trim();
   const itemImageEntries = (item) => {
     const entries = [];
     const add = (path, label) => {
@@ -867,18 +873,20 @@
     // Every selected garment belongs in the complete look, including extra accessories.
     const roles = ['hero', 'top', 'bottom', 'shoes', 'bag', 'accent'];
     const occupied = new Set();
-    board.classList.toggle('flatlay-simple', uniqueItems.length < 3);
+    let extraIndex = 0;
     const jobs = uniqueItems.map((item) => {
       let role = roles.find((key) => slots[key]?.id === item.id && !occupied.has(key));
       if (role) occupied.add(role);
       const piece = document.createElement('div');
-      piece.className = `flatlay-piece flatlay-${role || 'extra'}`;
+      const extraClass = role ? '' : ` flatlay-extra-${extraIndex++}`;
+      piece.className = `flatlay-piece flatlay-${role || 'extra'}${extraClass}`;
       piece.dataset.itemId = item.id;
       piece.setAttribute('role', 'img');
       piece.setAttribute('aria-label', item.name || translate('Вещь'));
       piece.title = item.name || translate('Вещь');
       board.append(piece);
-      if (item.image_path) return addImageBackground(piece, item.image_path, 'contain').then((ready) => {
+      const imagePath = collageImagePath(item);
+      if (imagePath) return addImageBackground(piece, imagePath, 'contain').then((ready) => {
         if (!ready && piece.isConnected) piece.textContent = item.name || translate('Вещь');
       });
       piece.classList.add('flatlay-missing'); piece.textContent = item.name || translate('Вещь');
@@ -886,7 +894,6 @@
     });
     board.classList.toggle('flatlay-with-outer', Boolean(slots.hero && isOuterwearItem(slots.hero)));
     board.classList.toggle('flatlay-with-dress', Boolean(slots.hero && isDressItem(slots.hero)));
-    board.classList.toggle('flatlay-has-extras', uniqueItems.length > occupied.size);
     await Promise.all(jobs);
   };
   const renderOutfitCollage = async (collage, outfit, keepEmpty = false) => {
