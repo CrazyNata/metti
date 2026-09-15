@@ -10,12 +10,14 @@ import {
 import {
   fallbackOutfitSuggestions,
   rankOutfits,
+  rankOutfitsWithDressCoverage,
 } from "../../_shared/stylist/ranking.ts";
 import { StylistService } from "../../_shared/stylist/service.ts";
 import { WardrobeAuditService } from "../../_shared/stylist/wardrobe-auditor.ts";
 import { withStylistVoice } from "../../_shared/stylist/stylist-voice.ts";
 import { colorHarmonyForOutfit } from "../../_shared/stylist/color-harmony.ts";
 import { buildCuratedShortlist } from "../../_shared/stylist/curation.ts";
+import { shouldOfferDressVariant } from "../../_shared/stylist/formula.ts";
 import {
   compositionQualityForOutfit,
 } from "../../_shared/stylist/composition.ts";
@@ -151,6 +153,38 @@ Deno.test("curated shortlist keeps an exact anchor inside complete style bases",
     candidate.itemIds.includes("top-1") && candidate.itemIds.includes("bottom-1")
   ));
   assert(shortlist.some((candidate) => candidate.itemIds.includes("dress-1")));
+});
+
+Deno.test("curated shortlist keeps a dress formula beside separates", () => {
+  const available = [
+    item("dress-1", "top", { subcategory: "dress", name: "Чёрное платье", formality: 3 }),
+    item("top-1", "top", { subcategory: "shirt", name: "Белая рубашка", formality: 3 }),
+    item("top-2", "top", { subcategory: "tshirt", name: "Молочный топ", formality: 2 }),
+    item("bottom-1", "bottom", { name: "Синие джинсы", formality: 2 }),
+    item("bottom-2", "bottom", { name: "Чёрная юбка", formality: 3 }),
+    item("shoes-1", "shoes", { name: "Белые кеды", formality: 2 }),
+  ];
+  const shortlist = buildCuratedShortlist(input(available), 6);
+  assert(shortlist.some((candidate) => candidate.itemIds.includes("dress-1")));
+  assert(shortlist.some((candidate) =>
+    candidate.itemIds.includes("top-1") && candidate.itemIds.includes("bottom-1")
+  ));
+});
+
+Deno.test("dress coverage respects fixed base anchors and an explicit exclusion", () => {
+  const available = [
+    item("dress-1", "top", { subcategory: "dress" }),
+    item("top-1", "top"),
+    item("bottom-1", "bottom"),
+  ];
+  assertEquals(
+    shouldOfferDressVariant(input(available, { selectedItemId: "top-1" })),
+    false,
+  );
+  assertEquals(
+    shouldOfferDressVariant(input(available, { prompt: "образ без платья" })),
+    false,
+  );
 });
 
 Deno.test("stylist voice states a concrete focal point and grounding", () => {
@@ -406,6 +440,49 @@ Deno.test("fallback keeps anchors and rotates complete wardrobe variants", () =>
   });
 });
 
+Deno.test("fallback reserves a dress variant when separates are also available", () => {
+  const available = [
+    item("dress-1", "top", { subcategory: "dress", name: "Чёрное платье" }),
+    item("top-1", "top", { subcategory: "shirt" }),
+    item("top-2", "top", { subcategory: "tshirt" }),
+    item("bottom-1", "bottom"),
+    item("bottom-2", "bottom"),
+    item("shoes-1", "shoes"),
+    item("shoes-2", "shoes"),
+  ];
+  const suggestions = fallbackOutfitSuggestions(
+    available,
+    { mode: "today", prompt: "городской образ" },
+    "ru",
+    3,
+  );
+  assert(suggestions.some((suggestion) => suggestion.itemIds.includes("dress-1")));
+  assert(suggestions.some((suggestion) =>
+    suggestion.itemIds.includes("top-1") && suggestion.itemIds.includes("bottom-1")
+  ));
+});
+
+Deno.test("dress coverage prevents three separate looks from hiding a dress", () => {
+  const available = [
+    item("dress-1", "top", { subcategory: "dress" }),
+    item("top-1", "top"),
+    item("top-2", "top"),
+    item("bottom-1", "bottom"),
+    item("bottom-2", "bottom"),
+    item("shoes-1", "shoes"),
+    item("shoes-2", "shoes"),
+  ];
+  const profileInput = input(available, { count: 3 });
+  const ranked = rankOutfitsWithDressCoverage([
+    outfit(["top-1", "bottom-1", "shoes-1"], 96),
+    outfit(["top-2", "bottom-2", "shoes-1"], 94),
+    outfit(["top-1", "bottom-2", "shoes-2"], 92),
+    outfit(["dress-1", "shoes-1"], 55),
+  ], [], profileInput, 3);
+  assertEquals(ranked.length, 3);
+  assert(ranked.some((suggestion) => suggestion.itemIds.includes("dress-1")));
+});
+
 Deno.test("selected item is mandatory in every validated candidate", () => {
   const available = [
     item("top-1", "top"),
@@ -532,6 +609,44 @@ Deno.test("shared StylistService validates provider output before ranking it", a
   assert(observedCritique);
   assertEquals(observedCritique.mode, "today");
   assertEquals(observedCritique.prompt, "city");
+});
+
+Deno.test("shared StylistService supplements a missing dress formula", async () => {
+  const db = new MemoryDataClient(userA.id);
+  db.seedProfile({
+    id: userA.id,
+    display_name: "Anna",
+    city: "Prague",
+    preferences: {},
+    style_tags: ["minimal"],
+    style_profile: {},
+  });
+  db.seedWardrobe(
+    { ...wardrobeFixture("dress-1", "top"), metadata: { subcategory: "dress" } },
+    wardrobeFixture("top-1", "top"),
+    wardrobeFixture("top-2", "top"),
+    wardrobeFixture("bottom-1", "bottom"),
+    wardrobeFixture("bottom-2", "bottom"),
+    wardrobeFixture("shoes-1", "shoes"),
+    wardrobeFixture("shoes-2", "shoes"),
+  );
+  const services = createApplicationServices(db, userA);
+  const llm: StylistLLM = {
+    provider: "test",
+    generateOutfits: async () => ({
+      outfits: [
+        outfit(["top-1", "bottom-1", "shoes-1"], 96),
+        outfit(["top-2", "bottom-2", "shoes-1"], 94),
+        outfit(["top-1", "bottom-2", "shoes-2"], 92),
+      ],
+      reason: "",
+    }),
+    critiqueOutfits: async () => ({ results: [] }),
+  };
+  const result = await new StylistService(services, llm, { get: () => undefined })
+    .generate({ mode: "today", count: 3, prompt: "city" });
+  assertEquals(result.outfits.length, 3);
+  assert(result.outfits.some((suggestion) => suggestion.itemIds.includes("dress-1")));
 });
 
 Deno.test("one corrective retry repairs invalid provider output and never loops", async () => {

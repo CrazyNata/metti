@@ -1,6 +1,12 @@
 import { colorHarmonyForOutfit, colorHarmonyLabel } from "./color-harmony.ts";
 import { compositionQualityForOutfit } from "./composition.ts";
 import { scoreStylistItem } from "./filters.ts";
+import {
+  isBaseTop,
+  isDress,
+  isOuterLayer,
+  shouldOfferDressVariant,
+} from "./formula.ts";
 import type {
   GenerateOutfitsInput,
   OutfitSuggestion,
@@ -22,33 +28,6 @@ function lower(value: unknown): string {
 function hasAny(value: unknown, terms: string[]): boolean {
   const text = lower(value);
   return terms.some((term) => text.includes(term));
-}
-
-function isDress(item: StylistItem | undefined): boolean {
-  return item?.category === "dress" || lower(item?.subcategory) === "dress";
-}
-
-function isOuter(item: StylistItem | undefined): boolean {
-  if (!item) return false;
-  return item.category === "outer" || hasAny(item.subcategory, [
-    "outerwear",
-    "blazer",
-    "jacket",
-    "coat",
-    "trench",
-    "parka",
-    "bomber",
-    "cardigan",
-    "куртк",
-    "пальто",
-    "тренч",
-    "жакет",
-    "кардиган",
-  ]);
-}
-
-function isBaseTop(item: StylistItem | undefined): boolean {
-  return item?.category === "top" && !isDress(item) && !isOuter(item);
 }
 
 function isShoes(item: StylistItem | undefined): boolean {
@@ -190,7 +169,7 @@ function formulaFor(itemIds: string[], byId: Map<string, StylistItem>): string {
     ? ["dress"]
     : ["top", "bottom"];
   if (chosen.some(isShoes)) parts.push("shoes");
-  if (chosen.some(isOuter)) parts.push("outer layer");
+  if (chosen.some(isOuterLayer)) parts.push("outer layer");
   return parts.join(" + ");
 }
 
@@ -220,7 +199,7 @@ export function buildCuratedShortlist(
   const tops = topCandidates(input.availableItems, input, isBaseTop);
   const bottoms = topCandidates(input.availableItems, input, (item) => item.category === "bottom");
   const shoes = topCandidates(input.availableItems, input, isShoes);
-  const outer = topCandidates(input.availableItems, input, isOuter, 8);
+  const outer = topCandidates(input.availableItems, input, isOuterLayer, 8);
   const hasFixedDress = fixed.some(isDress);
   const hasFixedTop = fixed.some(isBaseTop);
   const hasFixedBottom = fixed.some((item) => item.category === "bottom");
@@ -230,7 +209,7 @@ export function buildCuratedShortlist(
   const fixedShoes = fixedFor(fixed, isShoes, shoes);
   const wardrobeHasShoes = shoes.length > 0;
   const shoeChoices = fixedShoes.length ? fixedShoes : [undefined];
-  const fixedOuter = fixedFor(fixed, isOuter, []);
+  const fixedOuter = fixedFor(fixed, isOuterLayer, []);
   const includeOuter = fixedOuter.length > 0 || weatherNeedsLayer(input);
   const outerChoices = fixedOuter.length ? fixedOuter : [undefined, ...outer.slice(0, 3)];
   const candidates: string[][] = [];
@@ -242,7 +221,11 @@ export function buildCuratedShortlist(
     if (!candidates.some((candidate) => candidateKey(candidate) === key)) candidates.push(itemIds);
   };
 
-  const wantsDress = hasFixedDress || (!hasFixedTop && !hasFixedBottom && dresses.length > 0);
+  // Keep a dress formula in the editor's starting grid whenever it is
+  // compatible with the fixed anchors. Previously this was gated by the
+  // absence of *any* top and bottom in the wardrobe, so a normal separates
+  // wardrobe made every curated candidate a top + bottom look.
+  const wantsDress = shouldOfferDressVariant(input);
   if (wantsDress) {
     for (const dress of fixedDress.slice(0, 4)) {
       for (const shoe of shoeChoices.slice(0, 6)) {
@@ -266,7 +249,7 @@ export function buildCuratedShortlist(
     const currentIds = [...new Set(input.currentItemIds.filter((id) => byId.has(id)))];
     if (currentIds.length && containsAll(currentIds, fixedIds)) addCandidate(currentIds.map((id) => byId.get(id)));
   }
-  return candidates
+  const ranked = candidates
     .map((itemIds) => {
       const quality = candidateScore(itemIds, input.availableItems, input);
       return {
@@ -277,8 +260,23 @@ export function buildCuratedShortlist(
         notes: quality.notes,
       } satisfies CuratedStylistCandidate;
     })
-    .sort((left, right) => right.score - left.score || candidateKey(left.itemIds).localeCompare(candidateKey(right.itemIds)))
-    .slice(0, Math.max(1, Math.min(limit, 12)));
+    .sort((left, right) => right.score - left.score || candidateKey(left.itemIds).localeCompare(candidateKey(right.itemIds)));
+  const maxCandidates = Math.max(1, Math.min(limit, 12));
+  const selected = ranked.slice(0, maxCandidates);
+  if (wantsDress && maxCandidates > 1 && !selected.some((candidate) =>
+    candidate.itemIds.some((itemId) => isDress(byId.get(itemId)))
+  )) {
+    const bestDress = ranked.find((candidate) =>
+      candidate.itemIds.some((itemId) => isDress(byId.get(itemId)))
+    );
+    if (bestDress) {
+      selected[selected.length - 1] = bestDress;
+      selected.sort((left, right) =>
+        right.score - left.score || candidateKey(left.itemIds).localeCompare(candidateKey(right.itemIds))
+      );
+    }
+  }
+  return selected;
 }
 
 export function curatedShortlistPrompt(input: GenerateOutfitsInput): string {
@@ -291,6 +289,7 @@ ${JSON.stringify(shortlist, null, 2)}
 
 Используй эту сетку как контроль качества:
 - В первую очередь выбери один из верхних coherent-кандидатов и сохрани его точные itemIds.
+- Если в сетке есть формула «dress», а верх или низ не зафиксированы, сохрани её хотя бы в одном варианте; не заполняй весь requested count вариантами только «top + bottom».
 - Можешь отказаться от кандидата только при явном конфликте с brief, фото или обязательным якорем; тогда выбери более слабый компромисс и отрази его в warnings.
 - Не объединяй случайные itemIds из разных кандидатов только ради цвета.
 - Не добавляй аксессуары и слои, если они не усиливают уже выбранную формулу.`;

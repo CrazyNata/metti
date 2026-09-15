@@ -10,7 +10,13 @@ import {
 import {
   fallbackOutfitSuggestions,
   rankOutfits,
+  rankOutfitsWithDressCoverage,
 } from "./ranking.ts";
+import {
+  dressIsExplicitlyRequested,
+  outfitUsesDress,
+  shouldOfferDressVariant,
+} from "./formula.ts";
 import { colorHarmonyForOutfit } from "./color-harmony.ts";
 import { applyCompositionQuality } from "./composition.ts";
 import { WardrobeAuditService } from "./wardrobe-auditor.ts";
@@ -476,8 +482,8 @@ export class StylistService {
         },
       );
       return {
-        outfits: rankOutfits(
-          addStylistVoice(
+        outfits: rankOutfitsWithDressCoverage(
+            addStylistVoice(
             applyCompositionQuality(
               applyColorHarmony(
                 applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
@@ -491,6 +497,7 @@ export class StylistService {
             language,
           ),
           [],
+          generationInput,
           count,
         ).map(({ stylistScore: _stylist, criticScore: _critic, finalScore: _final, ...outfit }) => outfit),
         capsuleItemIds: fallback.capsuleItemIds,
@@ -535,8 +542,8 @@ export class StylistService {
         },
       );
       return {
-        outfits: rankOutfits(
-          addStylistVoice(
+        outfits: rankOutfitsWithDressCoverage(
+            addStylistVoice(
             applyCompositionQuality(
               applyColorHarmony(
                 applyCreativityMix(fallback.outfits, count, input.preferredCreativity),
@@ -550,6 +557,7 @@ export class StylistService {
             language,
           ),
           [],
+          generationInput,
           count,
         ).map(({ stylistScore: _stylist, criticScore: _critic, finalScore: _final, ...outfit }) => outfit),
         capsuleItemIds: fallback.capsuleItemIds,
@@ -646,16 +654,38 @@ export class StylistService {
       [],
       requestedVariants,
     );
-    if (diverseProviderCandidates.length < requestedVariants) {
+    const dressCoverageRequired = shouldOfferDressVariant(generationInput) && (
+      requestedVariants > 1 ||
+      dressIsExplicitlyRequested(prompt, generationInput.instruction, context.occasion)
+    );
+    const providerHasDress = candidateOutfits.some((outfit) =>
+      outfitUsesDress(outfit, filtered.items)
+    );
+    if (diverseProviderCandidates.length < requestedVariants ||
+      (dressCoverageRequired && !providerHasDress)) {
+      const dressSupplement = dressCoverageRequired && !providerHasDress
+        ? fallbackOutfitSuggestions(filtered.items, {
+          mode: generationInput.mode,
+          prompt: generationInput.prompt,
+          selectedItemId: generationInput.selectedItemId,
+          currentItemIds: generationInput.currentItemIds,
+          lockedItemIds: generationInput.lockedItemIds,
+          preferredCreativity: generationInput.preferredCreativity,
+          variantOffset: fallbackVariantOffset,
+        }, language, Math.min(5, Math.max(2, requestedVariants))).filter((outfit) =>
+          outfitUsesDress(outfit, filtered.items)
+        ).slice(0, 1)
+        : [];
+      const fallbackPool = fallbackCandidates(
+        generationInput,
+        filtered.items,
+        language,
+        Math.min(5, requestedVariants + 2),
+        fallbackVariantOffset,
+      );
       const supplemental = validateOutfitResult(
         {
-          outfits: fallbackCandidates(
-            generationInput,
-            filtered.items,
-            language,
-            Math.min(5, requestedVariants + 2),
-            fallbackVariantOffset,
-          ),
+          outfits: [...dressSupplement, ...fallbackPool],
           reason: "",
         },
         {
@@ -667,10 +697,21 @@ export class StylistService {
           count: Math.min(5, requestedVariants + 2),
         },
       );
-      candidateOutfits = [
+      const mergedCandidates = [
         ...candidateOutfits,
         ...supplemental.outfits,
-      ].slice(0, 10);
+      ];
+      candidateOutfits = mergedCandidates.slice(0, 10);
+      if (dressCoverageRequired && !providerHasDress) {
+        const dressCandidate = mergedCandidates.find((outfit) =>
+          outfitUsesDress(outfit, filtered.items)
+        );
+        if (dressCandidate && !candidateOutfits.some((outfit) =>
+          outfitUsesDress(outfit, filtered.items)
+        )) {
+          candidateOutfits[Math.max(0, candidateOutfits.length - 1)] = dressCandidate;
+        }
+      }
       validationErrors = [...new Set([
         ...validationErrors,
         ...supplemental.errors,
@@ -707,7 +748,12 @@ export class StylistService {
         if (debug) console.warn("stylist critic unavailable", error instanceof Error ? error.message : error);
       }
     }
-    const ranked = rankOutfits(candidateOutfits, critics, count);
+    const ranked = rankOutfitsWithDressCoverage(
+      candidateOutfits,
+      critics,
+      generationInput,
+      count,
+    );
     const result: StylistGenerationResult = {
       outfits: ranked.map(({ stylistScore: _stylist, criticScore: _critic, finalScore: _final, ...outfit }) => outfit),
       capsuleItemIds,

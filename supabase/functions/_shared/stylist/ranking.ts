@@ -6,6 +6,15 @@ import type {
   StylistItem,
   StylistMode,
 } from "./types.ts";
+import {
+  dressIsExplicitlyExcluded,
+  dressIsExplicitlyRequested,
+  isBaseTop,
+  isDress,
+  isOuterLayer,
+  outfitUsesDress,
+  shouldOfferDressVariant,
+} from "./formula.ts";
 
 function clamp(value: unknown): number {
   const parsed = Number(value);
@@ -73,6 +82,49 @@ export function rankOutfits(
   return diverse;
 }
 
+function outfitKey(outfit: OutfitSuggestion): string {
+  return [...outfit.itemIds].sort().join("|");
+}
+
+/**
+ * Keep one dress formula visible when the wardrobe can support it. A pure
+ * score sort is allowed to return three very similar separates looks, which
+ * makes a real dress effectively invisible even though it is compatible.
+ */
+export function rankOutfitsWithDressCoverage(
+  outfits: OutfitSuggestion[],
+  criticResults: CriticResult[] = [],
+  input: GenerateOutfitsInput,
+  maxCount = 5,
+): RankedOutfit[] {
+  const limit = Math.max(1, Math.min(maxCount, 5));
+  const ranked = rankOutfits(outfits, criticResults, limit);
+  const reserveDress = shouldOfferDressVariant(input) && (
+    limit > 1 || dressIsExplicitlyRequested(input.prompt, input.instruction, input.context.occasion)
+  );
+  if (!reserveDress || ranked.some((outfit) => outfitUsesDress(outfit, input.availableItems))) {
+    return ranked;
+  }
+
+  const dressEntries = outfits
+    .map((outfit, index) => ({ outfit, index }))
+    .filter(({ outfit }) => outfitUsesDress(outfit, input.availableItems));
+  if (!dressEntries.length) return ranked;
+  const dressOutfits = dressEntries.map(({ outfit }) => outfit);
+  const dressCritics = dressEntries.flatMap(({ index }, dressIndex) => {
+    const critic = criticResults.find((value) => value.outfitIndex === index);
+    return critic ? [{ ...critic, outfitIndex: dressIndex }] : [];
+  });
+  const bestDress = rankOutfits(dressOutfits, dressCritics, 1)[0];
+  if (!bestDress) return ranked;
+
+  const kept = ranked
+    .filter((outfit) => outfitKey(outfit) !== outfitKey(bestDress))
+    .slice(0, Math.max(0, limit - 1));
+  return [...kept, bestDress]
+    .sort((left, right) => right.finalScore - left.finalScore || right.stylistScore - left.stylistScore);
+}
+
 export function itemIdsForSimpleFallback(items: StylistItem[]): string[] {
   const selected: StylistItem[] = [];
   const add = (item: StylistItem | undefined) => {
@@ -92,28 +144,6 @@ export function itemIdsForSimpleFallback(items: StylistItem[]): string[] {
 
 function normalized(value: unknown): string {
   return String(value ?? "").toLocaleLowerCase();
-}
-
-function isDress(item: StylistItem | undefined): boolean {
-  return item?.category === "dress" || normalized(item?.subcategory) === "dress";
-}
-
-function isOuterLayer(item: StylistItem | undefined): boolean {
-  if (!item) return false;
-  return item.category === "outer" || [
-    "outerwear",
-    "blazer",
-    "jacket",
-    "coat",
-    "trench",
-    "parka",
-    "bomber",
-    "cardigan",
-  ].includes(normalized(item.subcategory));
-}
-
-function isBaseTop(item: StylistItem | undefined): boolean {
-  return item?.category === "top" && !isDress(item) && !isOuterLayer(item);
 }
 
 function mentions(value: string, terms: string[]): boolean {
@@ -200,6 +230,12 @@ export function fallbackOutfitSuggestions(
   const current = options.mode === "restyle"
     ? (options.currentItemIds ?? []).filter((value) => byId.has(value))
     : [];
+  const fixedItems = anchors.map((id) => byId.get(id)).filter(
+    (item): item is StylistItem => Boolean(item),
+  );
+  const fixedBase = fixedItems.some((item) => isBaseTop(item) || item.category === "bottom");
+  const canUseDress = dresses.length > 0 && !fixedBase && !dressIsExplicitlyExcluded(prompt);
+  const dressRequested = dressIsExplicitlyRequested(prompt);
   const results: OutfitSuggestion[] = [];
   const seen = new Set<string>();
 
@@ -222,6 +258,11 @@ export function fallbackOutfitSuggestions(
     let hasShoes = ids.some((id) => byId.get(id)?.category === "shoes");
     let hasOuter = ids.some((id) => isOuterLayer(byId.get(id)));
 
+    const preferDress = canUseDress && (dressRequested || (variant === 0 && !current.length));
+    if (!hasDress && preferDress) {
+      add(pickRotated(dresses, used, variantOffset + variant));
+      hasDress = ids.some((id) => isDress(byId.get(id)));
+    }
     if (!hasDress && !hasTop) {
       add(pickRotated(tops, used, variantOffset + variant));
       hasTop = ids.some((id) => isBaseTop(byId.get(id)));
@@ -230,7 +271,7 @@ export function fallbackOutfitSuggestions(
       add(pickRotated(bottoms, used, variantOffset + variant));
       hasBottom = ids.some((id) => byId.get(id)?.category === "bottom");
     }
-    if (!hasDress && !hasTop && !hasBottom) {
+    if (!hasDress && !hasTop && !hasBottom && canUseDress) {
       add(pickRotated(dresses, used, variantOffset + variant));
       hasDress = ids.some((id) => isDress(byId.get(id)));
     }

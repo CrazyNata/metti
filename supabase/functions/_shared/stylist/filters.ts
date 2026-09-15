@@ -4,6 +4,7 @@ import type {
   StylistContext,
   StylistItem,
 } from "./types.ts";
+import { isDress } from "./formula.ts";
 
 const DEFAULT_MAX_ITEMS = 80;
 
@@ -252,6 +253,15 @@ function ensureCategoryCoverage(
   if (candidate) selected.push(candidate);
 }
 
+function ensureDressCoverage(
+  selected: StylistItem[],
+  ranked: StylistItem[],
+): void {
+  if (selected.some(isDress)) return;
+  const candidate = ranked.find(isDress);
+  if (candidate) selected.push(candidate);
+}
+
 export interface FilteredWardrobe {
   items: StylistItem[];
   scores: Record<string, number>;
@@ -283,6 +293,10 @@ export function filterWardrobe(
   ["top", "bottom", "shoes"].forEach((category) =>
     ensureCategoryCoverage(selected, ranked, category)
   );
+  // A dress is a complete alternative formula, not a second top. Keep one in
+  // the shortlist so it cannot disappear simply because separates score a few
+  // points higher.
+  ensureDressCoverage(selected, ranked);
   ranked.forEach((item) => {
     if (selected.length >= Math.max(1, Math.min(maxItems, 100))) return;
     add(item);
