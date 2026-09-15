@@ -19,6 +19,11 @@ import { colorHarmonyForOutfit } from "../../_shared/stylist/color-harmony.ts";
 import { buildCuratedShortlist } from "../../_shared/stylist/curation.ts";
 import { shouldOfferDressVariant } from "../../_shared/stylist/formula.ts";
 import {
+  packingOutfitSuggestions,
+  scorePackingItem,
+  selectPackingCapsule,
+} from "../../_shared/stylist/packing.ts";
+import {
   compositionQualityForOutfit,
 } from "../../_shared/stylist/composition.ts";
 import { canonicalVocabularyValue } from "../../_shared/stylist/vocabulary.ts";
@@ -334,6 +339,107 @@ Deno.test("today prompt carries an existing outfit as restyle context", () => {
   ], { currentItemIds: ["top-1", "bottom-1", "shoes-1"] }));
   assert(prompt.includes("Контекст текущего образа"));
   assert(prompt.includes("top-1"));
+});
+
+Deno.test("packing prompt preserves trip constraints and capsule contract", () => {
+  const prompt = buildStylistUserPrompt(input([], {
+    mode: "packing",
+    count: 4,
+    prompt: "Отпуск в Риме",
+    context: {
+      location: "Rome",
+      durationDays: 7,
+      activities: ["город", "ужин"],
+      laundryAvailable: true,
+      temperature: 24,
+    },
+  }));
+  assert(prompt.includes("Собери капсулу"));
+  assert(prompt.includes("durationDays"));
+  assert(prompt.includes("activities"));
+  assert(prompt.includes("laundryAvailable"));
+  assert(prompt.includes("capsuleItemIds"));
+});
+
+Deno.test("packing ranks versatile exact items and builds complete capsule looks", () => {
+  const available = [
+    item("top-plain", "top", {
+      name: "Молочная футболка",
+      subcategory: "tshirt",
+      colors: ["cream"],
+      styles: ["minimal"],
+      occasions: ["city", "everyday"],
+      warmth: 2,
+    }),
+    item("top-evening", "top", {
+      name: "Шёлковый топ",
+      subcategory: "shirt",
+      colors: ["black"],
+      occasions: ["dinner"],
+      formality: 4,
+      statementLevel: 1,
+    }),
+    item("dress-1", "top", {
+      name: "Чёрное платье",
+      subcategory: "dress",
+      colors: ["black"],
+      occasions: ["dinner"],
+      formality: 4,
+    }),
+    item("bottom-1", "bottom", {
+      name: "Прямые брюки",
+      colors: ["beige"],
+      occasions: ["city", "dinner"],
+    }),
+    item("bottom-2", "bottom", {
+      name: "Джинсы",
+      colors: ["blue"],
+      occasions: ["city", "everyday"],
+    }),
+    item("shoes-1", "shoes", {
+      name: "Белые кеды",
+      subcategory: "sneakers",
+      colors: ["white"],
+      occasions: ["city", "everyday"],
+    }),
+    item("shoes-2", "shoes", {
+      name: "Чёрные туфли",
+      subcategory: "pumps",
+      colors: ["black"],
+      occasions: ["dinner"],
+      formality: 4,
+    }),
+    item("bag-1", "accessory", {
+      name: "Чёрная сумка",
+      subcategory: "bag",
+      colors: ["black"],
+    }),
+  ];
+  const packingInput = input(available, {
+    mode: "packing",
+    count: 4,
+    prompt: "Отпуск: город и ужины",
+    context: {
+      location: "Rome",
+      durationDays: 7,
+      activities: ["город", "ужин"],
+      laundryAvailable: true,
+      temperature: 24,
+      weatherCode: 1,
+    },
+  });
+  const capsule = selectPackingCapsule(available, packingInput);
+  const capsuleIds = new Set(capsule.map((value) => value.itemId));
+  assert(capsuleIds.has("top-plain"));
+  assert(capsuleIds.has("bottom-1") || capsuleIds.has("bottom-2"));
+  assert(capsuleIds.has("shoes-1") || capsuleIds.has("shoes-2"));
+  assert(capsuleIds.has("dress-1"));
+  assert(capsule.length <= 10);
+  assert(scorePackingItem(available[0], packingInput) > scorePackingItem(available[3], packingInput) - 10);
+  const looks = packingOutfitSuggestions(available, packingInput, "ru", 4);
+  assert(looks.length >= 2);
+  assert(looks.every((look) => look.itemIds.every((id) => capsuleIds.has(id))));
+  assert(looks.some((look) => look.itemIds.includes("dress-1")));
 });
 
 Deno.test("shared stylist skills enforce complete anchored outfits and diversity", () => {

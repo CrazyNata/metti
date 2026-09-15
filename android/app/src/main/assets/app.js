@@ -257,6 +257,115 @@
     });
     return selected.slice(0, 6);
   };
+  const packingText = (item) => itemText(item);
+  const packingActivities = (context = {}) => {
+    const raw = Array.isArray(context.activities) ? context.activities : String(context.activities || '').split(/[,;]+/);
+    return raw.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+  };
+  const packingHasActivity = (context, terms) => {
+    const activities = packingActivities(context);
+    const text = `${activities.join(' ')} ${context.occasion || ''} ${context.prompt || ''}`.toLowerCase();
+    return terms.some((term) => text.includes(term));
+  };
+  const packingTemperature = (context = {}) => {
+    const value = Number(context.temperature ?? context.feelsLike ?? state.weather.temperature_c);
+    return Number.isFinite(value) ? value : null;
+  };
+  const packingNeedsLayer = (context = {}) => {
+    const temperature = packingTemperature(context);
+    const code = Number(context.weatherCode ?? context.weather_code);
+    const precipitation = Number(context.precipitation);
+    return (Number.isFinite(temperature) && temperature <= 15) || (Number.isFinite(code) && code >= 51) || (Number.isFinite(precipitation) && precipitation > 0);
+  };
+  const packingItemScore = (item, context = {}) => {
+    const text = packingText(item);
+    const category = isDressItem(item) ? 'dress' : categoryForItem(item);
+    const base = { top: 15, bottom: 14, dress: 12, shoes: 12, accessory: 3 }[category] || 0;
+    let score = base;
+    if (/(базов|basic|minimal|однотон|neutral|нейтрал|classic|классич|everyday|повседнев|travel|универсал)/i.test(text)) score += 7;
+    if (new Set([...(Array.isArray(item.colors) ? item.colors : []), item.color].filter(Boolean).map((value) => String(value).toLowerCase())).size <= 1) score += 3;
+    if (Number(item.statementLevel) >= 4) score -= 3;
+    if (item.favorite || item.userFavorite) score += 4;
+    const temperature = packingTemperature(context);
+    if (Number.isFinite(temperature)) {
+      if (temperature >= 24) {
+        if (Number(item.warmth) >= 5) score -= 14;
+        if (/(лён|linen|хлопок|cotton|шорт|shorts|сандал|sandal)/i.test(text)) score += 5;
+        if (isOuterwearItem(item)) score -= 10;
+      } else if (temperature <= 10) {
+        if (Number(item.warmth) >= 4) score += 8;
+        if (isOuterwearItem(item)) score += 9;
+        if (/(шорт|shorts|сандал|sandal|лён|linen)/i.test(text)) score -= 10;
+      }
+    }
+    if (packingNeedsLayer(context) && isOuterwearItem(item)) score += 9;
+    if (!packingNeedsLayer(context) && Number.isFinite(temperature) && temperature >= 22 && isOuterwearItem(item)) score -= 8;
+    if (packingHasActivity(context, ['ужин', 'dinner', 'вечер', 'evening', 'свидан', 'date', 'наряд', 'formal']) && (isDressItem(item) || Number(item.formality) >= 3)) score += 5;
+    if (packingHasActivity(context, ['пляж', 'beach', 'море', 'pool', 'бассейн']) && /(лён|linen|шорт|shorts|плать|dress|сандал|sandal)/i.test(text)) score += 4;
+    if (packingHasActivity(context, ['поход', 'hike', 'горы', 'mountain', 'спорт', 'sport']) && /(спорт|sport|кроссов|sneaker|мембран|waterproof)/i.test(text)) score += 5;
+    return score;
+  };
+  const selectPackingCapsuleItems = (context = {}) => {
+    const items = state.wardrobe.filter((item) => item?.id);
+    const sorted = [...items].sort((left, right) => packingItemScore(right, context) - packingItemScore(left, context) || String(left.id).localeCompare(String(right.id)));
+    const selected = [];
+    const take = (predicate, count) => {
+      for (let index = 0; index < count; index += 1) {
+        const candidate = sorted.filter((item) => !selected.some((value) => String(value.id) === String(item.id)) && predicate(item)).sort((left, right) => {
+          const duplicateLeft = selected.filter((value) => itemSubcategory(value) === itemSubcategory(left) && String(value.color || '').toLowerCase() === String(left.color || '').toLowerCase()).length;
+          const duplicateRight = selected.filter((value) => itemSubcategory(value) === itemSubcategory(right) && String(value.color || '').toLowerCase() === String(right.color || '').toLowerCase()).length;
+          return packingItemScore(right, context) - duplicateRight * 8 - packingItemScore(left, context) + duplicateLeft * 8;
+        })[0];
+        if (!candidate) return;
+        selected.push(candidate);
+      }
+    };
+    const days = Math.max(1, Math.min(30, Number(context.durationDays) || 7));
+    const laundry = context.laundryAvailable === true;
+    const target = Math.max(6, Math.min(14, (days <= 3 ? 6 : days <= 7 ? 9 : days <= 14 ? 11 : 13) + (laundry ? -1 : 1)));
+    const dresses = sorted.filter(isDressItem);
+    const includeDress = dresses.length && (!sorted.some(isBaseTopItem) || !sorted.some((item) => categoryForItem(item) === 'bottom') || packingHasActivity(context, ['ужин', 'dinner', 'вечер', 'evening', 'свидан', 'date', 'наряд', 'formal']));
+    if (includeDress) take(isDressItem, 1);
+    take(isBaseTopItem, days <= 3 ? 1 : days <= 7 ? 2 : 3);
+    take((item) => categoryForItem(item) === 'bottom', days <= 4 ? 1 : days <= 7 ? 2 : 3);
+    take((item) => categoryForItem(item) === 'shoes', days <= 4 ? 1 : 2);
+    if (packingNeedsLayer(context)) take(isOuterwearItem, 1);
+    take((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) === 'bag', 1);
+    if (days >= 5 || includeDress) take((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) !== 'bag', 1);
+    take(() => true, target - selected.length);
+    return selected.slice(0, target);
+  };
+  const buildPackingFallback = (prompt, options = {}) => {
+    const context = options.context && typeof options.context === 'object' ? { ...options.context } : {};
+    const capsule = selectPackingCapsuleItems(context);
+    const tops = capsule.filter(isBaseTopItem);
+    const dresses = capsule.filter(isDressItem);
+    const bottoms = capsule.filter((item) => categoryForItem(item) === 'bottom');
+    const shoes = capsule.filter((item) => categoryForItem(item) === 'shoes');
+    const layers = capsule.filter(isOuterwearItem);
+    const bags = capsule.filter((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) === 'bag');
+    const accessories = capsule.filter((item) => categoryForItem(item) === 'accessory' && itemSubcategory(item) !== 'bag');
+    const requested = Math.max(1, Math.min(5, Number(options.count) || 4));
+    const outfits = [];
+    const seen = new Set();
+    const add = (values) => {
+      const selected = values.filter(Boolean).filter((item, index, list) => list.findIndex((value) => String(value.id) === String(item.id)) === index);
+      const complete = selected.some(isDressItem) || (selected.some(isBaseTopItem) && selected.some((item) => categoryForItem(item) === 'bottom'));
+      if (!complete || (state.wardrobe.some((item) => categoryForItem(item) === 'shoes') && !selected.some((item) => categoryForItem(item) === 'shoes'))) return;
+      const key = selected.map((item) => String(item.id)).sort().join('|');
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      outfits.push({ name: `Образ для отпуска ${outfits.length + 1}`, itemIds: selected.map((item) => item.id), creativity: outfits.length === 0 ? 'safe' : outfits.length === 1 ? 'balanced' : 'bold', style: ['travel', 'everyday'], occasion: ['trip'], score: Math.max(52, 76 - outfits.length * 3), explanation: 'Практичный образ из выбранной отпускной капсулы.', warnings: [] });
+    };
+    const wantsDress = dresses.length && packingHasActivity(context, ['ужин', 'dinner', 'вечер', 'evening', 'свидан', 'date', 'наряд', 'formal']);
+    for (let index = 0; index < requested * 2 && outfits.length < requested; index += 1) {
+      add([tops[index % Math.max(1, tops.length)], bottoms[(index + (wantsDress ? 1 : 0)) % Math.max(1, bottoms.length)], shoes[index % Math.max(1, shoes.length)], layers.length && (packingNeedsLayer(context) || index === 0) ? layers[index % layers.length] : null, bags.length && index % 2 === 0 ? bags[0] : null, accessories.length && index % 3 === 1 ? accessories[index % accessories.length] : null]);
+    }
+    if (wantsDress || !outfits.length) dresses.forEach((dress, index) => { if (outfits.length < requested) add([dress, shoes[index % Math.max(1, shoes.length)], layers.length && (packingNeedsLayer(context) || index === 0) ? layers[index % layers.length] : null, bags[0]]); });
+    const ids = outfits[0]?.itemIds?.length ? outfits[0].itemIds : capsule.map((item) => item.id);
+    const destination = String(context.location || '').trim();
+    return { title: destination ? `Капсула для ${destination}` : 'Капсула для отпуска', note: `Собрала компактную капсулу из ${capsule.length} вещей и ${outfits.length} готовых образов.`, item_ids: ids, capsuleItemIds: capsule.map((item) => item.id), outfits, mode: 'packing', packingContext: context, prompt, temperature_c: context.temperature ?? state.weather.temperature_c, weather_code: context.weatherCode ?? state.weather.weather_code, message: 'Собрала отпускную капсулу только из вещей вашего гардероба.' };
+  };
   const outfitItemIds = (outfit) => Array.isArray(outfit?.item_ids) ? outfit.item_ids : Array.isArray(outfit?.itemIds) ? outfit.itemIds : [];
   const selectedOutfitItems = (outfit) => {
     const selected = outfitItemIds(outfit).map((id) => state.wardrobe.find((item) => String(item.id) === String(id))).filter(Boolean);
@@ -1468,6 +1577,52 @@
     setTimeout(() => form.elements.style_tags?.focus(), 0);
   };
   const closeStyleSheet = () => { const node = byId('style-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
+  const openPackingSheet = () => {
+    const node = byId('packing-sheet');
+    const form = byId('packing-form');
+    if (!node || !form) return;
+    form.elements.destination.value = state.profile?.city || state.weather.city || '';
+    form.elements.durationDays.value = '7';
+    form.elements.weatherProfile.value = 'current';
+    form.elements.activities.value = '';
+    form.elements.laundryAvailable.value = 'false';
+    syncMettiSelectPickers();
+    setFormStatus('packing-form-status');
+    node.hidden = false;
+    document.body.classList.add('modal-open');
+    setTimeout(() => form.elements.destination?.focus(), 0);
+  };
+  const closePackingSheet = () => { const node = byId('packing-sheet'); if (node) node.hidden = true; document.body.classList.remove('modal-open'); };
+  const submitPackingForm = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const destination = form.elements.destination.value.trim();
+    const durationDays = Math.max(1, Math.min(30, Number(form.elements.durationDays.value) || 7));
+    const weatherProfile = form.elements.weatherProfile.value || 'current';
+    const weatherTemperatures = { current: state.weather.temperature_c, warm: 25, mild: 18, cool: 10, cold: 3 };
+    const temperature = Number(weatherTemperatures[weatherProfile]);
+    const activities = form.elements.activities.value.split(/[,;]+/).map((value) => value.trim()).filter(Boolean).slice(0, 8);
+    if (!activities.length) activities.push('город и прогулки');
+    const laundryAvailable = form.elements.laundryAvailable.value === 'true';
+    const location = destination || state.profile?.city || state.weather.city || 'поездка';
+    const context = {
+      location,
+      destination: destination || null,
+      durationDays,
+      activities,
+      laundryAvailable,
+      temperature: Number.isFinite(temperature) ? temperature : null,
+      feelsLike: Number.isFinite(temperature) ? temperature : null,
+      weatherCode: weatherProfile === 'current' ? state.weather.weather_code : null,
+      weather: weatherProfile === 'current' ? 'current conditions' : weatherProfile,
+      occasion: activities.join(', '),
+    };
+    const prompt = state.language === 'en'
+      ? `Build a vacation capsule for ${location} for ${durationDays} days. Activities: ${activities.join(', ')}. Laundry available: ${laundryAvailable ? 'yes' : 'no'}.`
+      : `Собери капсулу для отпуска в ${location} на ${durationDays} дней. Активности: ${activities.join(', ')}. Стирка: ${laundryAvailable ? 'доступна' : 'недоступна'}.`;
+    closePackingSheet();
+    await ask(prompt, { mode: 'packing', count: 4, context });
+  };
   const closeVisibleModal = () => {
     if (activeMettiSelect) { closeMettiSelectSheet({ restoreFocus: false }); return true; }
     const subcategory = byId('wardrobe-subcategory-sheet');
@@ -1479,6 +1634,7 @@
       else if (backdrop.id === 'language-sheet') closeLanguageSheet();
       else if (backdrop.id === 'delete-account-sheet') closeDeleteAccountSheet();
       else if (backdrop.id === 'style-sheet') closeStyleSheet();
+      else if (backdrop.id === 'packing-sheet') closePackingSheet();
       else { backdrop.hidden = true; document.body.classList.remove('modal-open'); }
       return true;
     }
@@ -1521,6 +1677,7 @@
   const addMessage = (text, role) => { const log = byId('chat-log'); if (!log) return null; const node = document.createElement('div'); node.className = `message ${role}`; node.textContent = translate(text); log.append(node); log.scrollTop = log.scrollHeight; return node; };
   const setThinking = (visible) => { const node = document.querySelector('.chat-log .thinking'); if (node) node.hidden = !visible; };
   const fallbackOutfit = (prompt, options = {}) => {
+    if (options.mode === 'packing') return buildPackingFallback(prompt, options);
     const currentItemIds = Array.isArray(options.currentItemIds) ? options.currentItemIds : [];
     const selectedItemId = options.selectedItemId ? String(options.selectedItemId) : '';
     const itemIds = options.mode === 'restyle' && currentItemIds.length
@@ -1528,10 +1685,20 @@
       : [...new Set([selectedItemId, ...pickOutfitItems(state.wardrobe).map((item) => item.id)].filter(Boolean))].slice(0, 8);
     return { title: prompt || 'Образ на сегодня', note: 'Собрала спокойный вариант из вещей, которые уже есть в вашем гардеробе.', item_ids: itemIds, temperature_c: state.weather.temperature_c, weather_code: state.weather.weather_code, message: 'С удовольствием. Учитываю погоду и ваш гардероб — собрала спокойный, элегантный вариант.' };
   };
-  const normalizeStylistCandidate = (candidate, result, prompt) => {
+  const normalizeStylistCandidate = (candidate, result, prompt, options = {}) => {
     const ids = outfitItemIds(candidate);
     if (!ids.length) return null;
     const metadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : {};
+    const capsuleItemIds = Array.isArray(candidate?.capsuleItemIds)
+      ? candidate.capsuleItemIds
+      : Array.isArray(candidate?.capsule_item_ids)
+      ? candidate.capsule_item_ids
+      : Array.isArray(result?.capsuleItemIds)
+      ? result.capsuleItemIds
+      : Array.isArray(result?.capsule_item_ids)
+      ? result.capsule_item_ids
+      : [];
+    const mode = options.mode || result?.mode || (capsuleItemIds.length ? 'packing' : undefined);
     return {
       ...result,
       ...candidate,
@@ -1539,6 +1706,9 @@
       note: candidate.explanation || candidate.note || result?.note || 'Собрала этот образ с учётом погоды и вашего гардероба.',
       itemIds: ids,
       item_ids: ids,
+      capsuleItemIds,
+      mode,
+      packingContext: options.context || result?.packingContext || result?.packing_context || null,
       prompt,
       message: result?.message || 'Готово — образ собран из вашего гардероба.',
       temperature_c: result?.temperature_c ?? state.weather.temperature_c,
@@ -1552,6 +1722,9 @@
         creativity: candidate.creativity || null,
         style: candidate.style || [],
         occasion: candidate.occasion || [],
+        mode,
+        capsule_item_ids: capsuleItemIds,
+        packing_context: options.context || result?.packingContext || result?.packing_context || null,
       },
     };
   };
@@ -1562,11 +1735,12 @@
       : { safe: 'Спокойный', balanced: 'Сбалансированный', bold: 'Смелый' };
     return labels[value] ? `${state.language === 'en' ? 'Styling' : 'Стилизация'} · ${labels[value]}` : '';
   };
-  const adoptStylistResult = (result, prompt) => {
+  const adoptStylistResult = (result, prompt, options = {}) => {
     const candidates = Array.isArray(result?.outfits) ? result.outfits : [];
-    state.generatedOutfits = candidates.map((candidate) => normalizeStylistCandidate(candidate, result, prompt)).filter(Boolean);
+    state.generatedOutfits = candidates.map((candidate) => normalizeStylistCandidate(candidate, result, prompt, options)).filter(Boolean);
     state.activeGeneratedOutfitIndex = 0;
-    return state.generatedOutfits[0] || (Array.isArray(result?.item_ids) && result.item_ids.length ? { ...result, prompt } : null);
+    const capsule = Array.isArray(result?.capsuleItemIds) ? result.capsuleItemIds : Array.isArray(result?.capsule_item_ids) ? result.capsule_item_ids : [];
+    return state.generatedOutfits[0] || (Array.isArray(result?.item_ids) && result.item_ids.length ? { ...result, prompt, mode: options.mode || result?.mode, capsuleItemIds: capsule, packingContext: options.context || result?.packingContext || null } : capsule.length ? { ...result, item_ids: capsule, prompt, mode: options.mode || result?.mode || 'packing', capsuleItemIds: capsule, packingContext: options.context || result?.packingContext || null } : null);
   };
   const renderResultVariants = (outfit) => {
     const container = byId('result-variants');
@@ -1584,6 +1758,57 @@
       container.append(button);
     });
   };
+  const renderPackingCapsule = async (outfit = state.currentOutfit) => {
+    const container = byId('packing-capsule');
+    const itemsNode = byId('packing-capsule-items');
+    if (!container || !itemsNode) return;
+    const rawIds = Array.isArray(outfit?.capsuleItemIds)
+      ? outfit.capsuleItemIds
+      : Array.isArray(outfit?.capsule_item_ids)
+      ? outfit.capsule_item_ids
+      : [];
+    const ids = [...new Set(rawIds.map((id) => String(id)).filter(Boolean))];
+    const items = ids.map((id) => state.wardrobe.find((item) => String(item.id) === id)).filter(Boolean);
+    const isPacking = outfit?.mode === 'packing' || outfit?.metadata?.mode === 'packing' || ids.length > 0;
+    container.hidden = !isPacking || !ids.length;
+    if (!isPacking || !ids.length) { itemsNode.replaceChildren(); return; }
+    const title = byId('packing-capsule-title');
+    const count = byId('packing-capsule-count');
+    const note = byId('packing-capsule-note');
+    const packingContext = outfit.packingContext || outfit.metadata?.packing_context || {};
+    const destination = String(packingContext.location || '').trim();
+    const durationDays = Number(packingContext.durationDays);
+    const packingActivitiesLabel = Array.isArray(packingContext.activities) ? packingContext.activities.join(', ') : String(packingContext.activities || '').trim();
+    if (title) title.textContent = destination ? `Капсула для ${destination}` : 'Капсула для отпуска';
+    if (count) count.textContent = `${items.length} ${state.language === 'en' ? 'items' : 'вещей'}`;
+    if (note) note.textContent = Number.isFinite(durationDays) && durationDays > 0
+      ? `${state.language === 'en' ? 'For' : 'На'} ${durationDays} ${state.language === 'en' ? 'days' : 'дн.'} · ${state.language === 'en' ? 'real wardrobe items for' : 'реальные вещи для'} ${packingActivitiesLabel || (state.language === 'en' ? 'your trip' : 'поездки')}.`
+      : (state.language === 'en' ? 'A compact set of real wardrobe items for the trip.' : 'Компактный набор настоящих вещей для поездки.');
+    itemsNode.replaceChildren();
+    primeImageUrls(items.map((item) => collageImagePath(item)).filter(Boolean));
+    await Promise.all(items.map(async (item) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'packing-item';
+      button.dataset.itemId = String(item.id);
+      const art = document.createElement('div');
+      const imagePath = collageImagePath(item);
+      art.className = `packing-item-art ${itemClass(item)}${imagePath ? ' has-uploaded-image' : ''}`;
+      const artLabel = document.createElement('span');
+      artLabel.textContent = translate(item.name || 'Вещь');
+      art.append(artLabel);
+      const copy = document.createElement('div');
+      copy.className = 'packing-item-copy';
+      const meta = document.createElement('small');
+      meta.textContent = translate(subcategoryLabel(itemSubcategory(item)) || categoryLabel(categoryForItem(item)));
+      const name = document.createElement('strong');
+      name.textContent = translate(item.name || 'Вещь');
+      copy.append(meta, name);
+      button.append(art, copy);
+      itemsNode.append(button);
+      if (imagePath) await addImageBackground(art, imagePath, 'contain');
+    }));
+  };
   const renderResult = async (outfit = state.currentOutfit) => {
     if (!outfit) return;
     renderResultVariants(outfit);
@@ -1593,14 +1818,19 @@
       creativityNode.textContent = label;
       creativityNode.hidden = !label;
     }
-    setText('.screen[data-screen-id="result"] h1', outfit.title || 'Образ на сегодня'); setText('.screen[data-screen-id="result"] .result-note p', `«${outfit.note || 'Собрала этот образ с учётом погоды и вашего гардероба.'}»`);
+    const packingContext = outfit.packingContext || outfit.metadata?.packing_context || {};
+    const resultTitle = outfit.mode === 'packing'
+      ? (packingContext.location ? `Капсула для ${packingContext.location}` : 'Капсула для отпуска')
+      : (outfit.title || 'Образ на сегодня');
+    setText('.screen[data-screen-id="result"] h1', resultTitle); setText('.screen[data-screen-id="result"] .result-note p', `«${outfit.note || 'Собрала этот образ с учётом погоды и вашего гардероба.'}»`);
+    await renderPackingCapsule(outfit);
     await renderOutfitCollage(document.querySelector('.screen[data-screen-id="result"] .result-outfit-collage'), outfit);
     await renderHomeCollage(outfit);
   };
   const saveCurrentOutfit = async (worn = false) => {
     if (!state.currentOutfit) state.currentOutfit = fallbackOutfit('Образ на сегодня');
     if (!state.user || !supabase?.data) { showToast('Войдите, чтобы сохранять образы', 'error'); return null; }
-    const base = { user_id: state.user.id, title: state.currentOutfit.title || 'Образ на сегодня', note: state.currentOutfit.note || null, temperature_c: state.currentOutfit.temperature_c ?? state.weather.temperature_c, weather_code: state.currentOutfit.weather_code ?? state.weather.weather_code, item_ids: outfitItemIds(state.currentOutfit), prompt: state.currentOutfit.prompt || null, is_worn: worn, worn_at: worn ? new Date().toISOString() : null, metadata: { ...(state.currentOutfit.metadata || {}), creativity: state.currentOutfit.creativity || state.currentOutfit.metadata?.creativity || null } };
+    const base = { user_id: state.user.id, title: state.currentOutfit.title || 'Образ на сегодня', note: state.currentOutfit.note || null, temperature_c: state.currentOutfit.temperature_c ?? state.weather.temperature_c, weather_code: state.currentOutfit.weather_code ?? state.weather.weather_code, item_ids: outfitItemIds(state.currentOutfit), prompt: state.currentOutfit.prompt || null, is_worn: worn, worn_at: worn ? new Date().toISOString() : null, metadata: { ...(state.currentOutfit.metadata || {}), creativity: state.currentOutfit.creativity || state.currentOutfit.metadata?.creativity || null, mode: state.currentOutfit.mode || state.currentOutfit.metadata?.mode || null, capsule_item_ids: state.currentOutfit.capsuleItemIds || state.currentOutfit.metadata?.capsule_item_ids || [], packing_context: state.currentOutfit.packingContext || state.currentOutfit.metadata?.packing_context || null } };
     try {
       const saved = state.currentOutfit.id ? await supabase.data.updateOutfit(state.currentOutfit.id, { is_worn: worn, worn_at: base.worn_at }) : await supabase.data.saveOutfit(base);
       state.currentOutfit = { ...state.currentOutfit, ...saved, item_ids: outfitItemIds(saved || state.currentOutfit) }; const existing = state.outfits.findIndex((item) => item.id === saved?.id); if (existing >= 0) state.outfits[existing] = state.currentOutfit; else if (saved) state.outfits.unshift(state.currentOutfit); renderLooks(); showToast(worn ? 'Образ отмечен как надетый' : 'Образ сохранён', 'success'); return state.currentOutfit;
@@ -1658,15 +1888,16 @@
     go('chat'); addMessage(promptForStylist, 'user'); setThinking(true); const requestId = ++state.requestNumber; showToast('Metti собирает образ…');
     try {
       let result;
-      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, mode: stylistOptions.mode || 'today', selectedItemId: stylistOptions.selectedItemId, currentItemIds: stylistOptions.currentItemIds, lockedItemIds: stylistOptions.lockedItemIds, instruction: stylistOptions.instruction });
+      if (state.user && supabase?.data?.invokeStylist) result = await supabase.data.invokeStylist({ prompt: promptForStylist, language: state.language, weather: state.weather, mode: stylistOptions.mode || 'today', count: stylistOptions.count, context: stylistOptions.context, selectedItemId: stylistOptions.selectedItemId, currentItemIds: stylistOptions.currentItemIds, lockedItemIds: stylistOptions.lockedItemIds, instruction: stylistOptions.instruction });
       else result = fallbackOutfit(promptForStylist, stylistOptions);
       if (requestId !== state.requestNumber) return;
-      const outfit = result?.outfits ? adoptStylistResult(result, promptForStylist) : result;
-      if (!outfit || !outfitItemIds(outfit).length) {
+      const outfit = result?.outfits ? adoptStylistResult(result, promptForStylist, stylistOptions) : result;
+      const capsuleIds = Array.isArray(outfit?.capsuleItemIds) ? outfit.capsuleItemIds : Array.isArray(outfit?.capsule_item_ids) ? outfit.capsule_item_ids : [];
+      if (!outfit || (!outfitItemIds(outfit).length && !capsuleIds.length)) {
         state.generatedOutfits = [];
         setThinking(false); addMessage(result?.message || 'В гардеробе пока не нашлось подходящего сочетания.', 'assistant'); showToast('Не нашла подходящий образ', 'error'); return;
       }
-      state.currentOutfit = { ...outfit, prompt: promptForStylist }; setThinking(false); addMessage(result?.message || outfit?.note || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
+      state.currentOutfit = { ...outfit, prompt: promptForStylist, mode: stylistOptions.mode || outfit.mode, packingContext: stylistOptions.context || outfit.packingContext || null }; setThinking(false); addMessage(result?.message || outfit?.note || 'Готово — образ собран из вашего гардероба.', 'assistant'); await renderResult(state.currentOutfit); setTimeout(() => go('result'), 350);
     } catch (error) {
       setThinking(false); addMessage('Не получилось связаться со стилистом. Проверьте подключение и попробуйте ещё раз.', 'assistant'); showToast(error?.message || 'AI-стилист временно недоступен', 'error');
     }
@@ -1683,6 +1914,8 @@
     const promptButton = event.target.closest('[data-prompt]'); if (promptButton) { ask(promptButton.dataset.prompt); return; }
     const tab = event.target.closest('[data-filter]'); if (tab) { tab.parentElement.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('selected')); tab.classList.add('selected'); state.wardrobeFilter = tab.dataset.filter || 'all'; state.wardrobeSubcategory = 'all'; renderWardrobeSubcategoryFilter(); applyWardrobeFilters(); return; }
     const action = event.target.closest('[data-action]')?.dataset.action;
+    if (action === 'open-packing-sheet') { openPackingSheet(); return; }
+    if (action === 'close-packing-sheet') { closePackingSheet(); return; }
     if (action === 'analyze-shopping') { void analyzeShoppingRecommendations(); return; }
     if (action === 'ask-purchase-stylist') {
       const button = event.target.closest('[data-action="ask-purchase-stylist"]');
@@ -1773,6 +2006,7 @@
   byId('wardrobe-sheet')?.querySelectorAll('[data-action="close-wardrobe-sheet"]').forEach((button) => button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); closeWardrobeSheet(); }));
   byId('profile-form')?.addEventListener('submit', saveProfileForm);
   byId('style-form')?.addEventListener('submit', saveStyleForm);
+  byId('packing-form')?.addEventListener('submit', submitPackingForm);
   byId('result-stylist-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const input = byId('result-stylist-input');
@@ -1791,7 +2025,7 @@
   ensureWardrobeSubcategoryPicker();
   ensureMettiSelectPickers();
   ensureStylistComposer();
-  document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
+  document.querySelectorAll('.sheet-backdrop').forEach((node) => node.addEventListener('click', (event) => { if (event.target === node) { if (node.id === 'wardrobe-subcategory-sheet') closeWardrobeSubcategorySheet(); else if (node.id === 'metti-select-sheet') closeMettiSelectSheet(); else if (node.id === 'packing-sheet') closePackingSheet(); else { node.hidden = true; document.body.classList.remove('modal-open'); } } }));
   document.addEventListener('keydown', (event) => { const node = byId('wardrobe-subcategory-sheet'); const selectSheet = byId('metti-select-sheet'); if (event.key !== 'Escape') return; if (selectSheet && !selectSheet.hidden) { closeMettiSelectSheet(); return; } if (node && !node.hidden) { closeWardrobeSubcategorySheet(); return; } closeVisibleModal(); });
   window.addEventListener('metti:authenticated', async (event) => { state.user = event.detail?.user || supabase?.currentUser?.(); await loadData(); });
   window.addEventListener('metti:signed-out', () => { state.user = null; state.profile = null; state.wardrobe = []; state.outfits = []; state.generatedOutfits = []; state.purchaseRecommendations = null; state.purchaseLoading = false; state.currentOutfit = null; state.activeItem = null; state.activeItemFromOutfit = false; state.activeItemOutfitId = null; state.activeItemOriginScreen = null; renderLooks(); });

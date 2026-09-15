@@ -21,6 +21,7 @@ import { colorHarmonyForOutfit } from "./color-harmony.ts";
 import { applyCompositionQuality } from "./composition.ts";
 import { WardrobeAuditService } from "./wardrobe-auditor.ts";
 import { withStylistVoice } from "./stylist-voice.ts";
+import { packingOutfitSuggestions, selectPackingCapsule } from "./packing.ts";
 import type {
   CriticResult,
   GenerateOutfitsInput,
@@ -279,6 +280,9 @@ function fallbackCandidates(
   count: number,
   variantOffset: number,
 ): OutfitSuggestion[] {
+  if (input.mode === "packing") {
+    return packingOutfitSuggestions(items, input, language, count);
+  }
   const curated = buildCuratedShortlist(input, Math.max(8, Math.min(12, count * 3)))
     .map((candidate, index): OutfitSuggestion => ({
       name: language === "en"
@@ -754,6 +758,12 @@ export class StylistService {
       generationInput,
       count,
     );
+    if (mode === "packing") {
+      const usedByVisibleOutfits = unionIds(...ranked.map((outfit) => outfit.itemIds));
+      capsuleItemIds = usedByVisibleOutfits.length
+        ? usedByVisibleOutfits
+        : selectPackingCapsule(filtered.items, generationInput).map((item) => item.itemId);
+    }
     const result: StylistGenerationResult = {
       outfits: ranked.map(({ stylistScore: _stylist, criticScore: _critic, finalScore: _final, ...outfit }) => outfit),
       capsuleItemIds,

@@ -5,6 +5,7 @@ import type {
   StylistItem,
 } from "./types.ts";
 import { isDress } from "./formula.ts";
+import { scorePackingItem } from "./packing.ts";
 
 const DEFAULT_MAX_ITEMS = 80;
 
@@ -273,9 +274,13 @@ export function filterWardrobe(
   maxItems = DEFAULT_MAX_ITEMS,
 ): FilteredWardrobe {
   const scores: Record<string, number> = {};
+  const score = (item: StylistItem): number =>
+    input.mode === "packing"
+      ? scorePackingItem(item, input) + Math.round(scoreStylistItem(item, input) * 0.35)
+      : scoreStylistItem(item, input);
   const ranked = [...items].sort((left, right) => {
-    const rightScore = scoreStylistItem(right, input);
-    const leftScore = scoreStylistItem(left, input);
+    const rightScore = score(right);
+    const leftScore = score(left);
     scores[right.itemId] = rightScore;
     scores[left.itemId] = leftScore;
     return rightScore - leftScore || left.itemId.localeCompare(right.itemId);

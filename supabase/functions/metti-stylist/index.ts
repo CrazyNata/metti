@@ -94,6 +94,15 @@ function requestContext(body: Record<string, unknown>): StylistContext {
     precipitation: scalarValue(context.precipitation, weather.precipitation, weather.precipitation_mm),
     wind: scalarValue(context.wind, weather.wind, weather.wind_kph),
     occasion: textValue(context.occasion, body.occasion),
+    durationDays: numberValue(context.durationDays ?? context.tripDays ?? body.durationDays),
+    activities: stringList(context.activities ?? body.activities, 12),
+    laundryAvailable: typeof context.laundryAvailable === "boolean"
+      ? context.laundryAvailable
+      : typeof context.laundry === "boolean"
+      ? context.laundry
+      : typeof body.laundryAvailable === "boolean"
+      ? body.laundryAvailable
+      : null,
   };
 }
 
